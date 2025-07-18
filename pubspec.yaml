@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  provider:
+  internet_connection_checker_plus:
 
 
 
