@@ -117,7 +117,7 @@ ThemeData lightmode = ThemeData(
     thickness: 1,
   ),
 
-  cardTheme: CardTheme(
+  cardTheme: CardThemeData(
     color: AppColors.lightSurface,
     elevation: 2,
     shadowColor: Colors.black12,
@@ -233,7 +233,7 @@ ThemeData darkmode = ThemeData(
     thickness: 1,
   ),
 
-  cardTheme: CardTheme(
+  cardTheme: CardThemeData(
     color: const Color(0xFF222222),
     elevation: 2,
     shadowColor: Colors.black54,
