@@ -3,6 +3,7 @@ import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'config/firebase/firebase_options.dart';
+import 'login_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +21,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return  MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: const HomePage(),
       theme: Provider.of<ThemeProvider>(context).themeData,
@@ -46,11 +47,27 @@ class HomePage extends StatelessWidget {
         ],
       ),
       body: Center(
-        child: Text(
-          'Welcome to Flowchart Thesis!',
-          style: Theme.of(context).textTheme.headlineMedium,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Welcome to Flowchart Thesis!',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginPage()),
+                );
+              },
+              child: const Text('Vai al login'),
+            ),
+          ],
         ),
       ),
     );
   }
 }
+
