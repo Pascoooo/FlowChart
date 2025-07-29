@@ -1,6 +1,6 @@
 import 'models/models.dart';
 
-abstract class UserRepository {
+abstract class UserRepository{
 
   Stream<MyUser?> get user;
 

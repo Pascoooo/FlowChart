@@ -1,10 +1,10 @@
-
-import 'package:flowchart_thesis/main.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
+import '../../../main.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -15,6 +15,8 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +96,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 40),
                       TextField(
+                        controller: _emailController,
                         decoration: InputDecoration(
                           labelText: "Email address",
                           prefixIcon: const Icon(Icons.email_outlined),
@@ -104,6 +107,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 20),
                       TextField(
+                        controller: _passwordController,
                         obscureText: _obscurePassword,
                         decoration: InputDecoration(
                           labelText: "Password",
@@ -119,7 +123,27 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 32),
                       ElevatedButton(
-                        onPressed: () {},
+                        onPressed: () async {
+                          final email = _emailController.text.trim();
+                          final password = _passwordController.text.trim();
+
+                          if (email.isEmpty || password.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Please fill in all fields")),
+                            );
+                            return;
+                          }
+                          try {
+                            // Simula il login con email e password
+                            // In un'app reale, qui chiameresti il tuo servizio di autenticazione
+                            //await AuthService.signUp(email, password);
+                            context.go('/');
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("Login failed: $e")),
+                            );
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 56),
                           shape: RoundedRectangleBorder(
@@ -134,7 +158,9 @@ class _LoginPageState extends State<LoginPage> {
                       const SizedBox(height: 16),
                       Center(
                         child: TextButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            context.go('/recover');
+                          },
                           child: const Text("Problemi con l'accesso?"),
                         ),
                       ),
@@ -181,21 +207,27 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       _socialButton(
                         icon: FontAwesomeIcons.google,
-                        text: "Google",
-                        onPressed: () {},
+                        text: "Accedi con Google",
+                        onPressed: () async {
+                          //final user = await AuthService.signInWithGoogle();
+                         // if (user != null) context.go('/');
+                        },
                       ),
                       const SizedBox(height: 16),
                       _socialButton(
                         icon: FontAwesomeIcons.github,
-                        text: "GitHub",
-                        onPressed: () {},
+                        text: "Accedi con  GitHub",
+                        onPressed: () async {
+                         // final user = await AuthService.signInWithGitHub(context);
+                         // if (user != null) context.go('/');
+                        }
                       ),
                       const SizedBox(height: 24),
                       _socialButton(
                         icon: Icons.mail_outline,
-                        text: "Sign up with Email",
+                        text: "Registrati con Email",
                         onPressed: () {
-                          context.go('/register');
+                          context.go('/error');
                         },
                         isPrimary: true,
                       ),
