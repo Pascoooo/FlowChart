@@ -57,6 +57,8 @@ class _DashboardPageState extends State<DashboardPage> {
       body: Row(
         children: [
           // Sidebar
+          // Sostituisci la sidebar originale con questa versione
+
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             width: _isSidebarCollapsed ? 80 : 280,
@@ -80,7 +82,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     children: [
-                      // Logo/Icon
                       Container(
                         width: 40,
                         height: 40,
@@ -112,7 +113,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                       ],
-                      // Collapse button
                       IconButton(
                         onPressed: () {
                           setState(() {
@@ -120,26 +120,19 @@ class _DashboardPageState extends State<DashboardPage> {
                           });
                         },
                         icon: Icon(
-                          _isSidebarCollapsed
-                              ? Icons.menu_open
-                              : Icons.menu,
+                          _isSidebarCollapsed ? Icons.menu_open : Icons.menu,
                           color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                         ),
                       ),
                     ],
                   ),
                 ),
-
                 const Divider(height: 1),
 
-                // Menu Items
+                // Macroaree a menù a tendina
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(8),
-                    itemCount: _menuItems.length,
-                    itemBuilder: (context, index) {
-                      return _buildMenuItem(index);
-                    },
+                  child: _SidebarMacroareas(
+                    isCollapsed: _isSidebarCollapsed,
                   ),
                 ),
 
@@ -601,6 +594,140 @@ class DashboardItem {
     required this.title,
     this.subtitle,
   });
+}
+
+class _SidebarMacroareas extends StatefulWidget {
+  final bool isCollapsed;
+  const _SidebarMacroareas({required this.isCollapsed});
+
+  @override
+  State<_SidebarMacroareas> createState() => _SidebarMacroareasState();
+}
+
+class _SidebarMacroareasState extends State<_SidebarMacroareas> {
+  int? _expandedSection;
+
+  final List<_SidebarSection> _sections = [
+    _SidebarSection(
+      icon: Icons.folder,
+      title: "Progetti",
+      children: [
+        _SidebarItem(title: "Recenti"),
+        _SidebarItem(title: "I miei progetti"),
+        _SidebarItem(title: "Preferiti"),
+      ],
+    ),
+    _SidebarSection(
+      icon: Icons.add_box,
+      title: "Inserisci",
+      children: [
+        _SidebarItem(title: "Rettangolo", icon: Icons.crop_16_9),
+        _SidebarItem(title: "Cerchio", icon: Icons.circle),
+        _SidebarItem(title: "Parallelogramma", icon: Icons.change_history),
+        _SidebarItem(title: "Rombo", icon: Icons.diamond),
+      ],
+    ),
+    _SidebarSection(
+      icon: Icons.play_arrow,
+      title: "Esecuzione",
+      children: [
+        _SidebarItem(title: "Simula"),
+        _SidebarItem(title: "Debug"),
+      ],
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: _sections.length,
+      itemBuilder: (context, sectionIndex) {
+        final section = _sections[sectionIndex];
+        final expanded = _expandedSection == sectionIndex;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              leading: Icon(section.icon, color: Theme.of(context).colorScheme.primary),
+              title: widget.isCollapsed ? null : Text(section.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+              trailing: widget.isCollapsed
+                  ? null
+                  : Icon(
+                expanded ? Icons.expand_less : Icons.expand_more,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              ),
+              onTap: () {
+                setState(() {
+                  _expandedSection = expanded ? null : sectionIndex;
+                });
+              },
+              contentPadding: EdgeInsets.symmetric(horizontal: widget.isCollapsed ? 8 : 16),
+            ),
+            if (expanded)
+              ...section.children.map((item) {
+                if (section.title == "Inserisci") {
+                  // Drag & Drop per le forme
+                  return Padding(
+                    padding: EdgeInsets.only(left: widget.isCollapsed ? 16 : 32.0),
+                    child: Draggable<String>(
+                      data: item.title,
+                      feedback: Material(
+                        color: Colors.transparent,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(item.icon, size: 28, color: Theme.of(context).colorScheme.primary),
+                            if (!widget.isCollapsed) ...[
+                              const SizedBox(width: 8),
+                              Text(item.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            ],
+                          ],
+                        ),
+                      ),
+                      child: ListTile(
+                        leading: Icon(item.icon, color: Theme.of(context).colorScheme.primary),
+                        title: widget.isCollapsed ? null : Text(item.title),
+                        dense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 0),
+                      ),
+                    ),
+                  );
+                } else {
+                  return Padding(
+                    padding: EdgeInsets.only(left: widget.isCollapsed ? 16 : 32.0),
+                    child: ListTile(
+                      title: widget.isCollapsed ? null : Text(item.title),
+                      dense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 0),
+                      onTap: () {
+                        // Azione per ogni voce
+                      },
+                    ),
+                  );
+                }
+              }).toList(),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SidebarSection {
+  final IconData icon;
+  final String title;
+  final List<_SidebarItem> children;
+
+  _SidebarSection({required this.icon, required this.title, required this.children});
+}
+
+class _SidebarItem {
+  final String title;
+  final IconData? icon;
+
+  _SidebarItem({required this.title, this.icon});
 }
 
 //avvia l'applicazione con il DashboardPage
