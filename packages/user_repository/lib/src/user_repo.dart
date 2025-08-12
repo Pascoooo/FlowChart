@@ -14,6 +14,10 @@ abstract class UserRepository{
 
   Future<String> getUid();
 
+  Future<MyUser> signInWithGoogle();
+
+  Future<MyUser> signInWithGitHub();
+
   //Future<bool> isEmailVerified();
 
   //void sendEmailVerification();

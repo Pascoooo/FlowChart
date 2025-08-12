@@ -1,8 +1,10 @@
+import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:user_repository/user_repository.dart';
 
 import '../../../main.dart';
 
@@ -14,6 +16,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _repo = FirebaseUserRepo();
   bool _obscurePassword = true;
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -209,8 +212,16 @@ class _LoginPageState extends State<LoginPage> {
                         icon: FontAwesomeIcons.google,
                         text: "Accedi con Google",
                         onPressed: () async {
-                          //final user = await AuthService.signInWithGoogle();
-                         // if (user != null) context.go('/');
+                          try {
+                            await _repo.signInWithGoogle();
+                            if (!mounted) return;
+                            context.go('/');
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Accesso Google fallito: $e')),
+                            );
+                          }
                         },
                       ),
                       const SizedBox(height: 16),
@@ -218,8 +229,16 @@ class _LoginPageState extends State<LoginPage> {
                         icon: FontAwesomeIcons.github,
                         text: "Accedi con  GitHub",
                         onPressed: () async {
-                         // final user = await AuthService.signInWithGitHub(context);
-                         // if (user != null) context.go('/');
+                          try {
+                            await _repo.signInWithGitHub();
+                            if (!mounted) return;
+                            context.go('/');
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Accesso GitHub fallito: $e')),
+                            );
+                          }
                         }
                       ),
                       const SizedBox(height: 24),
@@ -227,7 +246,7 @@ class _LoginPageState extends State<LoginPage> {
                         icon: Icons.mail_outline,
                         text: "Registrati con Email",
                         onPressed: () {
-                          context.go('/error');
+                            context.go('/register');
                         },
                         isPrimary: true,
                       ),

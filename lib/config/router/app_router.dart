@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../screens/settings/views/SettingsPage.dart';
+import '../../screens/user_dashboard/views/dashboard_sketch.dart';
+
 // Define route constants to avoid magic strings
 class AppRoutes {
   static const String home = '/';
@@ -15,6 +18,7 @@ class AppRoutes {
   static const String forgotPassword = '/recover';
   static const String emailVerification = '/verify-email';
   static const String error = '/error';
+  static const String settings = '/settings';
 
   static const Set<String> authRoutes = {login, register, forgotPassword};
 }
@@ -34,11 +38,11 @@ class AppRouter {
   static GoRouter get router => _router;
 
   static final GoRouter _router = GoRouter(
-    navigatorKey: _rootNavigatorKey,
-    refreshListenable: _AuthStateNotifier(),
-    redirect: _handleRedirect,
-    routes: _routes,
-    errorBuilder: (context, state) => const ErrorPage()
+      navigatorKey: _rootNavigatorKey,
+      refreshListenable: _AuthStateNotifier(),
+      redirect: _handleRedirect,
+      routes: _routes,
+      errorBuilder: (context, state) => const ErrorPage()
   );
 
   static String? _handleRedirect(BuildContext context, GoRouterState state) {
@@ -48,7 +52,7 @@ class AppRouter {
 
     // User not authenticated
     if (user == null) {
-      return isAuthRoute ? null : AppRoutes.error;
+      return isAuthRoute ? null : AppRoutes.home;
     }
 
     // User authenticated but email not verified
@@ -70,7 +74,7 @@ class AppRouter {
     GoRoute(
       path: AppRoutes.home,
       name: 'home',
-      builder: (context, state) => const ErrorPage(),
+      builder: (context, state) => const DashboardPage(),
     ),
     GoRoute(
       path: AppRoutes.login,
@@ -91,6 +95,11 @@ class AppRouter {
       path: AppRoutes.emailVerification,
       name: 'emailVerification',
       builder: (context, state) => const EmailVerificationPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.settings,
+      name: 'settings',
+      builder: (context, state) => const SettingsPage(),
     ),
     GoRoute(
       path: AppRoutes.error,
