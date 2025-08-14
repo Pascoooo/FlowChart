@@ -57,12 +57,16 @@ class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> 
 
     on<AuthenticationLogoutRequested>((event, emit) async {
       await userRepository.signOut();
+      emit(const AuthenticationState.unauthenticated());
+
     });
   }
 
-  @override
-  Future<void> close() async {
-    await _userSubscription.cancel();
-    return super.close();
+
+    @override
+    Future<void> close() async {
+      await _userSubscription.cancel();
+      return super.close();
+    }
   }
-}
+
