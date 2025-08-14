@@ -1,12 +1,16 @@
+// dart
+import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:flowchart_thesis/config/constants/theme_switch.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:user_repository/user_repository.dart';
 
-import '../../../main.dart';
+import '../../../blocs/auth_bloc/authentication_bloc.dart';
+import '../../../blocs/auth_bloc/authentication_event.dart';
+import '../../../blocs/auth_bloc/authentication_state.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,7 +20,6 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _repo = FirebaseUserRepo();
   bool _obscurePassword = true;
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -25,9 +28,13 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Stato corrente del Bloc per mostrare il loader su Google
+    final authState = context.watch<AuthenticationBloc>().state;
+    final isGoogleLoading =
+        authState.isLoading && authState.inProgressProvider == AuthProvider.google;
+
     return Scaffold(
       appBar: AppBar(
-        leading: const BackButton(),
         actions: [
           IconButton(
             icon: const Icon(Icons.brightness_6),
@@ -39,17 +46,13 @@ class _LoginPageState extends State<LoginPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      // Sfondo colorato per tutta la pagina
-      backgroundColor: isDark
-          ? const Color(0xFF0F1419) // Blu scuro elegante per tema scuro
-          : const Color(0xFFF8FAFC), // Grigio chiaro per tema chiaro
-
+      backgroundColor: isDark ? const Color(0xFF0F1419) : const Color(0xFFF8FAFC),
       body: SafeArea(
         child: Center(
           child: Container(
             constraints: const BoxConstraints(
-              maxWidth: 1000, // Larghezza massima del riquadro
-              maxHeight: 600, // Altezza massima del riquadro
+              maxWidth: 1000,
+              maxHeight: 600,
             ),
             margin: const EdgeInsets.all(32),
             padding: const EdgeInsets.all(40),
@@ -116,8 +119,14 @@ class _LoginPageState extends State<LoginPage> {
                           labelText: "Password",
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                            ),
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -132,16 +141,24 @@ class _LoginPageState extends State<LoginPage> {
 
                           if (email.isEmpty || password.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Please fill in all fields")),
+                              const SnackBar(
+                                content: Text("Please fill in all fields"),
+                              ),
                             );
                             return;
                           }
                           try {
-                            // Simula il login con email e password
-                            // In un'app reale, qui chiameresti il tuo servizio di autenticazione
-                            //await AuthService.signUp(email, password);
-                            context.go('/');
+                            // Metodo corretto del repository
+                            await context.read<UserRepository>().signIn(
+                              email,
+                              password,
+                            );
+                            // La navigazione è gestita dal GoRouter che ascolta lo stato del Bloc
                           } catch (e) {
+                            // Log semplice e snackbar utente
+                            // ignore: avoid_print
+                            print('Errore Email Sign In: $e');
+                            if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text("Login failed: $e")),
                             );
@@ -155,7 +172,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         child: const Text(
                           "Log in",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -183,11 +203,16 @@ class _LoginPageState extends State<LoginPage> {
                         color: Theme.of(context).dividerColor,
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Theme.of(context).dividerColor),
+                          border: Border.all(
+                            color: Theme.of(context).dividerColor,
+                          ),
                         ),
                         child: const Text(
                           "OR",
@@ -205,52 +230,35 @@ class _LoginPageState extends State<LoginPage> {
 
                 // Colonna destra: Login social
                 Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _socialButton(
-                        icon: FontAwesomeIcons.google,
-                        text: "Accedi con Google",
-                        onPressed: () async {
-                          try {
-                            await _repo.signInWithGoogle();
-                            if (!mounted) return;
-                            context.go('/');
-                          } catch (e) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Accesso Google fallito: $e')),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _socialButton(
+                          icon: FontAwesomeIcons.google,
+                          text: "Accedi con Google",
+                          isLoading: isGoogleLoading,
+                          onPressed: isGoogleLoading
+                              ? null
+                              : () {
+                            context.read<AuthenticationBloc>().add(
+                              const AuthenticationGoogleSignInRequested(),
                             );
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _socialButton(
-                        icon: FontAwesomeIcons.github,
-                        text: "Accedi con  GitHub",
-                        onPressed: () async {
-                          try {
-                            await _repo.signInWithGitHub();
-                            if (!mounted) return;
-                            context.go('/');
-                          } catch (e) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Accesso GitHub fallito: $e')),
-                            );
-                          }
-                        }
-                      ),
-                      const SizedBox(height: 24),
-                      _socialButton(
-                        icon: Icons.mail_outline,
-                        text: "Registrati con Email",
-                        onPressed: () {
+                          },
+                        ),
+                        const SizedBox(height: 32),
+                        _socialButton(
+                          icon: Icons.mail_outline,
+                          text: "Registrati con Email",
+                          onPressed: () {
                             context.go('/register');
-                        },
-                        isPrimary: true,
-                      ),
-                    ],
+                          },
+                          isPrimary: true,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -264,24 +272,53 @@ class _LoginPageState extends State<LoginPage> {
   Widget _socialButton({
     required IconData icon,
     required String text,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     bool isPrimary = false,
+    bool isLoading = false,
   }) {
-    return isPrimary
-        ? ElevatedButton.icon(
-      icon: Icon(icon, size: 20),
-      label: Text(text),
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        minimumSize: const Size(double.infinity, 56),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+    final spinner = SizedBox(
+      width: 20,
+      height: 20,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        valueColor: AlwaysStoppedAnimation<Color>(
+          Theme.of(context).colorScheme.onPrimary,
         ),
       ),
+    );
+
+    final child = isLoading
+        ? Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        spinner,
+        const SizedBox(width: 12),
+        Text(text),
+      ],
     )
-        : OutlinedButton.icon(
-      icon: Icon(icon, size: 20),
-      label: Text(text),
+        : Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 12),
+        Text(text),
+      ],
+    );
+
+    if (isPrimary) {
+      return ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(double.infinity, 56),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: child,
+      );
+    }
+
+    return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(double.infinity, 56),
@@ -289,6 +326,7 @@ class _LoginPageState extends State<LoginPage> {
           borderRadius: BorderRadius.circular(12),
         ),
       ),
+      child: child,
     );
   }
 }

@@ -35,7 +35,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const BackButton(),
         actions: [
           IconButton(
             icon: const Icon(Icons.brightness_6),
@@ -483,12 +482,6 @@ class _RegisterPageState extends State<RegisterPage> {
         _socialButton(
           icon: FontAwesomeIcons.google,
           text: "Register with Google",
-          onPressed: () {},
-        ),
-        const SizedBox(height: 16),
-        _socialButton(
-          icon: FontAwesomeIcons.github,
-          text: "Register with GitHub",
           onPressed: () {},
         ),
       ],

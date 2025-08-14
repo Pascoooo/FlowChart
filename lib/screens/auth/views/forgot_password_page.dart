@@ -22,7 +22,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const BackButton(),
         actions: [
           IconButton(
             icon: const Icon(Icons.brightness_6),

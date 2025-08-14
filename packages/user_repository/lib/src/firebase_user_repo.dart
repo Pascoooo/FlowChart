@@ -1,8 +1,6 @@
-import 'dart:developer';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import '../user_repository.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../user_repository.dart'; // MyUser, MyUserEntity, UserRepository
 
 class FirebaseUserRepo implements UserRepository {
   final FirebaseAuth _firebaseAuth;
@@ -13,104 +11,105 @@ class FirebaseUserRepo implements UserRepository {
 
   @override
   Stream<MyUser?> get user {
-    return _firebaseAuth.authStateChanges().asyncExpand((firebaseUser) async* {
-      if (firebaseUser == null) {
-        yield MyUser.empty;
-      } else {
-        final docRef = usersCollection.doc(firebaseUser.uid);
-        final snap = await docRef.get();
-        if (!snap.exists) {
-          final newUser = MyUser(
-            userId: firebaseUser.uid,
-            email: firebaseUser.email ?? '',
-            name: firebaseUser.displayName ?? '',
-            photoURL: firebaseUser.photoURL ?? '',
-          );
-          await setUserData(newUser);
-          yield newUser;
-        } else {
-          yield MyUser.fromEntity(MyUserEntity.fromDocument(snap.data()!));
-        }
-      }
+    return _firebaseAuth.authStateChanges().asyncMap((firebaseUser) async {
+      if (firebaseUser == null) return null;
+
+      final myUser = MyUser(
+        userId: firebaseUser.uid,
+        email: firebaseUser.email ?? '',
+        name: firebaseUser.displayName ?? '',
+        photoURL: firebaseUser.photoURL ?? '',
+      );
+
+      // Aggiorna Firestore senza bloccare la risposta
+      usersCollection.doc(firebaseUser.uid).set(
+        myUser.toEntity().toDocument(),
+        SetOptions(merge: true),
+      );
+
+      return myUser;
     });
   }
 
   @override
   Future<String> getUid() async {
-    return _firebaseAuth.currentUser!.uid;
+    final u = _firebaseAuth.currentUser;
+    if (u == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'Nessun utente autenticato',
+      );
+    }
+    return u.uid;
+  }
+
+  @override
+  Future<MyUser?> getCurrentUser() async {
+    final u = _firebaseAuth.currentUser;
+    if (u == null) return null;
+    return MyUser(
+      userId: u.uid,
+      email: u.email ?? '',
+      name: u.displayName ?? '',
+      photoURL: u.photoURL ?? '',
+    );
+  }
+
+
+  Future<MyUser> _saveFirebaseUser(User firebaseUser) async {
+    final myUser = MyUser(
+      userId: firebaseUser.uid,
+      email: firebaseUser.email ?? '',
+      name: firebaseUser.displayName ?? '',
+      photoURL: firebaseUser.photoURL ?? '',
+    );
+
+    await usersCollection
+        .doc(myUser.userId)
+        .set(myUser.toEntity().toDocument(), SetOptions(merge: true));
+
+    return myUser;
   }
 
   @override
   Future<void> setUserData(MyUser user) async {
-    try {
-      await usersCollection
-          .doc(user.userId)
-          .set(user.toEntity().toDocument());
-    } catch (e) {
-      log('Error setting user data: $e');
-      rethrow;
-    }
-  }
-
-  @override
-  Future<void> signIn(String email, String password) async {
-    await _firebaseAuth.signInWithEmailAndPassword(
-        email: email, password: password);
+    await usersCollection
+        .doc(user.userId)
+        .set(user.toEntity().toDocument(), SetOptions(merge: true));
   }
 
   @override
   Future<void> signOut() async {
-    await _firebaseAuth.signOut();
+    await _firebaseAuth.signOut(); // su web basta questo
   }
 
+  /// Login con email/password
+  @override
+  Future<MyUser> signIn(String email, String password) async {
+    final userCred = await _firebaseAuth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    return _saveFirebaseUser(userCred.user!);
+  }
+
+  /// Registrazione con email/password
   @override
   Future<MyUser> signUp(MyUser myUser, String password) async {
-    final userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
-        email: myUser.email, password: password);
-    myUser.userId = userCredential.user!.uid;
-    return myUser;
+    final userCred = await _firebaseAuth.createUserWithEmailAndPassword(
+      email: myUser.email,
+      password: password,
+    );
+    final createdUser = myUser..userId = userCred.user!.uid;
+    await setUserData(createdUser);
+    return createdUser;
   }
 
+  /// Login con Google (web) usando popup
   @override
   Future<MyUser> signInWithGoogle() async {
-    UserCredential credential;
-    if (kIsWeb) {
-      final googleProvider = GoogleAuthProvider();
-      googleProvider.addScope('email');
-      credential = await _firebaseAuth.signInWithPopup(googleProvider);
-    } else {
-      throw UnsupportedError('Google sign-in su mobile richiede il package google_sign_in');
-    }
-    final firebaseUser = credential.user!;
-    final myUser = MyUser(
-      userId: firebaseUser.uid,
-      email: firebaseUser.email ?? '',
-      name: firebaseUser.displayName ?? '',
-      photoURL: firebaseUser.photoURL ?? '',
-    );
-    await usersCollection.doc(firebaseUser.uid).set(myUser.toEntity().toDocument(), SetOptions(merge: true));
-    return myUser;
-  }
-
-  @override
-  Future<MyUser> signInWithGitHub() async {
-    UserCredential credential;
-    final githubProvider = GithubAuthProvider();
-    githubProvider.addScope('read:user');
-    githubProvider.addScope('user:email');
-    if (kIsWeb) {
-      credential = await _firebaseAuth.signInWithPopup(githubProvider);
-    } else {
-      credential = await _firebaseAuth.signInWithProvider(githubProvider);
-    }
-    final firebaseUser = credential.user!;
-    final myUser = MyUser(
-      userId: firebaseUser.uid,
-      email: firebaseUser.email ?? '',
-      name: firebaseUser.displayName ?? '',
-      photoURL: firebaseUser.photoURL ?? '',
-    );
-    await usersCollection.doc(firebaseUser.uid).set(myUser.toEntity().toDocument(), SetOptions(merge: true));
-    return myUser;
+    final provider = GoogleAuthProvider();
+    final userCred = await _firebaseAuth.signInWithPopup(provider);
+    return _saveFirebaseUser(userCred.user!);
   }
 }

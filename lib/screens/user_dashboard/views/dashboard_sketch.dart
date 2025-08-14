@@ -1,8 +1,9 @@
-import 'package:flowchart_thesis/main.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
+
+import '../../../blocs/auth_bloc/authentication_bloc.dart';
+import '../../../blocs/auth_bloc/authentication_event.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -164,7 +165,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         activeIcon: Icons.logout,
                         title: "Esci",
                         onTap: () {
-                          context.go('/login');
+                          context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
                         },
                         isDestructive: true,
                       ),

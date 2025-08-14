@@ -1,73 +1,77 @@
+// dart
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flowchart_thesis/screens/auth/views/login_page.dart';
 import 'package:flowchart_thesis/screens/auth/views/register_page.dart';
 import 'package:flowchart_thesis/screens/auth/views/forgot_password_page.dart';
 import 'package:flowchart_thesis/screens/auth/views/email_verification_page.dart';
 import 'package:flowchart_thesis/screens/error/error_page.dart';
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_sketch.dart';
+import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
 
-import '../../screens/settings/views/SettingsPage.dart';
-import '../../screens/user_dashboard/views/dashboard_sketch.dart';
+import '../../blocs/auth_bloc/authentication_state.dart';
+import '../../screens/auth/views/splashpage.dart';
 
-// Define route constants to avoid magic strings
 class AppRoutes {
   static const String home = '/';
   static const String login = '/login';
   static const String register = '/register';
   static const String forgotPassword = '/recover';
   static const String emailVerification = '/verify-email';
-  static const String error = '/error';
   static const String settings = '/settings';
+  static const String error = '/error';
+  static const String unknown = '/splash';
 
   static const Set<String> authRoutes = {login, register, forgotPassword};
 }
 
-// Create a custom Listenable for auth state changes
-class _AuthStateNotifier extends ChangeNotifier {
-  _AuthStateNotifier() {
-    FirebaseAuth.instance.authStateChanges().listen((_) {
-      notifyListeners();
-    });
-  }
-}
-
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
+  static final Map<String, GoRouter> _cache = {};
 
-  static GoRouter get router => _router;
+  static GoRouter getRouter(AuthenticationState state) {
+    final cacheKey = switch (state.status) {
+      AuthenticationStatus.authenticated =>
+      'auth_${state.user?.userId ?? 'unknown'}',
+      AuthenticationStatus.emailNotVerified =>
+      'email_not_verified_${state.user?.userId ?? 'unknown'}',
+      AuthenticationStatus.unauthenticated => 'unauth',
+      AuthenticationStatus.unknown => 'unknown',
+    };
 
-  static final GoRouter _router = GoRouter(
+    final existing = _cache[cacheKey];
+    if (existing != null) return existing;
+    if (_cache.length > 10) _cache.clear();
+
+    final router = GoRouter(
       navigatorKey: _rootNavigatorKey,
-      refreshListenable: _AuthStateNotifier(),
-      redirect: _handleRedirect,
       routes: _routes,
-      errorBuilder: (context, state) => const ErrorPage()
-  );
+      errorBuilder: (context, state) => const ErrorPage(),
+        redirect: (context, goState) {
+          final path = goState.uri.path;
+          final isAuthRoute = AppRoutes.authRoutes.contains(path);
 
-  static String? _handleRedirect(BuildContext context, GoRouterState state) {
-    final user = FirebaseAuth.instance.currentUser;
-    final currentPath = state.uri.path;
-    final isAuthRoute = AppRoutes.authRoutes.contains(currentPath);
+          switch (state.status) {
+            case AuthenticationStatus.unknown:
+              return AppRoutes.unknown;
+            case AuthenticationStatus.unauthenticated:
+              return isAuthRoute ? null : AppRoutes.login;
+            case AuthenticationStatus.emailNotVerified:
+              return path == AppRoutes.emailVerification
+                  ? null
+                  : AppRoutes.emailVerification;
+            case AuthenticationStatus.authenticated:
+              if (isAuthRoute || path == AppRoutes.emailVerification) {
+                return AppRoutes.home;
+              }
+              return null;
+          }
+        }
 
-    // User not authenticated
-    if (user == null) {
-      return isAuthRoute ? null : AppRoutes.home;
-    }
+    );
 
-    // User authenticated but email not verified
-    if (!user.emailVerified) {
-      return currentPath == AppRoutes.emailVerification
-          ? null
-          : AppRoutes.emailVerification;
-    }
-
-    // User authenticated and verified, redirect away from auth routes
-    if (isAuthRoute) {
-      return AppRoutes.home;
-    }
-
-    return null; // No redirect needed
+    _cache[cacheKey] = router;
+    return router;
   }
 
   static List<RouteBase> get _routes => [
@@ -105,6 +109,11 @@ class AppRouter {
       path: AppRoutes.error,
       name: 'error',
       builder: (context, state) => const ErrorPage(),
+    ),
+    GoRoute(
+    path: AppRoutes.unknown,
+    name: 'splash',
+    builder: (context, state) => const SplashPage(),
     ),
   ];
 }

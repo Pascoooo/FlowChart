@@ -1,4 +1,5 @@
-part of 'authentication_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:user_repository/user_repository.dart';
 
 sealed class AuthenticationEvent extends Equatable {
   const AuthenticationEvent();
@@ -11,6 +12,9 @@ class AuthenticationUserChanged extends AuthenticationEvent {
   final MyUser? user;
 
   const AuthenticationUserChanged(this.user);
+
+  @override
+  List<Object> get props => [user ?? MyUser.empty];
 }
 
 class AuthenticationUserVerified extends AuthenticationEvent {
@@ -21,4 +25,11 @@ class AuthenticationLogoutRequested extends AuthenticationEvent {
   const AuthenticationLogoutRequested();
 }
 
+class AuthenticationGoogleSignInRequested extends AuthenticationEvent {
+  const AuthenticationGoogleSignInRequested();
+}
+
+class AuthenticationTimeoutOccurred extends AuthenticationEvent {
+  const AuthenticationTimeoutOccurred();
+}
 
