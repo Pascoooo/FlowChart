@@ -1,9 +1,9 @@
-import 'package:flowchart_thesis/screens/auth/views/login_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:user_repository/user_repository.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -22,6 +22,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isLoading = false;
 
   final List<String> _stepTitles = [
     "Enter your email address",
@@ -46,20 +47,18 @@ class _RegisterPageState extends State<RegisterPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      // Sfondo colorato per tutta la pagina
       backgroundColor: isDark
-          ? const Color(0xFF0F1419) // Blu scuro elegante per tema scuro
-          : const Color(0xFFF8FAFC), // Grigio chiaro per tema chiaro
-
+          ? const Color(0xFF0F1419)
+          : const Color(0xFFF8FAFC),
       body: SafeArea(
         child: Center(
           child: Container(
             constraints: const BoxConstraints(
-              maxWidth: 800, // Larghezza massima del riquadro
-              maxHeight: 750, // Aumentata l'altezza massima
+              maxWidth: 800,
+              maxHeight: 750,
             ),
-            margin: const EdgeInsets.all(20), // Ridotto il margine
-            padding: const EdgeInsets.all(32), // Ridotto il padding
+            margin: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
@@ -88,17 +87,15 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
             child: Column(
               children: [
-                // Titolo principale
                 const Text(
                   "Register",
                   style: TextStyle(
-                    fontSize: 32, // Ridotto da 36
+                    fontSize: 32,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(height: 12), // Ridotto da 16
-                // Link al login
+                const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -111,7 +108,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         "Log in",
                         style: TextStyle(
                           color: isDark
-                              ? const Color(0xFF60A5FA) // Blu chiaro per dark mode
+                              ? const Color(0xFF60A5FA)
                               : Theme.of(context).primaryColor,
                           fontWeight: FontWeight.w600,
                           decoration: TextDecoration.underline,
@@ -123,11 +120,9 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24), // Ridotto da 32
-                // Indicatore di progresso
+                const SizedBox(height: 24),
                 _buildProgressIndicator(),
-                const SizedBox(height: 24), // Ridotto da 32
-                // Contenuto dei passi
+                const SizedBox(height: 24),
                 Expanded(
                   child: PageView(
                     controller: _pageController,
@@ -139,12 +134,6 @@ class _RegisterPageState extends State<RegisterPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20), // Ridotto da 32
-                // Separatore OR
-                _buildOrDivider(),
-                const SizedBox(height: 20), // Ridotto da 32
-                // Pulsanti social
-                _buildSocialButtons(),
               ],
             ),
           ),
@@ -156,23 +145,16 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget _buildProgressIndicator() {
     return Column(
       children: [
-        // Linea con punti numerati
         Row(
           children: [
-            // Step 1
             _buildStepCircle(1, 0),
-            // Linea di connessione 1-2
             _buildConnectorLine(0),
-            // Step 2
             _buildStepCircle(2, 1),
-            // Linea di connessione 2-3
             _buildConnectorLine(1),
-            // Step 3
             _buildStepCircle(3, 2),
           ],
         ),
-        const SizedBox(height: 16), // Ridotto da 20
-        // Titoli degli step
+        const SizedBox(height: 16),
         Row(
           children: List.generate(3, (index) {
             return Expanded(
@@ -180,7 +162,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 _stepTitles[index],
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 11, // Ridotto da 12
+                  fontSize: 11,
                   fontWeight: index == _currentStep
                       ? FontWeight.w600
                       : FontWeight.w400,
@@ -196,7 +178,6 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-
   Widget _buildStepCircle(int stepNumber, int stepIndex) {
     final isCurrent = stepIndex == _currentStep;
     final isCompleted = stepIndex < _currentStep;
@@ -206,15 +187,12 @@ class _RegisterPageState extends State<RegisterPage> {
     Color textColor;
 
     if (isCompleted) {
-      // Step completato - usa colore accent visibile
       circleColor = isDark ? const Color(0xFF06BEE1) : const Color(0xFF06BEE1);
       textColor = Colors.white;
     } else if (isCurrent) {
-      // Step corrente - usa colore primario
       circleColor = isDark ? const Color(0xFF06BEE1) : Theme.of(context).primaryColor;
       textColor = Colors.white;
     } else {
-      // Step futuro - usa grigio
       circleColor = isDark ? const Color(0xFF2D3748) : Colors.grey[300]!;
       textColor = isDark ? const Color(0xFF9CA3AF) : Colors.grey[600]!;
     }
@@ -275,6 +253,7 @@ class _RegisterPageState extends State<RegisterPage> {
       ),
     );
   }
+
   Widget _buildStep1() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -423,14 +402,20 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(width: 16),
             Expanded(
               child: ElevatedButton(
-                onPressed: () => _completeRegistration(),
+                onPressed: _isLoading ? null : () => _completeRegistration(),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(0, 56),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
+                child: _isLoading
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : const Text(
                   "Create Account",
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
@@ -442,69 +427,6 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  Widget _buildOrDivider() {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            height: 1,
-            color: Theme.of(context).dividerColor,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).dividerColor,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
-            child: const Text(
-              "OR",
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Container(
-            height: 1,
-            color: Theme.of(context).dividerColor,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSocialButtons() {
-    return Column(
-      children: [
-        _socialButton(
-          icon: FontAwesomeIcons.google,
-          text: "Register with Google",
-          onPressed: () {},
-        ),
-      ],
-    );
-  }
-
-  Widget _socialButton({
-    required IconData icon,
-    required String text,
-    required VoidCallback onPressed,
-  }) {
-    return OutlinedButton.icon(
-      icon: Icon(icon, size: 20),
-      label: Text(text),
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(double.infinity, 56),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
-  }
 
   void _nextStep() {
     if (_currentStep < 2) {
@@ -532,11 +454,84 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  void _completeRegistration() {
-    // Implementa qui la logica di registrazione
+  void _completeRegistration() async {
+    if (_passwordController.text.trim() != _confirmPasswordController.text.trim()) {
+      _showError('Le password non corrispondono');
+      return;
+    }
+
+    if (_passwordController.text.trim().length < 6) {
+      _showError('La password deve essere di almeno 6 caratteri');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final newUser = MyUser(
+        userId: '',
+        email: _emailController.text.trim(),
+        name: '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
+        photoURL: '',
+      );
+
+      await context.read<UserRepository>().signUp(
+        newUser,
+        _passwordController.text.trim(),
+      );
+
+      _onRegistrationComplete();
+    } on FirebaseAuthException catch (e) {
+      _handleFirebaseError(e);
+    } catch (e) {
+      _showError('Errore durante la registrazione: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+
+  void _handleFirebaseError(FirebaseAuthException e) {
+    String message;
+    switch (e.code) {
+      case 'email-already-in-use':
+        message = 'Email già registrata. Vai al login.';
+        break;
+      case 'account-exists-with-google':
+        message = 'Account già esistente con Google. Usa il login Google.';
+        break;
+      case 'account-exists-with-password':
+        message = 'Account esistente con email/password. Fai login con email e password.';
+        break;
+      case 'weak-password':
+        message = 'Password troppo debole.';
+        break;
+      case 'invalid-email':
+        message = 'Email non valida.';
+        break;
+      default:
+        message = 'Errore durante la registrazione: ${e.message}';
+    }
+    _showError(message);
+  }
+
+  void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Registration completed!")),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
     );
+  }
+
+  void _onRegistrationComplete() {
+    context.replace('/home');
   }
 
   @override

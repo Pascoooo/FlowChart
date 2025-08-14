@@ -14,7 +14,6 @@ void main() async {
   setUrlStrategy(const HashUrlStrategy());
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Configura una sola volta i provider di autenticazione
   FirebaseUIAuth.configureProviders([
     GoogleProvider(
       clientId: '641983601905-5m4om4subv34s6irtpejhjpd9u3d41e1.apps.googleusercontent.com',
@@ -22,8 +21,11 @@ void main() async {
   ]);
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        Provider<UserRepository>.value(value: FirebaseUserRepo()),
+      ],
       child: MyApp(FirebaseUserRepo()),
     ),
   );

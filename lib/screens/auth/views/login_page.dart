@@ -135,35 +135,31 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 32),
                       ElevatedButton(
-                        onPressed: () async {
-                          final email = _emailController.text.trim();
-                          final password = _passwordController.text.trim();
+                          onPressed: () async {
+                            final email = _emailController.text.trim();
+                            final password = _passwordController.text.trim();
 
-                          if (email.isEmpty || password.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Please fill in all fields"),
-                              ),
-                            );
-                            return;
-                          }
-                          try {
-                            // Metodo corretto del repository
-                            await context.read<UserRepository>().signIn(
-                              email,
-                              password,
-                            );
-                            // La navigazione è gestita dal GoRouter che ascolta lo stato del Bloc
-                          } catch (e) {
-                            // Log semplice e snackbar utente
-                            // ignore: avoid_print
-                            print('Errore Email Sign In: $e');
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Login failed: $e")),
-                            );
-                          }
-                        },
+                            if (email.isEmpty || password.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Please fill in all fields")),
+                              );
+                              return;
+                            }
+
+                            try {
+                              await context.read<UserRepository>().signIn(email, password);
+                              // Sostituisce l'entry corrente: il back del browser non torna al login
+                              if (!mounted) return;
+                              context.replace('home'); // in alternativa: context.replaceNamed('home')
+                            } catch (e) {
+                              // ignore: avoid_print
+                              print('Errore Email Sign In: $e');
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text("Login failed: $e")),
+                              );
+                            }
+                          },
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 56),
                           shape: RoundedRectangleBorder(
