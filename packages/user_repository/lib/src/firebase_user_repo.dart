@@ -105,7 +105,6 @@ class FirebaseUserRepo implements UserRepository {
     return createdUser;
   }
 
-  /// Login con Google (web) usando popup
   @override
   Future<MyUser> signInWithGoogle() async {
     final provider = GoogleAuthProvider();

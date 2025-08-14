@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 
@@ -148,7 +149,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         icon: Icons.settings_outlined,
                         activeIcon: Icons.settings,
                         title: "Impostazioni",
-                        onTap: () {},
+                        onTap: () {
+                          context.go('/settings');
+                        },
                       ),
                       const SizedBox(height: 8),
                       _buildBottomMenuItem(

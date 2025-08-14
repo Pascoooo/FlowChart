@@ -29,7 +29,4 @@ class AuthenticationGoogleSignInRequested extends AuthenticationEvent {
   const AuthenticationGoogleSignInRequested();
 }
 
-class AuthenticationTimeoutOccurred extends AuthenticationEvent {
-  const AuthenticationTimeoutOccurred();
-}
 
