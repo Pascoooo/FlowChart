@@ -55,7 +55,7 @@ class AppRouter {
             case AuthenticationStatus.unknown:
               return AppRoutes.unknown;
             case AuthenticationStatus.unauthenticated:
-              return isAuthRoute ? null : AppRoutes.login;
+              return isAuthRoute ? null : AppRoutes.home;
             case AuthenticationStatus.emailNotVerified:
               return path == AppRoutes.emailVerification
                   ? null

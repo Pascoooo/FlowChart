@@ -6,6 +6,36 @@ import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 
+class DashboardItem {
+  final IconData icon;
+  final IconData activeIcon;
+  final String title;
+  final String? subtitle;
+
+  DashboardItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.title,
+    this.subtitle,
+  });
+}
+
+class _SidebarSection {
+  final IconData icon;
+  final String title;
+  final List<_SidebarItem> children;
+
+  _SidebarSection(
+      {required this.icon, required this.title, required this.children});
+}
+
+class _SidebarItem {
+  final String title;
+  final IconData? icon;
+
+  _SidebarItem({required this.title, this.icon});
+}
+
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -14,63 +44,41 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  int _selectedIndex = 0;
   bool _isSidebarCollapsed = false;
+  bool _projectActive = false;
+  bool _drawingMode = false;
+  bool _eraserMode = false;
+  String? _projectListType; // "recenti", "i miei progetti", "preferiti"
 
-  final List<DashboardItem> _menuItems = [
-    DashboardItem(
-      icon: Icons.chat_bubble_outline,
-      activeIcon: Icons.chat_bubble,
-      title: "Chat",
-      subtitle: "Inizia una nuova conversazione",
-    ),
-    DashboardItem(
-      icon: Icons.history_outlined,
-      activeIcon: Icons.history,
-      title: "Cronologia",
-      subtitle: "Visualizza chat precedenti",
-    ),
-    DashboardItem(
-      icon: Icons.bookmark_border,
-      activeIcon: Icons.bookmark,
-      title: "Preferiti",
-      subtitle: "Chat salvate",
-    ),
-    DashboardItem(
-      icon: Icons.folder_outlined,
-      activeIcon: Icons.folder,
-      title: "Progetti",
-      subtitle: "I tuoi progetti",
-    ),
-    DashboardItem(
-      icon: Icons.analytics_outlined,
-      activeIcon: Icons.analytics,
-      title: "Analytics",
-      subtitle: "Statistiche utilizzo",
-    ),
-  ];
+  void _openProject() {
+    setState(() {
+      _projectActive = true;
+      _projectListType = null;
+    });
+  }
+
+  void _showProjectList(String type) {
+    setState(() {
+      _projectActive = false;
+      _projectListType = type;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF7F9FC),
+      backgroundColor: Colors.white,
       body: Row(
         children: [
           // Sidebar
-          // Sostituisci la sidebar originale con questa versione
-
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             width: _isSidebarCollapsed ? 80 : 280,
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF161B22) : Colors.white,
+              color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: isDark
-                      ? Colors.black.withOpacity(0.3)
-                      : Colors.grey.withOpacity(0.1),
+                  color: Colors.grey.withOpacity(0.1),
                   blurRadius: 10,
                   offset: const Offset(2, 0),
                 ),
@@ -91,7 +99,10 @@ class _DashboardPageState extends State<DashboardPage> {
                           gradient: LinearGradient(
                             colors: [
                               Theme.of(context).colorScheme.primary,
-                              Theme.of(context).colorScheme.primary.withOpacity(0.7),
+                              Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.7),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),
@@ -106,7 +117,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            "FlowChart AI",
+                            "uniChart",
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
@@ -115,17 +126,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                       ],
-                      IconButton(
-                        onPressed: () {
-                          setState(() {
-                            _isSidebarCollapsed = !_isSidebarCollapsed;
-                          });
-                        },
-                        icon: Icon(
-                          _isSidebarCollapsed ? Icons.menu_open : Icons.menu,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -135,12 +135,14 @@ class _DashboardPageState extends State<DashboardPage> {
                 Expanded(
                   child: _SidebarMacroareas(
                     isCollapsed: _isSidebarCollapsed,
+                    onProjectSelected: _openProject,
+                    onProjectListRequested: _showProjectList,
                   ),
                 ),
 
                 const Divider(height: 1),
 
-                // Bottom actions
+                // Bottom actions (solo Impostazioni)
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
@@ -153,25 +155,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           context.go('/settings');
                         },
                       ),
-                      const SizedBox(height: 8),
-                      _buildBottomMenuItem(
-                        icon: Icons.brightness_6_outlined,
-                        activeIcon: Icons.brightness_6,
-                        title: "Tema",
-                        onTap: () {
-                          Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      _buildBottomMenuItem(
-                        icon: Icons.logout_outlined,
-                        activeIcon: Icons.logout,
-                        title: "Esci",
-                        onTap: () {
-                          context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
-                        },
-                        isDestructive: true,
-                      ),
                     ],
                   ),
                 ),
@@ -181,168 +164,176 @@ class _DashboardPageState extends State<DashboardPage> {
 
           // Main Content
           Expanded(
-            child: Column(
+            child: Stack(
               children: [
-                // Top Bar
-                Container(
-                  height: 80,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF161B22) : Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDark
-                            ? Colors.black.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                // Ambiente di lavoro o lista progetti
+                _projectActive
+                    ? Center(
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 1000),
+                          margin: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 24,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              // Barra strumenti
+                              Container(
+                                height: 60,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 24),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(24)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    DropdownButton<String>(
+                                      value: "Inter",
+                                      items: ["Inter", "Arial", "Times"]
+                                          .map((e) => DropdownMenuItem(
+                                              value: e, child: Text(e)))
+                                          .toList(),
+                                      onChanged: (_) {},
+                                    ),
+                                    const SizedBox(width: 8),
+                                    DropdownButton<String>(
+                                      value: "10 pt",
+                                      items: ["8 pt", "10 pt", "12 pt", "14 pt"]
+                                          .map((e) => DropdownMenuItem(
+                                              value: e, child: Text(e)))
+                                          .toList(),
+                                      onChanged: (_) {},
+                                    ),
+                                    IconButton(
+                                        icon: const Icon(Icons.format_bold),
+                                        onPressed: () {}),
+                                    IconButton(
+                                        icon: const Icon(Icons.format_italic),
+                                        onPressed: () {}),
+                                    IconButton(
+                                      icon: const Icon(Icons.edit),
+                                      tooltip: "Schizzo",
+                                      onPressed: () {
+                                        setState(() {
+                                          _drawingMode = true;
+                                          _eraserMode = false;
+                                        });
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.auto_fix_normal),
+                                      tooltip: "Gomma",
+                                      onPressed: () {
+                                        setState(() {
+                                          _drawingMode = false;
+                                          _eraserMode = true;
+                                        });
+                                      },
+                                    ),
+                                    IconButton(
+                                        icon:
+                                            const Icon(Icons.format_underlined),
+                                        onPressed: () {}),
+                                    IconButton(
+                                        icon:
+                                            const Icon(Icons.format_align_left),
+                                        onPressed: () {}),
+                                    IconButton(
+                                        icon: const Icon(
+                                            Icons.format_align_center),
+                                        onPressed: () {}),
+                                    IconButton(
+                                        icon: const Icon(
+                                            Icons.format_align_right),
+                                        onPressed: () {}),
+                                  ],
+                                ),
+                              ),
+                              // Ambiente lavoro
+                              Expanded(
+                                child: WorkArea(
+                                  drawingMode: _drawingMode,
+                                  eraserMode: _eraserMode,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _projectListType != null
+                        ? _ProjectListView(
+                            type: _projectListType!,
+                            onOpenProject: _openProject)
+                        : Container(color: Colors.white),
+
+                // Icona utente sempre in alto a destra, fuori dal riquadro
+                Positioned(
+                  top: 24,
+                  right: 32,
+                  child: PopupMenuButton<String>(
+                    offset: const Offset(0, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onSelected: (value) {
+                      if (value == "logout") {
+                        context
+                            .read<AuthenticationBloc>()
+                            .add(const AuthenticationLogoutRequested());
+                      } else if (value == "account") {
+                        // vai ad account
+                      } else if (value == "supporto") {
+                        // vai a supporto
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                          value: "account", child: Text("Account")),
+                      const PopupMenuItem(
+                          value: "supporto", child: Text("Supporto")),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: "logout",
+                        child:
+                            Text("Logout", style: TextStyle(color: Colors.red)),
                       ),
                     ],
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        _menuItems[_selectedIndex].title,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      const Spacer(),
-                      // Search bar
-                      Container(
-                        width: 300,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF0D1117)
-                              : const Color(0xFFF6F8FA),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.grey.withOpacity(0.3)
-                                : Colors.grey.withOpacity(0.2),
-                          ),
-                        ),
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: "Cerca...",
-                            prefixIcon: Icon(
-                              Icons.search,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                              size: 20,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                          ),
-                        ),
+                      child: const Icon(
+                        Icons.person,
+                        color: Colors.white,
+                        size: 20,
                       ),
-                      const SizedBox(width: 16),
-                      // Profile
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Icon(
-                          Icons.person,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Content Area
-                Expanded(
-                  child: _buildMainContent(),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(int index) {
-    final item = _menuItems[index];
-    final isSelected = _selectedIndex == index;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: _isSidebarCollapsed ? 16 : 16,
-              vertical: 12,
-            ),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? (isDark
-                  ? Theme.of(context).colorScheme.primary.withOpacity(0.2)
-                  : Theme.of(context).colorScheme.primary.withOpacity(0.1))
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: isSelected
-                  ? Border.all(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-              )
-                  : null,
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isSelected ? item.activeIcon : item.icon,
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  size: 22,
-                ),
-                if (!_isSidebarCollapsed) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        if (item.subtitle != null)
-                          Text(
-                            item.subtitle!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                            ),
-                          ),
-                      ],
                     ),
                   ),
-                ],
+                ),
               ],
             ),
-          ),
-        ),
+          )
+        ],
       ),
     );
   }
@@ -352,7 +343,6 @@ class _DashboardPageState extends State<DashboardPage> {
     required IconData activeIcon,
     required String title,
     required VoidCallback onTap,
-    bool isDestructive = false,
   }) {
     return Material(
       color: Colors.transparent,
@@ -368,9 +358,7 @@ class _DashboardPageState extends State<DashboardPage> {
             children: [
               Icon(
                 icon,
-                color: isDestructive
-                    ? Colors.red
-                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 size: 20,
               ),
               if (!_isSidebarCollapsed) ...[
@@ -380,9 +368,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: isDestructive
-                        ? Colors.red
-                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withOpacity(0.8),
                   ),
                 ),
               ],
@@ -392,217 +381,19 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
-
-  Widget _buildMainContent() {
-    switch (_selectedIndex) {
-      case 0:
-        return _buildChatContent();
-      case 1:
-        return _buildHistoryContent();
-      case 2:
-        return _buildFavoritesContent();
-      case 3:
-        return _buildProjectsContent();
-      case 4:
-        return _buildAnalyticsContent();
-      default:
-        return _buildChatContent();
-    }
-  }
-
-  Widget _buildChatContent() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                    Theme.of(context).colorScheme.primary.withOpacity(0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                Icons.auto_awesome,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              "Inizia una nuova conversazione",
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              "Chiedi qualsiasi cosa e inizieremo a chattare insieme",
-              style: TextStyle(
-                fontSize: 16,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-              ),
-            ),
-            const SizedBox(height: 40),
-            // Quick actions
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: [
-                _buildQuickAction(
-                  "Scrivi codice",
-                  Icons.code,
-                  "Aiutami a programmare",
-                ),
-                _buildQuickAction(
-                  "Spiega concetti",
-                  Icons.lightbulb_outline,
-                  "Spiegami qualcosa",
-                ),
-                _buildQuickAction(
-                  "Risolvi problemi",
-                  Icons.psychology,
-                  "Ho un problema da risolvere",
-                ),
-                _buildQuickAction(
-                  "Creatività",
-                  Icons.brush,
-                  "Aiutami a essere creativo",
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickAction(String title, IconData icon, String description) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          // Implementa l'azione
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: 200,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF161B22) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark
-                  ? Colors.grey.withOpacity(0.2)
-                  : Colors.grey.withOpacity(0.1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDark
-                    ? Colors.black.withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 32,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHistoryContent() {
-    return const Center(
-      child: Text(
-        "Cronologia Chat",
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildFavoritesContent() {
-    return const Center(
-      child: Text(
-        "Preferiti",
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildProjectsContent() {
-    return const Center(
-      child: Text(
-        "I tuoi Progetti",
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildAnalyticsContent() {
-    return const Center(
-      child: Text(
-        "Analytics",
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
 }
 
-class DashboardItem {
-  final IconData icon;
-  final IconData activeIcon;
-  final String title;
-  final String? subtitle;
-
-  DashboardItem({
-    required this.icon,
-    required this.activeIcon,
-    required this.title,
-    this.subtitle,
-  });
-}
+// ------------------- Sidebar -------------------
 
 class _SidebarMacroareas extends StatefulWidget {
   final bool isCollapsed;
-  const _SidebarMacroareas({required this.isCollapsed});
+  final VoidCallback onProjectSelected;
+  final void Function(String type) onProjectListRequested;
+  const _SidebarMacroareas({
+    required this.isCollapsed,
+    required this.onProjectSelected,
+    required this.onProjectListRequested,
+  });
 
   @override
   State<_SidebarMacroareas> createState() => _SidebarMacroareasState();
@@ -610,128 +401,273 @@ class _SidebarMacroareas extends StatefulWidget {
 
 class _SidebarMacroareasState extends State<_SidebarMacroareas> {
   int? _expandedSection;
+  bool _projectCreated = false;
 
-  final List<_SidebarSection> _sections = [
-    _SidebarSection(
-      icon: Icons.folder,
-      title: "Progetti",
-      children: [
-        _SidebarItem(title: "Recenti"),
-        _SidebarItem(title: "I miei progetti"),
-        _SidebarItem(title: "Preferiti"),
-      ],
-    ),
-    _SidebarSection(
-      icon: Icons.add_box,
-      title: "Inserisci",
-      children: [
-        _SidebarItem(title: "Rettangolo", icon: Icons.crop_16_9),
-        _SidebarItem(title: "Cerchio", icon: Icons.circle),
-        _SidebarItem(title: "Parallelogramma", icon: Icons.change_history),
-        _SidebarItem(title: "Rombo", icon: Icons.diamond),
-      ],
-    ),
-    _SidebarSection(
-      icon: Icons.play_arrow,
-      title: "Esecuzione",
-      children: [
-        _SidebarItem(title: "Simula"),
-        _SidebarItem(title: "Debug"),
-      ],
-    ),
-  ];
+  final _progettiSection = _SidebarSection(
+    icon: Icons.folder,
+    title: "Progetti",
+    children: [
+      _SidebarItem(title: "Recenti"),
+      _SidebarItem(title: "I miei progetti"),
+      _SidebarItem(title: "Preferiti"),
+    ],
+  );
+
+  final _inserisciSection = _SidebarSection(
+    icon: Icons.add_box,
+    title: "Inserisci",
+    children: [
+      _SidebarItem(title: "Cerchio", icon: Icons.circle),
+      _SidebarItem(title: "Rettangolo", icon: Icons.crop_square),
+      _SidebarItem(title: "Parallelogramma", icon: Icons.change_history),
+      _SidebarItem(title: "Rombo", icon: Icons.diamond),
+    ],
+  );
+
+  final _esecuzioneSection = _SidebarSection(
+    icon: Icons.play_arrow,
+    title: "Esecuzione",
+    children: [
+      _SidebarItem(title: "Simula"),
+      _SidebarItem(title: "Debug"),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: _sections.length,
-      itemBuilder: (context, sectionIndex) {
-        final section = _sections[sectionIndex];
-        final expanded = _expandedSection == sectionIndex;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              leading: Icon(section.icon, color: Theme.of(context).colorScheme.primary),
-              title: widget.isCollapsed ? null : Text(section.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              trailing: widget.isCollapsed
-                  ? null
-                  : Icon(
-                expanded ? Icons.expand_less : Icons.expand_more,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-              ),
+    List<_SidebarSection> sections;
+    if (!_projectCreated) {
+      sections = [_progettiSection];
+    } else {
+      sections = [_inserisciSection, _esecuzioneSection];
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(8),
+            itemCount: sections.length,
+            itemBuilder: (context, sectionIndex) {
+              final section = sections[sectionIndex];
+              final expanded = _expandedSection == sectionIndex;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    leading: Icon(section.icon,
+                        color: Theme.of(context).colorScheme.primary),
+                    title: widget.isCollapsed
+                        ? null
+                        : Text(section.title,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                    trailing: widget.isCollapsed
+                        ? null
+                        : Icon(
+                            expanded ? Icons.expand_less : Icons.expand_more,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withOpacity(0.7),
+                          ),
+                    onTap: () {
+                      setState(() {
+                        _expandedSection = expanded ? null : sectionIndex;
+                      });
+                    },
+                    contentPadding: EdgeInsets.symmetric(
+                        horizontal: widget.isCollapsed ? 8 : 16),
+                  ),
+                  if (expanded)
+                    ...section.children.map((item) {
+                      return Padding(
+                        padding: EdgeInsets.only(
+                            left: widget.isCollapsed ? 16 : 32.0),
+                        child: ListTile(
+                          leading: item.icon != null
+                              ? Icon(item.icon,
+                                  color: Theme.of(context).colorScheme.primary)
+                              : null,
+                          title: widget.isCollapsed ? null : Text(item.title),
+                          dense: true,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 0),
+                          onTap: !_projectCreated
+                              ? () {
+                                  widget.onProjectListRequested(item.title);
+                                }
+                              : null,
+                        ),
+                      );
+                    }).toList(),
+                ],
+              );
+            },
+          ),
+        ),
+        if (_projectCreated)
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: ListTile(
+              leading: const Icon(Icons.arrow_back),
+              title: widget.isCollapsed ? null : const Text("Indietro"),
               onTap: () {
                 setState(() {
-                  _expandedSection = expanded ? null : sectionIndex;
+                  _projectCreated = false;
+                  _expandedSection = null;
                 });
+                // Torna alla schermata iniziale
+                widget.onProjectListRequested(
+                    ""); // oppure chiama una callback dedicata
               },
-              contentPadding: EdgeInsets.symmetric(horizontal: widget.isCollapsed ? 8 : 16),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              tileColor: Colors.grey.withOpacity(0.1),
             ),
-            if (expanded)
-              ...section.children.map((item) {
-                if (section.title == "Inserisci") {
-                  // Drag & Drop per le forme
-                  return Padding(
-                    padding: EdgeInsets.only(left: widget.isCollapsed ? 16 : 32.0),
-                    child: Draggable<String>(
-                      data: item.title,
-                      feedback: Material(
-                        color: Colors.transparent,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(item.icon, size: 28, color: Theme.of(context).colorScheme.primary),
-                            if (!widget.isCollapsed) ...[
-                              const SizedBox(width: 8),
-                              Text(item.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            ],
-                          ],
-                        ),
-                      ),
-                      child: ListTile(
-                        leading: Icon(item.icon, color: Theme.of(context).colorScheme.primary),
-                        title: widget.isCollapsed ? null : Text(item.title),
-                        dense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 0),
-                      ),
-                    ),
-                  );
-                } else {
-                  return Padding(
-                    padding: EdgeInsets.only(left: widget.isCollapsed ? 16 : 32.0),
-                    child: ListTile(
-                      title: widget.isCollapsed ? null : Text(item.title),
-                      dense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 0),
-                      onTap: () {
-                        // Azione per ogni voce
-                      },
-                    ),
-                  );
-                }
-              }).toList(),
-          ],
-        );
-      },
+          ),
+        if (!_projectCreated)
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.add, size: 32),
+                label: const Text(
+                  "Nuovo progetto",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 2,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _projectCreated = true;
+                    _expandedSection = null;
+                  });
+                  widget.onProjectSelected();
+                },
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
 
-class _SidebarSection {
-  final IconData icon;
-  final String title;
-  final List<_SidebarItem> children;
+// ------------------- Lista Progetti -------------------
 
-  _SidebarSection({required this.icon, required this.title, required this.children});
+class _ProjectListView extends StatelessWidget {
+  final String type;
+  final VoidCallback onOpenProject;
+  const _ProjectListView({required this.type, required this.onOpenProject});
+
+  @override
+  Widget build(BuildContext context) {
+    // Sostituisci con la tua logica di caricamento progetti
+    final List<String> projects = [
+      "Progetto 1",
+      "Progetto 2",
+      "Progetto 3",
+    ];
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Progetti $type",
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24),
+          ...projects.map((p) => Card(
+                child: ListTile(
+                  title: Text(p),
+                  trailing: ElevatedButton(
+                    child: const Text("Apri"),
+                    onPressed: onOpenProject,
+                  ),
+                ),
+              )),
+        ],
+      ),
+    );
+  }
 }
 
-class _SidebarItem {
-  final String title;
-  final IconData? icon;
+class WorkArea extends StatefulWidget {
+  final bool drawingMode;
+  final bool eraserMode;
+  const WorkArea({required this.drawingMode, required this.eraserMode, Key? key}) : super(key: key);
 
-  _SidebarItem({required this.title, this.icon});
+  @override
+  State<WorkArea> createState() => _WorkAreaState();
 }
 
-//avvia l'applicazione con il DashboardPage
+class _WorkAreaState extends State<WorkArea> {
+  List<Offset?> points = [];
+  List<Offset?> erasedPoints = [];
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onPanUpdate: (details) {
+        setState(() {
+          if (widget.drawingMode && !widget.eraserMode) {
+            points.add(details.localPosition);
+          } else if (widget.eraserMode && !widget.drawingMode) {
+            erasedPoints.add(details.localPosition);
+          }
+        });
+      },
+      onPanEnd: (_) {
+        setState(() {
+          if (widget.drawingMode && !widget.eraserMode) points.add(null);
+          if (widget.eraserMode && !widget.drawingMode) erasedPoints.add(null);
+        });
+      },
+      child: CustomPaint(
+        painter: SketchPainter(points, erasedPoints),
+        child: Container(color: Colors.white),
+      ),
+    );
+  }
+}
+
+class SketchPainter extends CustomPainter {
+  final List<Offset?> points;
+  final List<Offset?> erasedPoints;
+  SketchPainter(this.points, this.erasedPoints);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+    for (int i = 0; i < points.length - 1; i++) {
+      if (points[i] != null && points[i + 1] != null) {
+        canvas.drawLine(points[i]!, points[i + 1]!, paint);
+      }
+    }
+    final eraser = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 16.0
+      ..strokeCap = StrokeCap.round;
+    for (int i = 0; i < erasedPoints.length - 1; i++) {
+      if (erasedPoints[i] != null && erasedPoints[i + 1] != null) {
+        canvas.drawLine(erasedPoints[i]!, erasedPoints[i + 1]!, eraser);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
