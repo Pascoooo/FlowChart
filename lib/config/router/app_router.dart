@@ -11,6 +11,7 @@ import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
 
 import '../../blocs/auth_bloc/authentication_state.dart';
 import '../../screens/auth/views/splashpage.dart';
+import '../../screens/user_dashboard/sketch_edit/drawing_editor_page.dart';
 
 class AppRoutes {
   static const String home = '/';
@@ -114,6 +115,10 @@ class AppRouter {
     path: AppRoutes.unknown,
     name: 'splash',
     builder: (context, state) => const SplashPage(),
+    ),
+    GoRoute(
+      path: 'drawing-editor',
+      builder: (context, state) => const DrawingEditorPage(),
     ),
   ];
 }

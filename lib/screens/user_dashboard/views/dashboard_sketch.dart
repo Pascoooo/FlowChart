@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
@@ -48,12 +49,15 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _projectActive = false;
   bool _drawingMode = false;
   bool _eraserMode = false;
+  bool _editingMode = false;
   String? _projectListType; // "recenti", "i miei progetti", "preferiti"
 
   void _openProject() {
     setState(() {
       _projectActive = true;
       _projectListType = null;
+      _drawingMode = false;
+      _eraserMode = false;
     });
   }
 
@@ -169,119 +173,149 @@ class _DashboardPageState extends State<DashboardPage> {
                 // Ambiente di lavoro o lista progetti
                 _projectActive
                     ? Center(
-                        child: Container(
-                          constraints: const BoxConstraints(maxWidth: 1000),
-                          margin: const EdgeInsets.all(32),
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 1000),
+                    margin: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        // Barra strumenti
+                        Container(
+                          height: 60,
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black12,
-                                blurRadius: 24,
-                                offset: const Offset(0, 8),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
                               ),
                             ],
                           ),
-                          child: Column(
-                            children: [
-                              // Barra strumenti
-                              Container(
-                                height: 60,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 24),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(24)),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
+                          child: Row(
+                            children: _editingMode
+                                ? [
+                              // Barra degli strumenti per la modalità disegno
+                              IconButton(
+                                icon: Container(
+                                  decoration: BoxDecoration(
+                                    border: _drawingMode
+                                        ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
+                                        : null,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.edit),
                                 ),
-                                child: Row(
-                                  children: [
-                                    DropdownButton<String>(
-                                      value: "Inter",
-                                      items: ["Inter", "Arial", "Times"]
-                                          .map((e) => DropdownMenuItem(
-                                              value: e, child: Text(e)))
-                                          .toList(),
-                                      onChanged: (_) {},
-                                    ),
-                                    const SizedBox(width: 8),
-                                    DropdownButton<String>(
-                                      value: "10 pt",
-                                      items: ["8 pt", "10 pt", "12 pt", "14 pt"]
-                                          .map((e) => DropdownMenuItem(
-                                              value: e, child: Text(e)))
-                                          .toList(),
-                                      onChanged: (_) {},
-                                    ),
-                                    IconButton(
-                                        icon: const Icon(Icons.format_bold),
-                                        onPressed: () {}),
-                                    IconButton(
-                                        icon: const Icon(Icons.format_italic),
-                                        onPressed: () {}),
-                                    IconButton(
-                                      icon: const Icon(Icons.edit),
-                                      tooltip: "Schizzo",
-                                      onPressed: () {
-                                        setState(() {
-                                          _drawingMode = true;
-                                          _eraserMode = false;
-                                        });
-                                      },
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.auto_fix_normal),
-                                      tooltip: "Gomma",
-                                      onPressed: () {
-                                        setState(() {
-                                          _drawingMode = false;
-                                          _eraserMode = true;
-                                        });
-                                      },
-                                    ),
-                                    IconButton(
-                                        icon:
-                                            const Icon(Icons.format_underlined),
-                                        onPressed: () {}),
-                                    IconButton(
-                                        icon:
-                                            const Icon(Icons.format_align_left),
-                                        onPressed: () {}),
-                                    IconButton(
-                                        icon: const Icon(
-                                            Icons.format_align_center),
-                                        onPressed: () {}),
-                                    IconButton(
-                                        icon: const Icon(
-                                            Icons.format_align_right),
-                                        onPressed: () {}),
-                                  ],
-                                ),
+                                tooltip: "Matita",
+                                onPressed: () {
+                                  setState(() {
+                                    _drawingMode = true;
+                                    _eraserMode = false;
+                                  });
+                                },
                               ),
-                              // Ambiente lavoro
-                              Expanded(
-                                child: WorkArea(
-                                  drawingMode: _drawingMode,
-                                  eraserMode: _eraserMode,
+                              IconButton(
+                                icon: Container(
+                                  decoration: BoxDecoration(
+                                    border: _eraserMode
+                                        ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
+                                        : null,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.auto_fix_normal),
                                 ),
+                                tooltip: "Gomma",
+                                onPressed: () {
+                                  setState(() {
+                                    _drawingMode = false;
+                                    _eraserMode = true;
+                                  });
+                                },
+                              ),
+                              const Spacer(),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.arrow_back),
+                                label: const Text("Torna al foglio principale"),
+                                onPressed: () {
+                                  setState(() {
+                                    _editingMode = false;
+                                    _drawingMode = false;
+                                    _eraserMode = false;
+                                  });
+                                },
+                              ),
+                            ]
+                                : [
+                              // Barra degli strumenti normale con solo il bottone edit
+                              const Spacer(),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.edit),
+                                label: const Text("Edit"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () async {
+                                  // Crea l'URL per la pagina di disegno
+                                  final Uri url = Uri(
+                                    scheme: Uri.base.scheme,
+                                    host: Uri.base.host,
+                                    port: Uri.base.port,
+                                    path: '/drawing-editor', // Percorso assoluto, non relativo
+                                  );
+
+                                  // Apri l'URL in una nuova scheda
+                                  if (await canLaunchUrl(url)) {
+                                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                                  } else {
+                                    // Gestisci l'errore
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Impossibile aprire l'editor di disegno")),
+                                    );
+                                  }
+                                },
                               ),
                             ],
                           ),
                         ),
-                      )
+                        // Ambiente lavoro
+                        Expanded(
+                          child: _editingMode
+                              ? WorkArea(
+                            drawingMode: _drawingMode,
+                            eraserMode: _eraserMode,
+                          )
+                              : Container(
+                            color: Colors.white,
+                            child: const Center(
+                              child: Text(
+                                "Clicca su Edit per iniziare a disegnare",
+                                style: TextStyle(fontSize: 18, color: Colors.grey),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
                     : _projectListType != null
-                        ? _ProjectListView(
-                            type: _projectListType!,
-                            onOpenProject: _openProject)
-                        : Container(color: Colors.white),
+                    ? _ProjectListView(
+                    type: _projectListType!,
+                    onOpenProject: _openProject)
+                    : Container(color: Colors.white),
 
                 // Icona utente sempre in alto a destra, fuori dal riquadro
                 Positioned(
@@ -312,7 +346,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       const PopupMenuItem(
                         value: "logout",
                         child:
-                            Text("Logout", style: TextStyle(color: Colors.red)),
+                        Text("Logout", style: TextStyle(color: Colors.red)),
                       ),
                     ],
                     child: Container(
@@ -460,17 +494,17 @@ class _SidebarMacroareasState extends State<_SidebarMacroareas> {
                     title: widget.isCollapsed
                         ? null
                         : Text(section.title,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
+                        style:
+                        const TextStyle(fontWeight: FontWeight.w600)),
                     trailing: widget.isCollapsed
                         ? null
                         : Icon(
-                            expanded ? Icons.expand_less : Icons.expand_more,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.7),
-                          ),
+                      expanded ? Icons.expand_less : Icons.expand_more,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.7),
+                    ),
                     onTap: () {
                       setState(() {
                         _expandedSection = expanded ? null : sectionIndex;
@@ -487,16 +521,16 @@ class _SidebarMacroareasState extends State<_SidebarMacroareas> {
                         child: ListTile(
                           leading: item.icon != null
                               ? Icon(item.icon,
-                                  color: Theme.of(context).colorScheme.primary)
+                              color: Theme.of(context).colorScheme.primary)
                               : null,
                           title: widget.isCollapsed ? null : Text(item.title),
                           dense: true,
                           contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 0),
+                          const EdgeInsets.symmetric(horizontal: 0),
                           onTap: !_projectCreated
                               ? () {
-                                  widget.onProjectListRequested(item.title);
-                                }
+                            widget.onProjectListRequested(item.title);
+                          }
                               : null,
                         ),
                       );
@@ -509,7 +543,7 @@ class _SidebarMacroareasState extends State<_SidebarMacroareas> {
         if (_projectCreated)
           Padding(
             padding:
-                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: ListTile(
               leading: const Icon(Icons.arrow_back),
               title: widget.isCollapsed ? null : const Text("Indietro"),
@@ -588,14 +622,14 @@ class _ProjectListView extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           ...projects.map((p) => Card(
-                child: ListTile(
-                  title: Text(p),
-                  trailing: ElevatedButton(
-                    child: const Text("Apri"),
-                    onPressed: onOpenProject,
-                  ),
-                ),
-              )),
+            child: ListTile(
+              title: Text(p),
+              trailing: ElevatedButton(
+                child: const Text("Apri"),
+                onPressed: onOpenProject,
+              ),
+            ),
+          )),
         ],
       ),
     );
@@ -617,25 +651,41 @@ class _WorkAreaState extends State<WorkArea> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onPanUpdate: (details) {
-        setState(() {
-          if (widget.drawingMode && !widget.eraserMode) {
-            points.add(details.localPosition);
-          } else if (widget.eraserMode && !widget.drawingMode) {
-            erasedPoints.add(details.localPosition);
-          }
-        });
-      },
-      onPanEnd: (_) {
-        setState(() {
-          if (widget.drawingMode && !widget.eraserMode) points.add(null);
-          if (widget.eraserMode && !widget.drawingMode) erasedPoints.add(null);
-        });
-      },
-      child: CustomPaint(
-        painter: SketchPainter(points, erasedPoints),
-        child: Container(color: Colors.white),
+    return Center(
+      child: ClipRect(
+        child: SizedBox(
+          width: 1000,
+          height: 3000,
+          child: Stack(
+            children: [
+              // Sfondo bianco
+              Container(color: Colors.white),
+
+              // Layer di disegno
+              GestureDetector(
+                onPanUpdate: (details) {
+                  setState(() {
+                    if (widget.drawingMode && !widget.eraserMode) {
+                      points.add(details.localPosition);
+                    } else if (widget.eraserMode && !widget.drawingMode) {
+                      erasedPoints.add(details.localPosition);
+                    }
+                  });
+                },
+                onPanEnd: (_) {
+                  setState(() {
+                    if (widget.drawingMode && !widget.eraserMode) points.add(null);
+                    if (widget.eraserMode && !widget.drawingMode) erasedPoints.add(null);
+                  });
+                },
+                child: CustomPaint(
+                  painter: SketchPainter(points, erasedPoints),
+                  size: const Size(1000, 3000),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
