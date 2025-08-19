@@ -4,8 +4,7 @@ import 'package:user_repository/user_repository.dart';
 import 'authentication_event.dart';
 import 'authentication_state.dart';
 
-class AuthenticationBloc
-    extends Bloc<AuthenticationEvent, AuthenticationState> {
+class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> {
   final UserRepository userRepository;
   late final StreamSubscription<MyUser?> _userSubscription;
 
