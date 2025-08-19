@@ -4,13 +4,21 @@ import 'package:user_repository/user_repository.dart';
 import 'authentication_event.dart';
 import 'authentication_state.dart';
 
-class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> {
+class AuthenticationBloc
+    extends Bloc<AuthenticationEvent, AuthenticationState> {
   final UserRepository userRepository;
   late final StreamSubscription<MyUser?> _userSubscription;
 
   AuthenticationBloc({required this.userRepository})
-      : super(const AuthenticationState.unknown()) {
-
+      : super(AuthenticationState.authenticated(
+          MyUser(
+            userId: 'test',
+            email: 'test@example.com',
+            name: 'Test User',
+            photoURL: '',
+            // aggiungi altri campi fittizi se necessario
+          ),
+        )) {
     // 1. Controllo immediato dell'utente corrente
     userRepository.getCurrentUser().then((currentUser) {
       if (currentUser != null && currentUser != MyUser.empty) {
@@ -27,7 +35,7 @@ class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> 
 
     // 2. Sottoscrizione allo stream
     _userSubscription = userRepository.user.listen(
-          (user) => add(AuthenticationUserChanged(user)),
+      (user) => add(AuthenticationUserChanged(user)),
     );
 
     on<AuthenticationUserChanged>((event, emit) {
@@ -58,15 +66,12 @@ class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> 
     on<AuthenticationLogoutRequested>((event, emit) async {
       await userRepository.signOut();
       emit(const AuthenticationState.unauthenticated());
-
     });
   }
 
-
-    @override
-    Future<void> close() async {
-      await _userSubscription.cancel();
-      return super.close();
-    }
+  @override
+  Future<void> close() async {
+    await _userSubscription.cancel();
+    return super.close();
   }
-
+}
