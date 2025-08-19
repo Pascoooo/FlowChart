@@ -9,13 +9,14 @@ class AuthenticationBloc
   final UserRepository userRepository;
   late final StreamSubscription<MyUser?> _userSubscription;
 
+  //impostato un utente fittizio per il test, dovrebbe essere super(const AuthenticationState.unknown)
   AuthenticationBloc({required this.userRepository})
       : super(AuthenticationState.authenticated(
           MyUser(
             userId: 'test',
             email: 'test@example.com',
             name: 'Test User',
-            photoURL: '',
+            photoURL: 'https://example.com/photo.jpg',
             // aggiungi altri campi fittizi se necessario
           ),
         )) {
