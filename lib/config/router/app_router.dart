@@ -22,6 +22,7 @@ class AppRoutes {
   static const String settings = '/settings';
   static const String error = '/error';
   static const String unknown = '/splash';
+  static const String drawingEditor = '/drawing-editor';
 
   static const Set<String> authRoutes = {login, register, forgotPassword};
 }
@@ -56,7 +57,7 @@ class AppRouter {
             case AuthenticationStatus.unknown:
               return AppRoutes.unknown;
             case AuthenticationStatus.unauthenticated:
-              return isAuthRoute ? null : AppRoutes.home;
+              return isAuthRoute ? null : AppRoutes.login;
             case AuthenticationStatus.emailNotVerified:
               return path == AppRoutes.emailVerification
                   ? null
@@ -79,7 +80,7 @@ class AppRouter {
     GoRoute(
       path: AppRoutes.home,
       name: 'home',
-      builder: (context, state) => const DashboardPage(),
+      builder: (context, state) => const DrawingEditorPage(),
     ),
     GoRoute(
       path: AppRoutes.login,
@@ -117,7 +118,8 @@ class AppRouter {
     builder: (context, state) => const SplashPage(),
     ),
     GoRoute(
-      path: 'drawing-editor',
+      path: AppRoutes.drawingEditor,
+      name: 'drawing-editor',
       builder: (context, state) => const DrawingEditorPage(),
     ),
   ];
