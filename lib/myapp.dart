@@ -10,8 +10,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-        create: (context) => AuthenticationBloc(userRepository: userRepository),
-        child: const MyAppView());
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (context) => AuthenticationBloc(userRepository: userRepository),
+        ),
+      ],
+      child: const MyAppView(),
+    );
   }
 }

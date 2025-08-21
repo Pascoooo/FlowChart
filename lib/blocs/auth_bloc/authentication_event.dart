@@ -24,9 +24,3 @@ class AuthenticationUserVerified extends AuthenticationEvent {
 class AuthenticationLogoutRequested extends AuthenticationEvent {
   const AuthenticationLogoutRequested();
 }
-
-class AuthenticationGoogleSignInRequested extends AuthenticationEvent {
-  const AuthenticationGoogleSignInRequested();
-}
-
-

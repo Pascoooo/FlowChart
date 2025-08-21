@@ -1,23 +1,19 @@
-// dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flowchart_thesis/screens/auth/views/login_page.dart';
-import 'package:flowchart_thesis/screens/auth/views/register_page.dart';
-import 'package:flowchart_thesis/screens/auth/views/forgot_password_page.dart';
-import 'package:flowchart_thesis/screens/auth/views/email_verification_page.dart';
 import 'package:flowchart_thesis/screens/error/error_page.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_sketch.dart';
 import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
-
 import '../../blocs/auth_bloc/authentication_state.dart';
-import '../../screens/auth/views/splashpage.dart';
+import '../../screens/auth/pages/forgot_password_page.dart';
+import '../../screens/auth/pages/login_page.dart';
+import '../../screens/auth/pages/register_page.dart';
+import '../../screens/auth/pages/splashpage.dart';
 
 class AppRoutes {
   static const String home = '/';
   static const String login = '/login';
   static const String register = '/register';
   static const String forgotPassword = '/recover';
-  static const String emailVerification = '/verify-email';
   static const String settings = '/settings';
   static const String error = '/error';
   static const String unknown = '/splash';
@@ -33,8 +29,6 @@ class AppRouter {
     final cacheKey = switch (state.status) {
       AuthenticationStatus.authenticated =>
       'auth_${state.user?.userId ?? 'unknown'}',
-      AuthenticationStatus.emailNotVerified =>
-      'email_not_verified_${state.user?.userId ?? 'unknown'}',
       AuthenticationStatus.unauthenticated => 'unauth',
       AuthenticationStatus.unknown => 'unknown',
     };
@@ -44,9 +38,9 @@ class AppRouter {
     if (_cache.length > 10) _cache.clear();
 
     final router = GoRouter(
-      navigatorKey: _rootNavigatorKey,
-      routes: _routes,
-      errorBuilder: (context, state) => const ErrorPage(),
+        navigatorKey: _rootNavigatorKey,
+        routes: _routes,
+        errorBuilder: (context, state) => const ErrorPage(),
         redirect: (context, goState) {
           final path = goState.uri.path;
           final isAuthRoute = AppRoutes.authRoutes.contains(path);
@@ -56,18 +50,13 @@ class AppRouter {
               return AppRoutes.unknown;
             case AuthenticationStatus.unauthenticated:
               return isAuthRoute ? null : AppRoutes.login;
-            case AuthenticationStatus.emailNotVerified:
-              return path == AppRoutes.emailVerification
-                  ? null
-                  : AppRoutes.emailVerification;
             case AuthenticationStatus.authenticated:
-              if (isAuthRoute || path == AppRoutes.emailVerification) {
+              if (isAuthRoute) {
                 return AppRoutes.home;
               }
               return null;
           }
         }
-
     );
 
     _cache[cacheKey] = router;
@@ -96,11 +85,6 @@ class AppRouter {
       builder: (context, state) => const ForgotPasswordPage(),
     ),
     GoRoute(
-      path: AppRoutes.emailVerification,
-      name: 'emailVerification',
-      builder: (context, state) => const EmailVerificationPage(),
-    ),
-    GoRoute(
       path: AppRoutes.settings,
       name: 'settings',
       builder: (context, state) => const SettingsPage(),
@@ -111,9 +95,9 @@ class AppRouter {
       builder: (context, state) => const ErrorPage(),
     ),
     GoRoute(
-    path: AppRoutes.unknown,
-    name: 'splash',
-    builder: (context, state) => const SplashPage(),
+      path: AppRoutes.unknown,
+      name: 'splash',
+      builder: (context, state) => const SplashPage(),
     ),
   ];
 }

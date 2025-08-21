@@ -319,4 +319,15 @@ class FirebaseUserRepo implements UserRepository {
 
     return user.providerData.map((provider) => provider.providerId).toList();
   }
+
+  @override
+  Future<bool> isEmailVerified() async {
+    _firebaseAuth.currentUser!.reload();
+    return _firebaseAuth.currentUser!.emailVerified;
+  }
+
+  @override
+  void sendEmailVerification() {
+    _firebaseAuth.currentUser!.sendEmailVerification();
+  }
 }

@@ -2,71 +2,41 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:user_repository/user_repository.dart';
 import 'authentication_event.dart';
-import 'authentication_state.dart';
+import 'authentication_state.dart' as s;
 
-class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> {
+class AuthenticationBloc extends Bloc<AuthenticationEvent, s.AuthenticationState> {
   final UserRepository userRepository;
   late final StreamSubscription<MyUser?> _userSubscription;
 
   AuthenticationBloc({required this.userRepository})
-      : super(const AuthenticationState.unknown()) {
+      : super(const s.AuthenticationState.unknown()) {
 
-    // 1. Controllo immediato dell'utente corrente
-    userRepository.getCurrentUser().then((currentUser) {
-      if (currentUser != null && currentUser != MyUser.empty) {
-        add(AuthenticationUserChanged(currentUser));
-      } else {
-        // Timeout di fallback: se dopo 3 sec ancora unknown, assumiamo utente non loggato
-        Future.delayed(const Duration(seconds: 3), () {
-          if (state.status == AuthenticationStatus.unknown) {
-            add(AuthenticationUserChanged(MyUser.empty));
-          }
-        });
-      }
-    });
-
-    // 2. Sottoscrizione allo stream
-    _userSubscription = userRepository.user.listen(
+    _userSubscription = userRepository.user
+        .listen(
           (user) => add(AuthenticationUserChanged(user)),
+      onError: (error) {
+        add(AuthenticationUserChanged(MyUser.empty));
+      },
     );
 
     on<AuthenticationUserChanged>((event, emit) {
-      final u = event.user;
-      if (u == MyUser.empty) {
-        emit(const AuthenticationState.unauthenticated());
-      } else if (u != null) {
-        emit(AuthenticationState.authenticated(u));
-      }
-    });
-
-    on<AuthenticationGoogleSignInRequested>((event, emit) async {
-      emit(const AuthenticationState.unauthenticated(
-        isLoading: true,
-        inProgressProvider: AuthProvider.google,
-      ));
-      try {
-        await userRepository.signInWithGoogle();
-      } catch (e) {
-        emit(AuthenticationState.unauthenticated(
-          isLoading: false,
-          inProgressProvider: null,
-          error: e.toString(),
-        ));
+      final user = event.user;
+      if (user == MyUser.empty || user == null) {
+        emit(const s.AuthenticationState.unauthenticated());
+      } else {
+        emit(s.AuthenticationState.authenticated(user));
       }
     });
 
     on<AuthenticationLogoutRequested>((event, emit) async {
       await userRepository.signOut();
-      emit(const AuthenticationState.unauthenticated());
-
+      emit(const s.AuthenticationState.unauthenticated());
     });
   }
 
-
-    @override
-    Future<void> close() async {
-      await _userSubscription.cancel();
-      return super.close();
-    }
+  @override
+  Future<void> close() async {
+    await _userSubscription.cancel();
+    return super.close();
   }
-
+}
