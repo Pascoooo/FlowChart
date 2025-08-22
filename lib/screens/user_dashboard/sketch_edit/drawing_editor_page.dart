@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as vector_math;
 
-
 class DrawingEditorPage extends StatefulWidget {
   const DrawingEditorPage({Key? key}) : super(key: key);
 
@@ -12,10 +11,26 @@ class DrawingEditorPage extends StatefulWidget {
 class _DrawingEditorPageState extends State<DrawingEditorPage> {
   bool _drawingMode = true;
   bool _eraserMode = false;
-  List<Offset?> points = [];
-  List<Offset?> erasedPoints = [];
-  final TransformationController _transformationController = TransformationController();
+  List<Stroke> strokes = [];
+  Stroke? currentStroke;
 
+  List<Offset?> erasedPoints = [];
+  double _strokeWidth = 2.0;
+  double _eraserWidth = 16.0;
+  Color _strokeColor = Colors.black;
+  List<Color> _availableColors = [
+    Colors.black,
+    Colors.red,
+    Colors.blue,
+    Colors.green,
+    Colors.yellow,
+    Colors.purple,
+    Colors.orange,
+  ];
+  final TransformationController _transformationController =
+      TransformationController();
+
+  @override
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -27,20 +42,14 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
             Navigator.of(context).pop();
           },
         ),
-        actions: [
-          // Pulsante per reimpostare lo zoom
-          IconButton(
-            icon: const Icon(Icons.zoom_out_map),
-            onPressed: () => _transformationController.value = Matrix4.identity(),
-          ),
-        ],
       ),
       body: Column(
         children: [
-          // Barra degli strumenti semplificata
+          // Barra degli strumenti migliorata
+          // Barra degli strumenti riorganizzata
           Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            height: 100,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
@@ -52,88 +61,214 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
               ],
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Matita
-                IconButton(
-                  icon: Container(
-                    decoration: BoxDecoration(
-                      border: _drawingMode
-                          ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
-                          : null,
-                      borderRadius: BorderRadius.circular(8),
+                // Colonna strumenti disegno e slider
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Riga con matita e gomma
+                    Row(
+                      children: [
+                        // Matita
+                        IconButton(
+                          icon: Container(
+                            decoration: BoxDecoration(
+                              border: _drawingMode
+                                  ? Border.all(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  width: 2)
+                                  : null,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.edit),
+                          ),
+                          tooltip: "Matita",
+                          onPressed: () {
+                            setState(() {
+                              _drawingMode = true;
+                              _eraserMode = false;
+                            });
+                          },
+                        ),
+                        // Gomma
+                        IconButton(
+                          icon: Container(
+                            decoration: BoxDecoration(
+                              border: _eraserMode
+                                  ? Border.all(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  width: 2)
+                                  : null,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.auto_fix_normal),
+                          ),
+                          tooltip: "Gomma",
+                          onPressed: () {
+                            setState(() {
+                              _drawingMode = false;
+                              _eraserMode = true;
+                            });
+                          },
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.edit),
-                  ),
-                  tooltip: "Matita",
+                    // Slider sotto gli strumenti
+                    if (_drawingMode)
+                      Container(
+                        width: 120,
+                        child: Slider(
+                          value: _strokeWidth,
+                          min: 1.0,
+                          max: 10.0,
+                          divisions: 5,
+                          label: "${_strokeWidth.toInt()}",
+                          onChanged: (value) {
+                            setState(() {
+                              _strokeWidth = value;
+                            });
+                          },
+                        ),
+                      ),
+                    if (_eraserMode)
+                      Container(
+                        width: 120,
+                        child: Slider(
+                          value: _eraserWidth,
+                          min: 5.0,
+                          max: 50.0,
+                          divisions: 5,
+                          label: "${_eraserWidth.toInt()}",
+                          onChanged: (value) {
+                            setState(() {
+                              _eraserWidth = value;
+                            });
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+
+                // Cestino
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: "Cancella tutto",
                   onPressed: () {
-                    setState(() {
-                      _drawingMode = true;
-                      _eraserMode = false;
-                    });
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Cancella tutto"),
+                        content: const Text("Vuoi davvero cancellare tutto il disegno?"),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("Annulla"),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                strokes.clear();
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: const Text("Cancella"),
+                          ),
+                        ],
+                      ),
+                    );
                   },
                 ),
-                // Gomma
-                IconButton(
-                  icon: Container(
-                    decoration: BoxDecoration(
-                      border: _eraserMode
-                          ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
-                          : null,
-                      borderRadius: BorderRadius.circular(8),
+
+                // Tavolozza colori a destra del cestino
+                if (_drawingMode)
+                  Expanded(
+                    child: SizedBox(
+                      height: 30, // Ridotto da 40 a 30
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _availableColors.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2.0), // Ridotto da 4 a 2
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _strokeColor = _availableColors[index];
+                                });
+                              },
+                              child: Container(
+                                width: 22, // Ridotto da 30 a 22
+                                height: 22, // Ridotto da 30 a 22
+                                decoration: BoxDecoration(
+                                  color: _availableColors[index],
+                                  shape: BoxShape.circle,
+                                  border: _strokeColor == _availableColors[index]
+                                      ? Border.all(color: Colors.white, width: 1.5) // Ridotto da 2 a 1.5
+                                      : null,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 2, // Ridotto da 3 a 2
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    child: const Icon(Icons.auto_fix_normal),
                   ),
-                  tooltip: "Gomma",
-                  onPressed: () {
-                    setState(() {
-                      _drawingMode = false;
-                      _eraserMode = true;
-                    });
-                  },
-                ),
               ],
             ),
           ),
 
-          // Area di disegno con zoom infinito
+          // Area di disegno
           Expanded(
-            child: InteractiveViewer(
-              transformationController: _transformationController,
-              boundaryMargin: const EdgeInsets.all(double.infinity), // Consente lo zoom e pan infiniti
-              minScale: 0.1, // Zoom minimo
-              maxScale: 10.0, // Zoom massimo
-              child: GestureDetector(
-                onPanUpdate: (details) {
-                  // Converti le coordinate considerando la trasformazione attuale
-                  final invertedMatrix = Matrix4.tryInvert(_transformationController.value);
-                  if (invertedMatrix != null) {
-                    final vector_math.Vector3 position = invertedMatrix.transform3(
-                      vector_math.Vector3(details.localPosition.dx, details.localPosition.dy, 0),
+            child: GestureDetector(
+              onPanStart: (details) {
+                setState(() {
+                  if (_drawingMode && !_eraserMode) {
+                    currentStroke = Stroke(
+                      points: [details.localPosition],
+                      color: _strokeColor,
+                      width: _strokeWidth,
                     );
-
-                    setState(() {
-                      if (_drawingMode && !_eraserMode) {
-                        points.add(Offset(position.x, position.y));
-                      } else if (_eraserMode && !_drawingMode) {
-                        erasedPoints.add(Offset(position.x, position.y));
-                      }
-                    });
+                    strokes.add(currentStroke!);
+                  } else if (_eraserMode && !_drawingMode) {
+                    currentStroke = Stroke(
+                      points: [details.localPosition],
+                      color: Colors.transparent,
+                      width: _eraserWidth,
+                      isEraser: true,
+                    );
+                    strokes.add(currentStroke!);
                   }
-                },
-                onPanEnd: (_) {
-                  setState(() {
-                    if (_drawingMode && !_eraserMode) points.add(null);
-                    if (_eraserMode && !_drawingMode) erasedPoints.add(null);
-                  });
-                },
-                child: Container(
-                  width: 5000, // Area di disegno molto grande
-                  height: 5000,
-                  color: Colors.white,
-                  child: CustomPaint(
-                    painter: SketchPainter(points, erasedPoints),
-                    size: const Size(5000, 5000),
-                  ),
+                });
+              },
+              onPanUpdate: (details) {
+                setState(() {
+                  if (currentStroke != null) {
+                    currentStroke!.points.add(details.localPosition);
+                  }
+                });
+              },
+              onPanEnd: (_) {
+                setState(() {
+                  if (currentStroke != null) {
+                    currentStroke!.points.add(null); // Termina il tratto
+                    currentStroke = null;
+                  }
+                });
+              },
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: Colors.white,
+                child: CustomPaint(
+                  painter: SketchPainter(strokes),
+                  size: Size.infinite,
                 ),
               ),
             ),
@@ -152,33 +287,46 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
 
 // Classe SketchPainter aggiunta
 class SketchPainter extends CustomPainter {
-  final List<Offset?> points;
-  final List<Offset?> erasedPoints;
-  SketchPainter(this.points, this.erasedPoints);
+  final List<Stroke> strokes;
+
+  SketchPainter(this.strokes);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-    for (int i = 0; i < points.length - 1; i++) {
-      if (points[i] != null && points[i + 1] != null) {
-        canvas.drawLine(points[i]!, points[i + 1]!, paint);
+    for (final stroke in strokes) {
+      final paint = Paint()..strokeCap = StrokeCap.round;
+
+      if (stroke.isEraser) {
+        paint.color = Colors.transparent;
+        paint.blendMode = BlendMode.clear;
+      } else {
+        paint.color = stroke.color;
       }
-    }
-    final eraser = Paint()
-      ..color = Colors.transparent
-      ..strokeWidth = 16.0
-      ..strokeCap = StrokeCap.round
-      ..blendMode = BlendMode.clear;
-    for (int i = 0; i < erasedPoints.length - 1; i++) {
-      if (erasedPoints[i] != null && erasedPoints[i + 1] != null) {
-        canvas.drawLine(erasedPoints[i]!, erasedPoints[i + 1]!, eraser);
+
+      paint.strokeWidth = stroke.width;
+
+      for (int i = 0; i < stroke.points.length - 1; i++) {
+        if (stroke.points[i] != null && stroke.points[i + 1] != null) {
+          canvas.drawLine(stroke.points[i]!, stroke.points[i + 1]!, paint);
+        }
       }
     }
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class Stroke {
+  final List<Offset?> points;
+  final Color color;
+  final double width;
+  final bool isEraser;
+
+  Stroke({
+    required this.points,
+    required this.color,
+    required this.width,
+    this.isEraser = false,
+  });
 }
