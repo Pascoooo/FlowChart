@@ -22,22 +22,14 @@ abstract class UserRepository{
 
   Future<MyUser?> getCurrentUser();
 
+  Future<MyUser> linkWithGoogle();
 
-  //Future<bool> isEmailVerified();
+  Future<MyUser> linkWithEmailPassword(String email,String password);
 
-  //void sendEmailVerification();
+  Future<List<String>> getLinkedProviders();
 
-  //void postProfileImage(String path);
+  Future<bool> hasProvider(String providerId);
 
-  //Future<String> postImage(String path);
 
-  //String get getPhotoUrl;
 
-  //Future<void> changeEmail(String text);
-
-  //Future<void> deleteAccount();
-
-  //Future<void> emailChanged();
-
-  //Future<void> changePhoneNumber(String text);
 }

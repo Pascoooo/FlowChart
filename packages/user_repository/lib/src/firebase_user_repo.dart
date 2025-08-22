@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import '../user_repository.dart'; // MyUser, MyUserEntity, UserRepository
+import '../user_repository.dart';
 
 class FirebaseUserRepo implements UserRepository {
   final FirebaseAuth _firebaseAuth;
@@ -11,7 +11,7 @@ class FirebaseUserRepo implements UserRepository {
   FirebaseUserRepo({
     FirebaseAuth? firebaseAuth,
     GoogleSignIn? googleSignIn,
-  }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+  })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
         _googleSignIn = googleSignIn ?? GoogleSignIn();
 
   @override
@@ -25,12 +25,10 @@ class FirebaseUserRepo implements UserRepository {
         name: firebaseUser.displayName ?? '',
         photoURL: firebaseUser.photoURL ?? '',
       );
-
-      // Aggiorna Firestore senza bloccare la risposta
       usersCollection.doc(firebaseUser.uid).set(
-        myUser.toEntity().toDocument(),
-        SetOptions(merge: true),
-      );
+            myUser.toEntity().toDocument(),
+            SetOptions(merge: true),
+          );
 
       return myUser;
     });
@@ -68,16 +66,11 @@ class FirebaseUserRepo implements UserRepository {
       photoURL: firebaseUser.photoURL ?? '',
     );
 
-    // Estrai i provider dall'utente Firebase
-    final providers = firebaseUser.providerData
-        .map((provider) => provider.providerId)
-        .toList();
-
-    await usersCollection.doc(myUser.userId).set({
-      ...myUser.toEntity().toDocument(),
-      'providers': providers, // Salva i provider
-      'lastSignIn': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    // Salva solo i dati utente essenziali
+    await usersCollection.doc(myUser.userId).set(
+          myUser.toEntity().toDocument(),
+          SetOptions(merge: true),
+        );
 
     return myUser;
   }
@@ -95,43 +88,14 @@ class FirebaseUserRepo implements UserRepository {
     await _firebaseAuth.signOut();
   }
 
-  /// Verifica se un'email esiste già nel database
-  Future<bool> _emailExists(String email) async {
-    try {
-      final query = await usersCollection
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-
-      return query.docs.isNotEmpty;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// Ottiene i provider di un utente dal database
-  Future<List<String>> _getUserProviders(String email) async {
-    try {
-      final query = await usersCollection
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-
-      if (query.docs.isEmpty) return [];
-
-      final userData = query.docs.first.data();
-      return List<String>.from(userData['providers'] ?? []);
-    } catch (e) {
-      return [];
-    }
-  }
-
   /// Link account email/password a account Google esistente
-  Future<MyUser> _linkEmailPasswordToCurrentUser(String email, String password) async {
+  Future<MyUser> _linkEmailPasswordToCurrentUser(
+      String email, String password) async {
     final user = _firebaseAuth.currentUser;
     if (user == null) throw Exception('Nessun utente autenticato');
 
-    final credential = EmailAuthProvider.credential(email: email, password: password);
+    final credential =
+        EmailAuthProvider.credential(email: email, password: password);
     final userCredential = await user.linkWithCredential(credential);
 
     // Aggiorna il nome se non presente
@@ -163,25 +127,11 @@ class FirebaseUserRepo implements UserRepository {
   /// Login con email/password
   @override
   Future<MyUser> signIn(String email, String password) async {
-    try {
-      final userCred = await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return _saveFirebaseUser(userCred.user!);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found') {
-        // Verifica se esiste un account Google con questa email
-        final providers = await _getUserProviders(email);
-        if (providers.contains('google.com')) {
-          throw FirebaseAuthException(
-            code: 'account-exists-with-google',
-            message: 'Account esistente con Google. Usa il login Google.',
-          );
-        }
-      }
-      rethrow;
-    }
+    final userCred = await _firebaseAuth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    return _saveFirebaseUser(userCred.user!);
   }
 
   /// Registrazione con email/password
@@ -209,29 +159,6 @@ class FirebaseUserRepo implements UserRepository {
           // L'utente è già loggato con Google, linko l'account email/password
           return await _linkEmailPasswordToCurrentUser(myUser.email, password);
         }
-
-        // Verifica i provider per questa email usando Firestore
-        final providers = await _getUserProviders(myUser.email);
-        if (providers.contains('google.com')) {
-          throw FirebaseAuthException(
-            code: 'account-exists-with-google',
-            message: 'Account già esistente con Google. Fai login con Google prima.',
-          );
-        } else if (providers.contains('password')) {
-          throw FirebaseAuthException(
-            code: 'email-already-in-use',
-            message: 'Email già registrata. Fai login con email e password.',
-          );
-        }
-
-        // Se l'email esiste ma non abbiamo info sui provider, gestisci genericamente
-        final emailExists = await _emailExists(myUser.email);
-        if (emailExists) {
-          throw FirebaseAuthException(
-            code: 'email-already-in-use',
-            message: 'Email già registrata. Prova a fare login.',
-          );
-        }
       }
       rethrow;
     }
@@ -240,34 +167,17 @@ class FirebaseUserRepo implements UserRepository {
   /// Login con Google
   @override
   Future<MyUser> signInWithGoogle() async {
-    try {
-      final googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) throw Exception('Login Google annullato');
+    final googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) throw Exception('Login Google annullato');
 
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
 
-      final userCred = await _firebaseAuth.signInWithCredential(credential);
-      return _saveFirebaseUser(userCred.user!);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'account-exists-with-different-credential') {
-        final email = e.email;
-        if (email != null) {
-          // Verifica se c'è un account email/password esistente usando Firestore
-          final providers = await _getUserProviders(email);
-          if (providers.contains('password')) {
-            throw FirebaseAuthException(
-              code: 'account-exists-with-password',
-              message: 'Account esistente con email/password. Fai login con email e password prima.',
-            );
-          }
-        }
-      }
-      rethrow;
-    }
+    final userCred = await _firebaseAuth.signInWithCredential(credential);
+    return _saveFirebaseUser(userCred.user!);
   }
 
   /// Link Google account all'utente corrente (da chiamare dopo login email/password)
@@ -308,7 +218,8 @@ class FirebaseUserRepo implements UserRepository {
     final user = _firebaseAuth.currentUser;
     if (user == null) return false;
 
-    return user.providerData.any((provider) => provider.providerId == providerId);
+    return user.providerData
+        .any((provider) => provider.providerId == providerId);
   }
 
   /// Ottiene i provider collegati all'utente corrente
@@ -322,12 +233,19 @@ class FirebaseUserRepo implements UserRepository {
 
   @override
   Future<bool> isEmailVerified() async {
-    _firebaseAuth.currentUser!.reload();
-    return _firebaseAuth.currentUser!.emailVerified;
+    final user = _firebaseAuth.currentUser;
+    if (user == null) return false;
+
+    await user.reload();
+    final refreshedUser = _firebaseAuth.currentUser;
+    return refreshedUser?.emailVerified ?? false;
   }
 
   @override
-  void sendEmailVerification() {
-    _firebaseAuth.currentUser!.sendEmailVerification();
+  Future<void> sendEmailVerification() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) return;
+
+    await user.sendEmailVerification();
   }
 }

@@ -17,7 +17,7 @@ class _LoginFormState extends State<LoginForm> {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch, // allinea a textfield
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const Text(
@@ -61,7 +61,7 @@ class _LoginFormState extends State<LoginForm> {
             _passwordController.text.trim(),
           ),
           style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 56), // stessa altezza textfield
+            minimumSize: const Size(double.infinity, 56),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           child: const Text("Log in", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),

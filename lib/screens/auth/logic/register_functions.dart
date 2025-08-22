@@ -1,8 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flowchart_thesis/blocs/auth_bloc/authentication_bloc.dart';
-import 'package:flowchart_thesis/blocs/auth_bloc/authentication_event.dart';
 import 'package:user_repository/user_repository.dart';
+import '../../../blocs/sign_up_bloc/sign_up_bloc.dart';
 
 class RegisterFunctions {
   bool validateEmail(BuildContext context, String email) {
@@ -47,8 +47,10 @@ class RegisterFunctions {
       name: '$firstName $lastName',
       photoURL: '',
     );
-    context.read<AuthenticationBloc>().add(
-      AuthenticationSignUpRequested(user, password),
+
+    // Usa il SignUpBloc per la registrazione
+    context.read<SignUpBloc>().add(
+      SignUpRequired(user: user, password: password),
     );
   }
 

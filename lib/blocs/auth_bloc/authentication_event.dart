@@ -17,10 +17,35 @@ class AuthenticationUserChanged extends AuthenticationEvent {
   List<Object> get props => [user ?? MyUser.empty];
 }
 
-class AuthenticationUserVerified extends AuthenticationEvent {
-  const AuthenticationUserVerified();
-}
-
 class AuthenticationLogoutRequested extends AuthenticationEvent {
   const AuthenticationLogoutRequested();
+}
+
+// Eventi per compatibilità con il codice esistente
+class AuthenticationGoogleSignInRequested extends AuthenticationEvent {
+  const AuthenticationGoogleSignInRequested();
+}
+
+class AuthenticationEmailSignInRequested extends AuthenticationEvent {
+  final String email;
+  final String password;
+
+  const AuthenticationEmailSignInRequested(this.email, this.password);
+
+  @override
+  List<Object> get props => [email, password];
+}
+
+class AuthenticationSignUpRequested extends AuthenticationEvent {
+  final MyUser user;
+  final String password;
+
+  const AuthenticationSignUpRequested(this.user, this.password);
+
+  @override
+  List<Object> get props => [user, password];
+}
+
+class AuthenticationUserVerified extends AuthenticationEvent {
+  const AuthenticationUserVerified();
 }

@@ -30,7 +30,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^2.0.0
+  bloc_test: ^10.0.0       # Versione compatibile con flutter_bloc 9.x
+  mockito: ^5.4.2          # Per creare i mock
+  build_runner: ^2.4.6     # Per generare i mock automaticamente
 
 flutter:
   uses-material-design: true

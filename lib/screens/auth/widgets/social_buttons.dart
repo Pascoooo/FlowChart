@@ -28,9 +28,9 @@ class SocialButtons extends StatelessWidget {
             ),
           ),
           child: isGoogleLoading
-              ? Row(
+              ? const Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
+            children: [
               SizedBox(
                 width: 20,
                 height: 20,
@@ -40,9 +40,9 @@ class SocialButtons extends StatelessWidget {
               Text("Accedi con Google"),
             ],
           )
-              : Row(
+              : const Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
+            children: [
               Icon(FontAwesomeIcons.google, size: 20),
               SizedBox(width: 12),
               Text("Accedi con Google"),
@@ -58,9 +58,9 @@ class SocialButtons extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: Row(
+          child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
+            children: [
               Icon(Icons.mail_outline, size: 20),
               SizedBox(width: 12),
               Text("Registrati con Email"),
