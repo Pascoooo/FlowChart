@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
+import 'dart:js' as js;
 
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
@@ -267,24 +268,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                   backgroundColor: Theme.of(context).colorScheme.primary,
                                   foregroundColor: Colors.white,
                                 ),
-                                onPressed: () async {
-                                  // Crea l'URL per la pagina di disegno
-                                  final Uri url = Uri(
-                                    scheme: Uri.base.scheme,
-                                    host: Uri.base.host,
-                                    port: Uri.base.port,
-                                    path: '/drawing-editor', // Percorso assoluto, non relativo
-                                  );
-
-                                  // Apri l'URL in una nuova scheda
-                                  if (await canLaunchUrl(url)) {
-                                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                                  } else {
-                                    // Gestisci l'errore
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text("Impossibile aprire l'editor di disegno")),
-                                    );
-                                  }
+                                onPressed: () {
+                                  context.go('/drawing-editor');
+                                  js.context.callMethod('open', ['/drawing-editor', '_blank']);
                                 },
                               ),
                             ],
