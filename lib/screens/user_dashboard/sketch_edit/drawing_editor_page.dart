@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:vector_math/vector_math_64.dart' as vector_math;
 
 class DrawingEditorPage extends StatefulWidget {
   const DrawingEditorPage({Key? key}) : super(key: key);
@@ -14,7 +13,6 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
   List<Stroke> strokes = [];
   Stroke? currentStroke;
 
-  List<Offset?> erasedPoints = [];
   double _strokeWidth = 2.0;
   double _eraserWidth = 16.0;
   Color _strokeColor = Colors.black;
@@ -27,26 +25,21 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
     Colors.purple,
     Colors.orange,
   ];
-  final TransformationController _transformationController =
-      TransformationController();
 
-  @override
+  // Dimensioni dell'area di disegno
+  final Size _canvasSize = Size(800, 600);
+  final GlobalKey _canvasKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Editor di Disegno"),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-        ),
+        automaticallyImplyLeading: false,
       ),
       body: Column(
         children: [
-          // Barra degli strumenti migliorata
-          // Barra degli strumenti riorganizzata
+          // Barra degli strumenti
           Container(
             height: 100,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -63,21 +56,19 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Colonna strumenti disegno e slider
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Riga con matita e gomma
                     Row(
                       children: [
-                        // Matita
                         IconButton(
                           icon: Container(
                             decoration: BoxDecoration(
                               border: _drawingMode
                                   ? Border.all(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  width: 2)
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      width: 2)
                                   : null,
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -91,14 +82,14 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
                             });
                           },
                         ),
-                        // Gomma
                         IconButton(
                           icon: Container(
                             decoration: BoxDecoration(
                               border: _eraserMode
                                   ? Border.all(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  width: 2)
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      width: 2)
                                   : null,
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -114,9 +105,8 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
                         ),
                       ],
                     ),
-                    // Slider sotto gli strumenti
                     if (_drawingMode)
-                      Container(
+                      SizedBox(
                         width: 120,
                         child: Slider(
                           value: _strokeWidth,
@@ -132,7 +122,7 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
                         ),
                       ),
                     if (_eraserMode)
-                      Container(
+                      SizedBox(
                         width: 120,
                         child: Slider(
                           value: _eraserWidth,
@@ -149,8 +139,6 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
                       ),
                   ],
                 ),
-
-                // Cestino
                 IconButton(
                   icon: const Icon(Icons.delete_outline),
                   tooltip: "Cancella tutto",
@@ -159,7 +147,8 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
                       context: context,
                       builder: (context) => AlertDialog(
                         title: const Text("Cancella tutto"),
-                        content: const Text("Vuoi davvero cancellare tutto il disegno?"),
+                        content: const Text(
+                            "Vuoi davvero cancellare tutto il disegno?"),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
@@ -179,18 +168,17 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
                     );
                   },
                 ),
-
-                // Tavolozza colori a destra del cestino
                 if (_drawingMode)
                   Expanded(
                     child: SizedBox(
-                      height: 30, // Ridotto da 40 a 30
+                      height: 30,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         itemCount: _availableColors.length,
                         itemBuilder: (context, index) {
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 2.0), // Ridotto da 4 a 2
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 2.0),
                             child: InkWell(
                               onTap: () {
                                 setState(() {
@@ -198,18 +186,20 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
                                 });
                               },
                               child: Container(
-                                width: 22, // Ridotto da 30 a 22
-                                height: 22, // Ridotto da 30 a 22
+                                width: 22,
+                                height: 22,
                                 decoration: BoxDecoration(
                                   color: _availableColors[index],
                                   shape: BoxShape.circle,
-                                  border: _strokeColor == _availableColors[index]
-                                      ? Border.all(color: Colors.white, width: 1.5) // Ridotto da 2 a 1.5
-                                      : null,
+                                  border:
+                                      _strokeColor == _availableColors[index]
+                                          ? Border.all(
+                                              color: Colors.white, width: 1.5)
+                                          : null,
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black26,
-                                      blurRadius: 2, // Ridotto da 3 a 2
+                                      blurRadius: 2,
                                     ),
                                   ],
                                 ),
@@ -225,51 +215,76 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
           ),
 
           // Area di disegno
+
           Expanded(
-            child: GestureDetector(
-              onPanStart: (details) {
-                setState(() {
-                  if (_drawingMode && !_eraserMode) {
-                    currentStroke = Stroke(
-                      points: [details.localPosition],
-                      color: _strokeColor,
-                      width: _strokeWidth,
-                    );
-                    strokes.add(currentStroke!);
-                  } else if (_eraserMode && !_drawingMode) {
-                    currentStroke = Stroke(
-                      points: [details.localPosition],
-                      color: Colors.transparent,
-                      width: _eraserWidth,
-                      isEraser: true,
-                    );
-                    strokes.add(currentStroke!);
-                  }
-                });
-              },
-              onPanUpdate: (details) {
-                setState(() {
-                  if (currentStroke != null) {
-                    currentStroke!.points.add(details.localPosition);
-                  }
-                });
-              },
-              onPanEnd: (_) {
-                setState(() {
-                  if (currentStroke != null) {
-                    currentStroke!.points.add(null); // Termina il tratto
-                    currentStroke = null;
-                  }
-                });
-              },
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: Colors.white,
-                child: CustomPaint(
-                  painter: SketchPainter(strokes),
-                  size: Size.infinite,
-                ),
+            child: ClipRect(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return GestureDetector(
+                    key: _canvasKey,
+                    onPanStart: (details) {
+                      final RenderBox box = _canvasKey.currentContext!
+                          .findRenderObject() as RenderBox;
+                      final localPos =
+                          box.globalToLocal(details.globalPosition);
+
+                      // Verifica che il punto sia all'interno dell'area di disegno
+                      if (localPos.dx >= 0 &&
+                          localPos.dx <= constraints.maxWidth &&
+                          localPos.dy >= 0 &&
+                          localPos.dy <= constraints.maxHeight) {
+                        setState(() {
+                          if (_drawingMode && !_eraserMode) {
+                            currentStroke = Stroke(
+                              points: [localPos],
+                              color: _strokeColor,
+                              width: _strokeWidth,
+                            );
+                            strokes.add(currentStroke!);
+                          } else if (_eraserMode && !_drawingMode) {
+                            currentStroke = Stroke(
+                              points: [localPos],
+                              color: Colors.transparent,
+                              width: _eraserWidth,
+                              isEraser: true,
+                            );
+                            strokes.add(currentStroke!);
+                          }
+                        });
+                      }
+                    },
+                    onPanUpdate: (details) {
+                      final RenderBox box = _canvasKey.currentContext!
+                          .findRenderObject() as RenderBox;
+                      final localPos =
+                          box.globalToLocal(details.globalPosition);
+
+                      if (currentStroke != null) {
+                        // Limita i punti all'interno dell'area di disegno
+                        final constrainedPos = Offset(
+                          localPos.dx.clamp(0, constraints.maxWidth),
+                          localPos.dy.clamp(0, constraints.maxHeight),
+                        );
+
+                        setState(() {
+                          currentStroke!.points.add(constrainedPos);
+                        });
+                      }
+                    },
+                    onPanEnd: (_) {
+                      setState(() {
+                        if (currentStroke != null) {
+                          currentStroke!.points.add(null); // Termina il tratto
+                          currentStroke = null;
+                        }
+                      });
+                    },
+                    child: CustomPaint(
+                      painter: SketchPainter(strokes),
+                      size: Size(constraints.maxWidth, constraints.maxHeight),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -277,15 +292,8 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
       ),
     );
   }
-
-  @override
-  void dispose() {
-    _transformationController.dispose();
-    super.dispose();
-  }
 }
 
-// Classe SketchPainter aggiunta
 class SketchPainter extends CustomPainter {
   final List<Stroke> strokes;
 

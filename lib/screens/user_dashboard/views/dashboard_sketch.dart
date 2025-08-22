@@ -269,8 +269,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                   foregroundColor: Colors.white,
                                 ),
                                 onPressed: () {
-                                  context.go('/drawing-editor');
-                                  js.context.callMethod('open', ['/drawing-editor', '_blank']);
+                                  final baseUrl = Uri.base.toString().split('#')[0];
+                                  js.context.callMethod('open', ['${baseUrl}#/drawing-editor', '_blank']);
                                 },
                               ),
                             ],
