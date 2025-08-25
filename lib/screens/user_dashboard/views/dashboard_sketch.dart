@@ -270,7 +270,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                 ),
                                 onPressed: () {
                                   final baseUrl = Uri.base.toString().split('#')[0];
-                                  js.context.callMethod('open', ['${baseUrl}#/drawing-editor', '_blank']);
+                                  // Utilizzo parametri window features per forzare una finestra separata
+                                  js.context.callMethod('open', [
+                                    '${baseUrl}#/drawing-editor',
+                                    '_blank',
+                                    'width=1200,height=800,left=100,top=100,resizable=yes,scrollbars=yes,status=yes'
+                                  ]);
                                 },
                               ),
                             ],
