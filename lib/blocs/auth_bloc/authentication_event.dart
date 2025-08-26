@@ -21,31 +21,25 @@ class AuthenticationLogoutRequested extends AuthenticationEvent {
   const AuthenticationLogoutRequested();
 }
 
-// Eventi per compatibilità con il codice esistente
 class AuthenticationGoogleSignInRequested extends AuthenticationEvent {
   const AuthenticationGoogleSignInRequested();
 }
 
-class AuthenticationEmailSignInRequested extends AuthenticationEvent {
+class AuthenticationEmailLinkRequested extends AuthenticationEvent {
   final String email;
-  final String password;
 
-  const AuthenticationEmailSignInRequested(this.email, this.password);
-
-  @override
-  List<Object> get props => [email, password];
-}
-
-class AuthenticationSignUpRequested extends AuthenticationEvent {
-  final MyUser user;
-  final String password;
-
-  const AuthenticationSignUpRequested(this.user, this.password);
+  const AuthenticationEmailLinkRequested(this.email);
 
   @override
-  List<Object> get props => [user, password];
+  List<Object> get props => [email];
 }
 
-class AuthenticationUserVerified extends AuthenticationEvent {
-  const AuthenticationUserVerified();
+class AuthenticationEmailLinkSignInRequested extends AuthenticationEvent {
+  final String email;
+  final String emailLink;
+
+  const AuthenticationEmailLinkSignInRequested(this.email, this.emailLink);
+
+  @override
+  List<Object> get props => [email, emailLink];
 }

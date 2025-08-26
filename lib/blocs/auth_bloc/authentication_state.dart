@@ -1,33 +1,28 @@
-import 'package:equatable/equatable.dart';
-import 'package:user_repository/user_repository.dart';
+part of 'authentication_bloc.dart';
 
 enum AuthenticationStatus {
   unknown,
-  unauthenticated,
   authenticated,
-  emailNotVerified
+  unauthenticated,
 }
 
 class AuthenticationState extends Equatable {
   final AuthenticationStatus status;
   final MyUser? user;
 
-  const AuthenticationState({
-    required this.status,
+  const AuthenticationState._({
+    this.status = AuthenticationStatus.unknown,
     this.user,
   });
 
-  const AuthenticationState.unknown({MyUser? user})
-      : this(status: AuthenticationStatus.unknown, user: user);
-
-  const AuthenticationState.unauthenticated()
-      : this(status: AuthenticationStatus.unauthenticated);
+  const AuthenticationState.unknown() : this._();
 
   const AuthenticationState.authenticated(MyUser user)
-      : this(status: AuthenticationStatus.authenticated, user: user);
+      : this._(status: AuthenticationStatus.authenticated, user: user);
 
-  const AuthenticationState.emailNotVerified(MyUser user)
-      : this(status: AuthenticationStatus.emailNotVerified, user: user);
+  const AuthenticationState.unauthenticated()
+      : this._(status: AuthenticationStatus.unauthenticated);
+
 
   @override
   List<Object?> get props => [status, user];

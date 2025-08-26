@@ -1,8 +1,11 @@
+
 import 'dart:async';
+import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:user_repository/user_repository.dart';
 import 'authentication_event.dart';
-import 'authentication_state.dart';
+part 'authentication_state.dart';
 
 class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> {
   final UserRepository userRepository;
@@ -13,50 +16,57 @@ class AuthenticationBloc extends Bloc<AuthenticationEvent, AuthenticationState> 
 
     _userSubscription = userRepository.user.listen(
           (user) => add(AuthenticationUserChanged(user)),
-      onError: (error) {
-        add(AuthenticationUserChanged(MyUser.empty));
-      },
+      onError: (_) => add(AuthenticationUserChanged(MyUser.empty)),
     );
 
     on<AuthenticationUserChanged>((event, emit) async {
       final user = event.user;
       if (user == MyUser.empty || user == null) {
         emit(const AuthenticationState.unauthenticated());
-      } else {
-        try {
-          final isEmailVerified = await userRepository
-              .isEmailVerified()
-              .timeout(const Duration(seconds: 10));
-
-          if (isEmailVerified) {
-            emit(AuthenticationState.authenticated(user));
-          } else {
-            emit(AuthenticationState.emailNotVerified(user));
-          }
-        } catch (e) {
-          print('Errore controllo verifica email: $e');
-          emit(AuthenticationState.emailNotVerified(user));
-        }
+        return;
       }
+      // Utente autenticato - il provider non è rilevante qui
+      emit(AuthenticationState.authenticated(user));
     });
 
     on<AuthenticationLogoutRequested>((event, emit) async {
-      await userRepository.signOut();
-      emit(const AuthenticationState.unauthenticated());
+      try {
+        await userRepository.signOut();
+        emit(const AuthenticationState.unauthenticated());
+      } catch (e) {
+        debugPrint('Logout error: $e');
+        emit(const AuthenticationState.unauthenticated());
+      }
     });
 
-    on<AuthenticationUserVerified>((event, emit) async {
-      final user = state.user;
-      if (user != null) {
-        try {
-          final isEmailVerified = await userRepository.isEmailVerified();
-          if (isEmailVerified) {
-            emit(AuthenticationState.authenticated(user));
-          }
-        } catch (e) {
-          // Se c'è un errore, mantieni lo stato attuale
-          emit(state);
-        }
+    on<AuthenticationGoogleSignInRequested>((event, emit) async {
+      try {
+        await userRepository.signInWithGoogle();
+        // Lo stato cambierà automaticamente tramite lo stream user
+      } catch (e) {
+        debugPrint('Google sign in error: $e');
+        // Il metodo può lanciare un'eccezione che verrà catturata nell'UI
+        rethrow;
+      }
+    });
+
+    on<AuthenticationEmailLinkRequested>((event, emit) async {
+      try {
+        await userRepository.sendEmailLink(event.email);
+        // Successo - nessun cambiamento di stato necessario
+      } catch (e) {
+        debugPrint('Send email link error: $e');
+        rethrow;
+      }
+    });
+
+    on<AuthenticationEmailLinkSignInRequested>((event, emit) async {
+      try {
+        await userRepository.signInWithEmailLink(event.email, event.emailLink);
+        // Lo stato cambierà automaticamente tramite lo stream user
+      } catch (e) {
+        debugPrint('Email link sign in error: $e');
+        rethrow;
       }
     });
   }

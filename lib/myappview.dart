@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 
 import 'blocs/auth_bloc/authentication_bloc.dart';
-import 'blocs/auth_bloc/authentication_state.dart';
 
 class MyAppView extends StatelessWidget {
   const MyAppView({super.key});

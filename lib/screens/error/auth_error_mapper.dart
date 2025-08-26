@@ -1,21 +1,30 @@
-import 'package:firebase_auth/firebase_auth.dart' as fb;
+String mapAuthError(dynamic exception) {
+  final errorCode = exception?.code ?? 'unknown';
 
-class AuthErrorMapper {
-  static const Map<String, String> _messages = {
-    'email-already-in-use': 'Email già registrata. Vai al login.',
-    'account-exists-with-google': 'Account già esistente con Google. Usa il login Google.',
-    'account-exists-with-password': 'Account esistente con email/password. Fai login con email e password.',
-    'weak-password': 'Password troppo debole.',
-    'invalid-email': 'Email non valida.',
-    'user-disabled': 'Utente disabilitato.',
-    'user-not-found': 'Utente non trovato.',
-    'wrong-password': 'Password errata.',
-    'operation-not-allowed': 'Operazione non consentita.',
-    'too-many-requests': 'Troppe richieste, riprova più tardi.',
-    'network-request-failed': 'Problema di rete, riprova.',
-  };
-
-  static String fromFirebase(fb.FirebaseAuthException e) {
-    return _messages[e.code] ?? (e.message ?? 'Errore sconosciuto');
+  switch (errorCode) {
+    case 'user-not-found':
+      return 'Nessun utente trovato con questa email.';
+    case 'wrong-password':
+      return 'Password incorretta.';
+    case 'email-already-in-use':
+      return 'Questa email è già registrata.';
+    case 'weak-password':
+      return 'La password è troppo debole.';
+    case 'invalid-email':
+      return 'Email non valida.';
+    case 'user-disabled':
+      return 'Questo account è stato disabilitato.';
+    case 'too-many-requests':
+      return 'Troppi tentativi. Riprova più tardi.';
+    case 'operation-not-allowed':
+      return 'Operazione non consentita.';
+    case 'network-request-failed':
+      return 'Errore di connessione. Controlla la tua connessione internet.';
+    case 'popup-closed-by-user':
+      return 'Finestra di accesso chiusa dall\'utente.';
+    case 'cancelled-popup-request':
+      return 'Richiesta di accesso annullata.';
+    default:
+      return 'Si è verificato un errore imprevisto. Riprova.';
   }
 }

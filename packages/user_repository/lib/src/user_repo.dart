@@ -1,35 +1,30 @@
 import 'models/models.dart';
 
-abstract class UserRepository{
-
+abstract class UserRepository {
+  // Stream of the currently authenticated user (or null if signed out)
   Stream<MyUser?> get user;
 
+  // Persist user profile data in the backend (Firestore)
   Future<void> setUserData(MyUser user);
 
-  Future<void> signIn(String email,String password);
-
+  // Sign out from Firebase (and providers where needed)
   Future<void> signOut();
 
-  Future<MyUser> signUp(MyUser myUser,String password);
-
+  // Get current Firebase user uid or throw if no user
   Future<String> getUid();
 
-  Future<MyUser> signInWithGoogle();
-
-  Future<bool> isEmailVerified();
-
-  void sendEmailVerification();
-
+  // Get current user mapped to MyUser (or null if not authenticated)
   Future<MyUser?> getCurrentUser();
 
-  Future<MyUser> linkWithGoogle();
+  // Sign in with Google
+  Future<MyUser> signInWithGoogle();
 
-  Future<MyUser> linkWithEmailPassword(String email,String password);
+  // Send email magic link
+  Future<void> sendEmailLink(String email);
 
-  Future<List<String>> getLinkedProviders();
+  // Sign in with email link
+  Future<MyUser> signInWithEmailLink(String email, String emailLink);
 
-  Future<bool> hasProvider(String providerId);
-
-
-
+  // Check if string is valid email link
+  bool isEmailLink(String link);
 }
