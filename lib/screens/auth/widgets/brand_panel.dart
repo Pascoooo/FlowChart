@@ -170,7 +170,7 @@ class _BrandPanelState extends State<BrandPanel>
                       child: Transform.translate(
                         offset: Offset(0, 50 * (1 - value)),
                         child: Text(
-                          'Flowchart Thesis',
+                          'Unichart',
                           style: theme.textTheme.displayMedium?.copyWith(
                             fontWeight: FontWeight.w900,
                             color: theme.colorScheme.onSurface,
@@ -192,7 +192,7 @@ class _BrandPanelState extends State<BrandPanel>
                       child: Transform.translate(
                         offset: Offset(0, 30 * (1 - value)),
                         child: Text(
-                          'Progetta, organizza e collabora in modo semplice.\nAccedi in sicurezza con Google o Email Link.',
+                          'Esegui, analizza e perfeziona la tua logica con un debugger visuale integrato. Dai vita alle tue idee, un blocco alla volta.',
                           style: theme.textTheme.titleLarge?.copyWith(
                             color: theme.colorScheme.onSurface.withOpacity(0.7),
                             height: 1.5,
@@ -205,54 +205,84 @@ class _BrandPanelState extends State<BrandPanel>
                 ),
                 const SizedBox(height: 40),
                 // Features list
-                ...List.generate(3, (index) {
-                  final features = [
-                    'Interfaccia intuitiva e moderna',
-                    'Collaborazione in tempo reale',
-                    'Sincronizzazione cloud automatica',
-                  ];
-                  return TweenAnimationBuilder<double>(
-                    duration: Duration(milliseconds: 1200 + (index * 200)),
-                    tween: Tween(begin: 0.0, end: 1.0),
-                    builder: (context, value, child) {
-                      return Opacity(
-                        opacity: value,
-                        child: Transform.translate(
-                          offset: Offset(0, 20 * (1 - value)),
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Text(
-                                  features[index],
-                                  style: theme.textTheme.bodyLarge?.copyWith(
-                                    color: theme.colorScheme.onSurface
-                                        .withOpacity(0.8),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                }),
+                ..._buildFeatureList(context),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  List<Widget> _buildFeatureList(BuildContext context) {
+    final theme = Theme.of(context);
+    final features = [
+      {
+        'icon': FontAwesomeIcons.eye,
+        'title': 'Esecuzione Visuale',
+        'subtitle': 'Guarda i tuoi algoritmi prendere vita in tempo reale.'
+      },
+      {
+        'icon': FontAwesomeIcons.bugSlash,
+        'title': 'Debug Potenziato',
+        'subtitle': 'Imposta breakpoint e naviga il codice, direttamente sul diagramma.'
+      },
+      {
+        'icon': FontAwesomeIcons.magnifyingGlassChart,
+        'title': 'Analisi Dettagliata',
+        'subtitle': 'Ispeziona variabili e stati del programma ad ogni passo.'
+      },
+    ];
+
+    return List.generate(features.length, (index) {
+      final feature = features[index];
+      return TweenAnimationBuilder<double>(
+        duration: Duration(milliseconds: 1200 + (index * 200)),
+        tween: Tween(begin: 0.0, end: 1.0),
+        builder: (context, value, child) {
+          return Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, 30 * (1 - value)),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 24.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FaIcon(
+                      feature['icon'] as IconData,
+                      color: theme.colorScheme.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            feature['title'] as String,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            feature['subtitle'] as String,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    });
   }
 }
