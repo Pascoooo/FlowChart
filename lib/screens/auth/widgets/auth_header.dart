@@ -1,11 +1,14 @@
+// dart
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:go_router/go_router.dart';
 
 class AuthHeader extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback? onThemeToggle;
   final bool isDark;
+  final bool showBackButton;
 
   const AuthHeader({
     super.key,
@@ -13,6 +16,7 @@ class AuthHeader extends StatelessWidget {
     required this.subtitle,
     this.onThemeToggle,
     required this.isDark,
+    this.showBackButton = false,
   });
 
   @override
@@ -22,7 +26,11 @@ class AuthHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Logo e testi
+        if (showBackButton)
+          IconButton(
+            icon: Icon(Icons.arrow_back_ios_new, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+            onPressed: () => context.pop(),
+          ),
         Expanded(
           child: Row(
             children: [
@@ -113,7 +121,6 @@ class AuthHeader extends StatelessWidget {
             ],
           ),
         ),
-        // Theme toggle button
         if (onThemeToggle != null)
           TweenAnimationBuilder<double>(
             duration: const Duration(milliseconds: 1000),

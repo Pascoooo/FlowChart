@@ -1,25 +1,26 @@
+// dart
 import '../entities/entities.dart';
 
 class MyUser {
-  String userId;
-  String email;
-  String name;
-  String photoURL;
+  final String userId;
+  final String email;
+  final String name;
+  final String photoURL;
 
-  MyUser({
+  const MyUser({
     required this.userId,
     required this.email,
     required this.name,
     required this.photoURL,
   });
 
-  static final empty = MyUser(
+  // Rendi 'empty' una variabile costante
+  static const empty = MyUser(
     userId: '',
     email: '',
     name: '',
     photoURL: '',
   );
-
 
   MyUserEntity toEntity() {
     return MyUserEntity(
@@ -43,4 +44,6 @@ class MyUser {
   String toString() {
     return 'MyUser: $userId, $email, $name, $photoURL';
   }
+
+  bool get isEmpty => this == MyUser.empty;
 }

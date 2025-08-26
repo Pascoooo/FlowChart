@@ -1,4 +1,5 @@
 // dart
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -6,171 +7,170 @@ import '../user_repository.dart';
 
 class FirebaseUserRepo implements UserRepository {
   final FirebaseAuth _firebaseAuth;
-  final usersCollection = FirebaseFirestore.instance.collection('users');
+  final FirebaseFirestore _firestore;
+  late final CollectionReference _usersCollection;
 
   FirebaseUserRepo({
     FirebaseAuth? firebaseAuth,
-  }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+    FirebaseFirestore? firestore,
+  })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+        _firestore = firestore ?? FirebaseFirestore.instance {
+    _usersCollection = _firestore.collection('users');
+  }
 
   @override
   Stream<MyUser?> get user {
-    return _firebaseAuth.authStateChanges().asyncMap((firebaseUser) async {
-      if (firebaseUser == null) return null;
-
-      await firebaseUser.reload();
-      final refreshedUser = _firebaseAuth.currentUser;
-      if (refreshedUser == null) return null;
-
-      final myUser = MyUser(
-        userId: refreshedUser.uid,
-        email: refreshedUser.email ?? '',
-        name: refreshedUser.displayName ?? '',
-        photoURL: refreshedUser.photoURL ?? '',
-      );
-
-      await usersCollection.doc(refreshedUser.uid).set(
-        myUser.toEntity().toDocument(),
-        SetOptions(merge: true),
-      );
-      return myUser;
-    });
+    return _firebaseAuth
+        .authStateChanges()
+        .distinct()
+        .asyncMap(_mapFirebaseUserToMyUser)
+        .handleError(_handleStreamError);
   }
 
-  @override
-  Future<String> getUid() async {
-    final u = _firebaseAuth.currentUser;
-    if (u == null) {
-      throw FirebaseAuthException(
-        code: 'no-current-user',
-        message: 'Nessun utente autenticato',
-      );
+  Future<MyUser?> _mapFirebaseUserToMyUser(User? firebaseUser) async {
+    if (firebaseUser == null) {
+      return null;
     }
-    return u.uid;
+
+    try {
+      final myUser = MyUser(
+        userId: firebaseUser.uid,
+        email: firebaseUser.email ?? '',
+        name: firebaseUser.displayName ?? '',
+        photoURL: firebaseUser.photoURL ?? '',
+      );
+
+      if (myUser.isEmpty) {
+        if (kDebugMode) debugPrint('Invalid user data: $myUser');
+        return null;
+      }
+
+      await _saveUserToFirestore(myUser);
+      return myUser;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error mapping Firebase user: $e');
+      }
+      rethrow;
+    }
   }
 
-  @override
-  Future<MyUser?> getCurrentUser() async {
-    final u = _firebaseAuth.currentUser;
-    if (u == null) return null;
-    return MyUser(
-      userId: u.uid,
-      email: u.email ?? '',
-      name: u.displayName ?? '',
-      photoURL: u.photoURL ?? '',
-    );
+  void _handleStreamError(Object error, StackTrace stackTrace) {
+    if (kDebugMode) {
+      debugPrint('User stream error: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
-  @override
-  Future<void> setUserData(MyUser user) async {
-    await usersCollection
-        .doc(user.userId)
-        .set(user.toEntity().toDocument(), SetOptions(merge: true));
-  }
-
-  @override
-  Future<void> signOut() async {
-    await _firebaseAuth.signOut();
+  Future<void> _saveUserToFirestore(MyUser user) async {
+    try {
+      await _usersCollection
+          .doc(user.userId)
+          .set(user.toEntity().toDocument(), SetOptions(merge: true))
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      if (kDebugMode) debugPrint('Failed to save user: $e');
+      rethrow;
+    }
   }
 
   @override
   Future<MyUser> signInWithGoogle() async {
     try {
-      final provider = GoogleAuthProvider();
-      UserCredential credential;
+      final provider = GoogleAuthProvider()
+        ..addScope('email')
+        ..addScope('profile');
 
-      try {
-        credential = await _firebaseAuth.signInWithPopup(provider);
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
-          throw FirebaseAuthException(
-            code: e.code,
-            message: 'Login annullato dall\'utente',
-          );
-        }
-        rethrow;
-      }
+      final credential = await _firebaseAuth.signInWithPopup(provider);
 
       if (credential.user == null) {
-        throw FirebaseAuthException(
-          code: 'sign_in_failed',
-          message: 'Google sign in failed',
-        );
+        throw const AuthenticationException('Google sign in fallito');
       }
 
-      return await _saveFirebaseUser(credential.user!);
+      final firebaseUser = credential.user!;
+      final myUser = MyUser(
+        userId: firebaseUser.uid,
+        email: firebaseUser.email ?? '',
+        name: firebaseUser.displayName ?? '',
+        photoURL: firebaseUser.photoURL ?? '',
+      );
+
+      // Salva l'utente solo se i dati sono validi
+      if (myUser.isEmpty) {
+        throw const AuthenticationException('Dati utente Google non validi.');
+      }
+
+      await _saveUserToFirestore(myUser);
+      return myUser;
+    } on FirebaseAuthException catch (e) {
+      throw _mapFirebaseAuthException(e);
     } catch (e) {
-      debugPrint('Google Sign In Error: $e');
-      rethrow;
+      if (kDebugMode) {
+        debugPrint('Google Sign In Error: $e');
+      }
+      throw const AuthenticationException('Errore di autenticazione Google.');
     }
   }
 
   @override
-  Future<void> sendEmailLink(String email) async {
+  Future<void> signOut() async {
     try {
-      final actionCodeSettings = ActionCodeSettings(
-        url: '${Uri.base.origin}/#/finish-signin',
-        handleCodeInApp: true,
-      );
-
-      await _firebaseAuth.sendSignInLinkToEmail(
-        email: email,
-        actionCodeSettings: actionCodeSettings,
-      );
-
-      debugPrint('Email link sent to: $email');
+      await _firebaseAuth.signOut().timeout(const Duration(seconds: 10));
+    } on FirebaseAuthException catch (e) {
+      throw _mapFirebaseAuthException(e);
     } catch (e) {
-      debugPrint('Send Email Link Error: $e');
-      rethrow;
+      if (kDebugMode) debugPrint('Sign out error: $e');
+      throw const AuthenticationException('Errore durante il logout.');
     }
   }
 
+  Exception _mapFirebaseAuthException(FirebaseAuthException e) {
+    return switch (e.code) {
+      'popup-closed-by-user' => const AuthenticationException('Login annullato dall\'utente.'),
+      'cancelled-popup-request' => const AuthenticationException('Login annullato.'),
+      'network-request-failed' => const AuthenticationException('Errore di connessione. Controlla la tua connessione e riprova.'),
+      _ => AuthenticationException('Errore di autenticazione: ${e.message}'),
+    };
+  }
+
+  // Metodi non più necessari per il flusso di autenticazione solo con Google
   @override
-  Future<MyUser> signInWithEmailLink(String email, String emailLink) async {
-    try {
-      if (!_firebaseAuth.isSignInWithEmailLink(emailLink)) {
-        throw FirebaseAuthException(
-          code: 'invalid-email-link',
-          message: 'Invalid email link',
-        );
-      }
+  Future<MyUser?> getCurrentUser() async => _mapFirebaseUserToMyUser(_firebaseAuth.currentUser);
 
-      final credential = await _firebaseAuth.signInWithEmailLink(
-        email: email,
-        emailLink: emailLink,
-      );
+  @override
+  Future<void> setUserData(MyUser user) async => _saveUserToFirestore(user);
 
-      if (credential.user == null) {
-        throw FirebaseAuthException(
-          code: 'sign_in_failed',
-          message: 'Email link sign in failed',
-        );
-      }
+  @override
+  Future<void> sendEmailLink(String email) async => throw UnimplementedError();
 
-      return await _saveFirebaseUser(credential.user!);
-    } catch (e) {
-      debugPrint('Sign In with Email Link Error: $e');
-      rethrow;
+  @override
+  Future<MyUser> signInWithEmailLink(String email, String emailLink) async => throw UnimplementedError();
+
+  @override
+  bool isEmailLink(String link) => throw UnimplementedError();
+
+  @override
+  Future<String> getUid() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw const AuthenticationException('Nessun utente autenticato');
     }
+    return user.uid;
   }
+}
+
+class AuthenticationException implements Exception {
+  final String message;
+  const AuthenticationException(this.message);
 
   @override
-  bool isEmailLink(String link) {
-    return _firebaseAuth.isSignInWithEmailLink(link);
-  }
+  String toString() => 'AuthenticationException: $message';
+}
 
-  Future<MyUser> _saveFirebaseUser(User firebaseUser) async {
-    final myUser = MyUser(
-      userId: firebaseUser.uid,
-      email: firebaseUser.email ?? '',
-      name: firebaseUser.displayName ?? '',
-      photoURL: firebaseUser.photoURL ?? '',
-    );
+class ValidationException implements Exception {
+  final String message;
+  const ValidationException(this.message);
 
-    await usersCollection.doc(myUser.userId).set(
-      myUser.toEntity().toDocument(),
-      SetOptions(merge: true),
-    );
-
-    return myUser;
-  }
+  @override
+  String toString() => 'ValidationException: $message';
 }
