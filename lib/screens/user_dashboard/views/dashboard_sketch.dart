@@ -1,10 +1,9 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
-import 'package:flowchart_thesis/config/constants/theme_switch.dart';
-
-import '../../../blocs/auth_bloc/authentication_bloc.dart';
-import '../../../blocs/auth_bloc/authentication_event.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../widgets/project_view.dart';
+import '../widgets/sidebar.dart';
+import '../widgets/workarea_toolbar.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -13,254 +12,321 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
-  int _selectedIndex = 0;
-  bool _isSidebarCollapsed = false;
+class _DashboardPageState extends State<DashboardPage>
+    with TickerProviderStateMixin {
+  bool _projectActive = false;
+  bool _editingMode = false;
+  String? _projectListType;
 
-  final List<DashboardItem> _menuItems = [
-    DashboardItem(
-      icon: Icons.chat_bubble_outline,
-      activeIcon: Icons.chat_bubble,
-      title: "Chat",
-      subtitle: "Inizia una nuova conversazione",
-    ),
-    DashboardItem(
-      icon: Icons.history_outlined,
-      activeIcon: Icons.history,
-      title: "Cronologia",
-      subtitle: "Visualizza chat precedenti",
-    ),
-    DashboardItem(
-      icon: Icons.bookmark_border,
-      activeIcon: Icons.bookmark,
-      title: "Preferiti",
-      subtitle: "Chat salvate",
-    ),
-    DashboardItem(
-      icon: Icons.folder_outlined,
-      activeIcon: Icons.folder,
-      title: "Progetti",
-      subtitle: "I tuoi progetti",
-    ),
-    DashboardItem(
-      icon: Icons.analytics_outlined,
-      activeIcon: Icons.analytics,
-      title: "Analytics",
-      subtitle: "Statistiche utilizzo",
-    ),
-  ];
+  late AnimationController _backgroundController;
+  late AnimationController _contentController;
+  late Animation<double> _backgroundAnimation;
+  late Animation<double> _contentAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAnimations();
+  }
+
+  void _initAnimations() {
+    _backgroundController = AnimationController(
+      duration: const Duration(seconds: 8),
+      vsync: this,
+    );
+    _contentController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _backgroundAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(
+      parent: _backgroundController,
+      curve: Curves.easeInOut,
+    ));
+
+    _contentAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(
+      parent: _contentController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _backgroundController.repeat();
+    _contentController.forward();
+  }
+
+  @override
+  void dispose() {
+    _backgroundController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+
+  void _setProjectActive(bool isActive) {
+    setState(() {
+      _projectActive = isActive;
+      if (isActive) {
+        _projectListType = null;
+      }
+    });
+  }
+
+  void _setProjectListType(String type) {
+    setState(() {
+      _projectActive = false;
+      _projectListType = type;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF7F9FC),
-      body: Row(
-        children: [
-          // Sidebar
-          // Sostituisci la sidebar originale con questa versione
-
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: _isSidebarCollapsed ? 80 : 280,
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF161B22) : Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: isDark
-                      ? Colors.black.withOpacity(0.3)
-                      : Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(2, 0),
-                ),
-              ],
-            ),
-            child: Column(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.surface,
+              theme.colorScheme.surface.withOpacity(0.98),
+              theme.colorScheme.surfaceVariant.withOpacity(0.05),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            _buildAnimatedBackground(theme),
+            Row(
               children: [
-                // Header
-                Container(
-                  height: 80,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Theme.of(context).colorScheme.primary,
-                              Theme.of(context).colorScheme.primary.withOpacity(0.7),
+                Sidebar(
+                  isCollapsed: false,
+                  projectActive: _projectActive,
+                  onProjectStateChanged: _setProjectActive,
+                  onProjectListRequested: _setProjectListType,
+                ),
+                Expanded(
+                  child: AnimatedBuilder(
+                    animation: _contentAnimation,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(30 * (1 - _contentAnimation.value), 0),
+                        child: Opacity(
+                          opacity: _contentAnimation.value,
+                          child: Column(
+                            children: [
+                              _buildTopBar(context),
+                              Expanded(child: _buildMainContent()),
                             ],
                           ),
-                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
-                          Icons.auto_awesome,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      if (!_isSidebarCollapsed) ...[
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            "FlowChart AI",
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                      ],
-                      IconButton(
-                        onPressed: () {
-                          setState(() {
-                            _isSidebarCollapsed = !_isSidebarCollapsed;
-                          });
-                        },
-                        icon: Icon(
-                          _isSidebarCollapsed ? Icons.menu_open : Icons.menu,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-
-                // Macroaree a menù a tendina
-                Expanded(
-                  child: _SidebarMacroareas(
-                    isCollapsed: _isSidebarCollapsed,
-                  ),
-                ),
-
-                const Divider(height: 1),
-
-                // Bottom actions
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      _buildBottomMenuItem(
-                        icon: Icons.settings_outlined,
-                        activeIcon: Icons.settings,
-                        title: "Impostazioni",
-                        onTap: () {
-                          context.go('/settings');
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      _buildBottomMenuItem(
-                        icon: Icons.brightness_6_outlined,
-                        activeIcon: Icons.brightness_6,
-                        title: "Tema",
-                        onTap: () {
-                          Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      _buildBottomMenuItem(
-                        icon: Icons.logout_outlined,
-                        activeIcon: Icons.logout,
-                        title: "Esci",
-                        onTap: () {
-                          context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
-                        },
-                        isDestructive: true,
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedBackground(ThemeData theme) {
+    return Positioned.fill(
+      child: AnimatedBuilder(
+        animation: _backgroundAnimation,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: _BackgroundPainter(
+              animation: _backgroundAnimation,
+              primaryColor: theme.colorScheme.primary,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTopBar(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      height: 80,
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withOpacity(0.8),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outline.withOpacity(0.1),
+            width: 1,
           ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Spacer(),
+          _buildBreadcrumb(theme),
+          const Spacer(),
+        ],
+      ),
+    );
+  }
 
-          // Main Content
-          Expanded(
-            child: Column(
-              children: [
-                // Top Bar
-                Container(
-                  height: 80,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF161B22) : Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDark
-                            ? Colors.black.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
+  Widget _buildBreadcrumb(ThemeData theme) {
+    String currentPage = "Dashboard";
+    if (_projectActive) {
+      currentPage = "Progetto";
+    } else if (_projectListType != null) {
+      currentPage = _projectListType == "recent" ? "Progetti Recenti" : "Tutti i Progetti";
+    }
+
+    return Row(
+      children: [
+        Text(
+          "Unichart",
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(width: 8),
+        FaIcon(
+          FontAwesomeIcons.chevronRight,
+          size: 12,
+          color: theme.colorScheme.onSurface.withOpacity(0.4),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          currentPage,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMainContent() {
+    if (_projectActive) {
+      return _buildProjectView();
+    } else if (_projectListType != null) {
+      return ProjectListView(
+        type: _projectListType!,
+        onOpenProject: () => _setProjectActive(true),
+      );
+    } else {
+      return _buildWelcomeView();
+    }
+  }
+
+  Widget _buildProjectView() {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 600),
+        tween: Tween(begin: 0.0, end: 1.0),
+        builder: (context, value, child) {
+          return Transform.scale(
+            scale: 0.95 + (0.05 * value),
+            child: Opacity(
+              opacity: value,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      theme.colorScheme.surface,
+                      theme.colorScheme.surface.withOpacity(0.95),
                     ],
                   ),
-                  child: Row(
-                    children: [
-                      Text(
-                        _menuItems[_selectedIndex].title,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      // Search bar
-                      Container(
-                        width: 300,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF0D1117)
-                              : const Color(0xFFF6F8FA),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.grey.withOpacity(0.3)
-                                : Colors.grey.withOpacity(0.2),
-                          ),
-                        ),
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: "Cerca...",
-                            prefixIcon: Icon(
-                              Icons.search,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                              size: 20,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Profile
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Icon(
-                          Icons.person,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ],
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withOpacity(0.1),
+                    width: 1,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: theme.colorScheme.shadow.withOpacity(0.1),
+                      blurRadius: 40,
+                      offset: const Offset(0, 16),
+                    ),
+                    BoxShadow(
+                      color: theme.colorScheme.primary.withOpacity(0.05),
+                      blurRadius: 60,
+                      offset: const Offset(0, 24),
+                    ),
+                  ],
                 ),
+                child: Column(
+                  children: [
+                    const WorkAreaToolbar(),
+                    Expanded(
+                      child: _editingMode
+                          ? const WorkArea()
+                          : _buildEmptyState(theme),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
-                // Content Area
-                Expanded(
-                  child: _buildMainContent(),
-                ),
-              ],
+  Widget _buildEmptyState(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary.withOpacity(0.1),
+                  theme.colorScheme.primary.withOpacity(0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: FaIcon(
+              FontAwesomeIcons.penToSquare,
+              size: 48,
+              color: theme.colorScheme.primary.withOpacity(0.7),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            "Inizia a creare",
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Clicca su Edit per iniziare a disegnare il tuo diagramma",
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
             ),
           ),
         ],
@@ -268,470 +334,118 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildMenuItem(int index) {
-    final item = _menuItems[index];
-    final isSelected = _selectedIndex == index;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildWelcomeView() {
+    final theme = Theme.of(context);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: _isSidebarCollapsed ? 16 : 16,
-              vertical: 12,
-            ),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? (isDark
-                  ? Theme.of(context).colorScheme.primary.withOpacity(0.2)
-                  : Theme.of(context).colorScheme.primary.withOpacity(0.1))
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: isSelected
-                  ? Border.all(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
-              )
-                  : null,
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isSelected ? item.activeIcon : item.icon,
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  size: 22,
-                ),
-                if (!_isSidebarCollapsed) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        if (item.subtitle != null)
-                          Text(
-                            item.subtitle!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                            ),
-                          ),
-                      ],
+    return Center(
+      child: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 1000),
+        tween: Tween(begin: 0.0, end: 1.0),
+        builder: (context, value, child) {
+          return Opacity(
+            opacity: value,
+            child: Transform.translate(
+              offset: Offset(0, 50 * (1 - value)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(40),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          theme.colorScheme.primary.withOpacity(0.1),
+                          theme.colorScheme.primary.withOpacity(0.05),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(32),
+                    ),
+                    child: FaIcon(
+                      FontAwesomeIcons.rocket,
+                      size: 64,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    "Benvenuto in Unichart",
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Seleziona un progetto dalla sidebar per iniziare",
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
                     ),
                   ),
                 ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomMenuItem({
-    required IconData icon,
-    required IconData activeIcon,
-    required String title,
-    required VoidCallback onTap,
-    bool isDestructive = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: _isSidebarCollapsed ? 16 : 12,
-            vertical: 8,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                color: isDestructive
-                    ? Colors.red
-                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                size: 20,
-              ),
-              if (!_isSidebarCollapsed) ...[
-                const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDestructive
-                        ? Colors.red
-                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMainContent() {
-    switch (_selectedIndex) {
-      case 0:
-        return _buildChatContent();
-      case 1:
-        return _buildHistoryContent();
-      case 2:
-        return _buildFavoritesContent();
-      case 3:
-        return _buildProjectsContent();
-      case 4:
-        return _buildAnalyticsContent();
-      default:
-        return _buildChatContent();
-    }
-  }
-
-  Widget _buildChatContent() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                    Theme.of(context).colorScheme.primary.withOpacity(0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                Icons.auto_awesome,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
               ),
             ),
-            const SizedBox(height: 32),
-            Text(
-              "Inizia una nuova conversazione",
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              "Chiedi qualsiasi cosa e inizieremo a chattare insieme",
-              style: TextStyle(
-                fontSize: 16,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-              ),
-            ),
-            const SizedBox(height: 40),
-            // Quick actions
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: [
-                _buildQuickAction(
-                  "Scrivi codice",
-                  Icons.code,
-                  "Aiutami a programmare",
-                ),
-                _buildQuickAction(
-                  "Spiega concetti",
-                  Icons.lightbulb_outline,
-                  "Spiegami qualcosa",
-                ),
-                _buildQuickAction(
-                  "Risolvi problemi",
-                  Icons.psychology,
-                  "Ho un problema da risolvere",
-                ),
-                _buildQuickAction(
-                  "Creatività",
-                  Icons.brush,
-                  "Aiutami a essere creativo",
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickAction(String title, IconData icon, String description) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          // Implementa l'azione
+          );
         },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: 200,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF161B22) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark
-                  ? Colors.grey.withOpacity(0.2)
-                  : Colors.grey.withOpacity(0.1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDark
-                    ? Colors.black.withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 32,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHistoryContent() {
-    return const Center(
-      child: Text(
-        "Cronologia Chat",
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildFavoritesContent() {
-    return const Center(
-      child: Text(
-        "Preferiti",
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildProjectsContent() {
-    return const Center(
-      child: Text(
-        "I tuoi Progetti",
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Widget _buildAnalyticsContent() {
-    return const Center(
-      child: Text(
-        "Analytics",
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
       ),
     );
   }
 }
 
-class DashboardItem {
-  final IconData icon;
-  final IconData activeIcon;
-  final String title;
-  final String? subtitle;
+class _BackgroundPainter extends CustomPainter {
+  final Animation<double> animation;
+  final Color primaryColor;
 
-  DashboardItem({
-    required this.icon,
-    required this.activeIcon,
-    required this.title,
-    this.subtitle,
+  _BackgroundPainter({
+    required this.animation,
+    required this.primaryColor,
   });
-}
-
-class _SidebarMacroareas extends StatefulWidget {
-  final bool isCollapsed;
-  const _SidebarMacroareas({required this.isCollapsed});
 
   @override
-  State<_SidebarMacroareas> createState() => _SidebarMacroareasState();
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = primaryColor.withOpacity(0.02)
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    final waveHeight = 50;
+    final waveLength = size.width / 4;
+    final phase = animation.value * 2 * 3.14159;
+
+    path.moveTo(0, size.height * 0.8);
+
+    for (double x = 0; x <= size.width; x += 1) {
+      final y = size.height * 0.8 +
+          waveHeight * math.sin((x / waveLength) * 2 * 3.14159 + phase);
+      path.lineTo(x, y);
+    }
+
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-class _SidebarMacroareasState extends State<_SidebarMacroareas> {
-  int? _expandedSection;
-
-  final List<_SidebarSection> _sections = [
-    _SidebarSection(
-      icon: Icons.folder,
-      title: "Progetti",
-      children: [
-        _SidebarItem(title: "Recenti"),
-        _SidebarItem(title: "I miei progetti"),
-        _SidebarItem(title: "Preferiti"),
-      ],
-    ),
-    _SidebarSection(
-      icon: Icons.add_box,
-      title: "Inserisci",
-      children: [
-        _SidebarItem(title: "Rettangolo", icon: Icons.crop_16_9),
-        _SidebarItem(title: "Cerchio", icon: Icons.circle),
-        _SidebarItem(title: "Parallelogramma", icon: Icons.change_history),
-        _SidebarItem(title: "Rombo", icon: Icons.diamond),
-      ],
-    ),
-    _SidebarSection(
-      icon: Icons.play_arrow,
-      title: "Esecuzione",
-      children: [
-        _SidebarItem(title: "Simula"),
-        _SidebarItem(title: "Debug"),
-      ],
-    ),
-  ];
+class WorkArea extends StatelessWidget {
+  const WorkArea({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: _sections.length,
-      itemBuilder: (context, sectionIndex) {
-        final section = _sections[sectionIndex];
-        final expanded = _expandedSection == sectionIndex;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              leading: Icon(section.icon, color: Theme.of(context).colorScheme.primary),
-              title: widget.isCollapsed ? null : Text(section.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              trailing: widget.isCollapsed
-                  ? null
-                  : Icon(
-                expanded ? Icons.expand_less : Icons.expand_more,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-              ),
-              onTap: () {
-                setState(() {
-                  _expandedSection = expanded ? null : sectionIndex;
-                });
-              },
-              contentPadding: EdgeInsets.symmetric(horizontal: widget.isCollapsed ? 8 : 16),
-            ),
-            if (expanded)
-              ...section.children.map((item) {
-                if (section.title == "Inserisci") {
-                  // Drag & Drop per le forme
-                  return Padding(
-                    padding: EdgeInsets.only(left: widget.isCollapsed ? 16 : 32.0),
-                    child: Draggable<String>(
-                      data: item.title,
-                      feedback: Material(
-                        color: Colors.transparent,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(item.icon, size: 28, color: Theme.of(context).colorScheme.primary),
-                            if (!widget.isCollapsed) ...[
-                              const SizedBox(width: 8),
-                              Text(item.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            ],
-                          ],
-                        ),
-                      ),
-                      child: ListTile(
-                        leading: Icon(item.icon, color: Theme.of(context).colorScheme.primary),
-                        title: widget.isCollapsed ? null : Text(item.title),
-                        dense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 0),
-                      ),
-                    ),
-                  );
-                } else {
-                  return Padding(
-                    padding: EdgeInsets.only(left: widget.isCollapsed ? 16 : 32.0),
-                    child: ListTile(
-                      title: widget.isCollapsed ? null : Text(item.title),
-                      dense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 0),
-                      onTap: () {
-                        // Azione per ogni voce
-                      },
-                    ),
-                  );
-                }
-              }).toList(),
-          ],
-        );
-      },
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
+        ),
+      ),
+      child: const Center(
+        child: Text("Area di lavoro attiva"),
+      ),
     );
   }
 }
-
-class _SidebarSection {
-  final IconData icon;
-  final String title;
-  final List<_SidebarItem> children;
-
-  _SidebarSection({required this.icon, required this.title, required this.children});
-}
-
-class _SidebarItem {
-  final String title;
-  final IconData? icon;
-
-  _SidebarItem({required this.title, this.icon});
-}
-
-//avvia l'applicazione con il DashboardPage
