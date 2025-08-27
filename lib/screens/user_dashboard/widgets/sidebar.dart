@@ -11,6 +11,9 @@ class Sidebar extends StatefulWidget {
   final bool projectActive;
   final void Function(bool projectIsActive) onProjectStateChanged;
   final void Function(String type) onProjectListRequested;
+  final VoidCallback onCreateProject;
+  final VoidCallback onNewFile;
+  final VoidCallback onNewDirectory;
 
   const Sidebar({
     super.key,
@@ -18,6 +21,9 @@ class Sidebar extends StatefulWidget {
     required this.projectActive,
     required this.onProjectStateChanged,
     required this.onProjectListRequested,
+    required this.onCreateProject,
+    required this.onNewFile,
+    required this.onNewDirectory,
   });
 
   @override
@@ -114,6 +120,8 @@ class _SidebarState extends State<Sidebar> with TickerProviderStateMixin {
         children: [
           _buildHeader(context),
           _buildDivider(context),
+          _buildProjectActions(context),
+          _buildDivider(context),
           Expanded(
             child: SidebarMenu(
               isCollapsed: widget.isCollapsed,
@@ -169,7 +177,7 @@ class _SidebarState extends State<Sidebar> with TickerProviderStateMixin {
                   ),
                   child: Stack(
                     children: [
-                      // Shimmer effect
+                      // Effetto shimmer
                       Positioned.fill(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(16),
@@ -228,6 +236,71 @@ class _SidebarState extends State<Sidebar> with TickerProviderStateMixin {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildProjectActions(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        children: [
+          // Bottone per creare un nuovo progetto
+          _buildCreateProjectButton(context),
+          const SizedBox(height: 12),
+          // Pulsanti per file e cartelle, visibili solo se un progetto è attivo
+          if (widget.projectActive) ...[
+            _buildActionButtons(context),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreateProjectButton(BuildContext context) {
+    final theme = Theme.of(context);
+    return _buildModernMenuItem(
+      context,
+      icon: FontAwesomeIcons.plus,
+      title: "Crea Progetto",
+      onTap: widget.onCreateProject,
+      isPrimaryAction: true,
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context) {
+    return Column(
+      children: [
+        _buildActionButton(
+          context,
+          'Nuovo File',
+          Icons.insert_drive_file_outlined,
+          widget.onNewFile,
+        ),
+        const SizedBox(height: 8),
+        _buildActionButton(
+          context,
+          'Nuova Cartella',
+          Icons.folder_outlined,
+          widget.onNewDirectory,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(BuildContext context, String label, IconData icon, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
       ),
     );
   }
@@ -291,7 +364,7 @@ class _SidebarState extends State<Sidebar> with TickerProviderStateMixin {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Account"),
-        content: const Text("Impostazioni account in arrivo..."),
+        content: const Text("Qui verranno mostrate le impostazioni dell'account."),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -308,6 +381,7 @@ class _SidebarState extends State<Sidebar> with TickerProviderStateMixin {
         required String title,
         required VoidCallback onTap,
         bool isDestructive = false,
+        bool isPrimaryAction = false, // Aggiunto parametro per lo stile primario
       }) {
     final theme = Theme.of(context);
 
@@ -317,6 +391,7 @@ class _SidebarState extends State<Sidebar> with TickerProviderStateMixin {
       onTap: onTap,
       isCollapsed: widget.isCollapsed,
       isDestructive: isDestructive,
+      isPrimaryAction: isPrimaryAction, // Passato al widget
       theme: theme,
     );
   }
@@ -328,6 +403,7 @@ class _ModernMenuItem extends StatefulWidget {
   final VoidCallback onTap;
   final bool isCollapsed;
   final bool isDestructive;
+  final bool isPrimaryAction; // Flag per lo stile primario
   final ThemeData theme;
 
   const _ModernMenuItem({
@@ -336,6 +412,7 @@ class _ModernMenuItem extends StatefulWidget {
     required this.onTap,
     required this.isCollapsed,
     required this.isDestructive,
+    required this.isPrimaryAction,
     required this.theme,
   });
 
@@ -374,9 +451,50 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
 
   @override
   Widget build(BuildContext context) {
+    final baseColorScheme = widget.theme.colorScheme;
     final colorScheme = widget.isDestructive
         ? ColorScheme.fromSeed(seedColor: Colors.red)
-        : widget.theme.colorScheme;
+        : baseColorScheme;
+
+    final bool isHighlighted = _isHovered || _isPressed;
+
+    // Definisce colori e stili in base allo stato e al tipo di azione
+    final Color iconColor;
+    final Color textColor;
+    final Gradient? backgroundGradient;
+    final List<BoxShadow>? boxShadow;
+
+    if (widget.isPrimaryAction) {
+      iconColor = baseColorScheme.onPrimary;
+      textColor = baseColorScheme.onPrimary;
+      backgroundGradient = LinearGradient(
+        colors: [
+          baseColorScheme.primary,
+          baseColorScheme.primary.withOpacity(isHighlighted ? 1.0 : 0.8),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+      boxShadow = [
+        BoxShadow(
+          color: baseColorScheme.primary.withOpacity(0.3),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ];
+    } else {
+      iconColor = isHighlighted ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.7);
+      textColor = isHighlighted ? colorScheme.primary : baseColorScheme.onSurface.withOpacity(0.8);
+      backgroundGradient = isHighlighted
+          ? LinearGradient(
+        colors: [
+          colorScheme.primary.withOpacity(0.1),
+          colorScheme.primary.withOpacity(0.05),
+        ],
+      )
+          : null;
+      boxShadow = null;
+    }
 
     return AnimatedBuilder(
       animation: _scaleAnimation,
@@ -386,6 +504,7 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
           child: MouseRegion(
             onEnter: (_) => setState(() => _isHovered = true),
             onExit: (_) => setState(() => _isHovered = false),
+            cursor: SystemMouseCursors.click,
             child: GestureDetector(
               onTapDown: (_) {
                 setState(() => _isPressed = true);
@@ -393,8 +512,7 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
               },
               onTapUp: (_) {
                 setState(() => _isPressed = false);
-                _scaleController.reverse();
-                widget.onTap();
+                _scaleController.reverse().then((_) => widget.onTap());
               },
               onTapCancel: () {
                 setState(() => _isPressed = false);
@@ -404,30 +522,9 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
                 duration: const Duration(milliseconds: 200),
                 height: widget.isCollapsed ? 56 : 52,
                 decoration: BoxDecoration(
-                  gradient: _isPressed || _isHovered
-                      ? LinearGradient(
-                    colors: [
-                      colorScheme.primary.withOpacity(0.1),
-                      colorScheme.primary.withOpacity(0.05),
-                    ],
-                  )
-                      : null,
+                  gradient: backgroundGradient,
                   borderRadius: BorderRadius.circular(16),
-                  border: _isPressed
-                      ? Border.all(
-                    color: colorScheme.primary.withOpacity(0.3),
-                    width: 1,
-                  )
-                      : null,
-                  boxShadow: _isPressed
-                      ? [
-                    BoxShadow(
-                      color: colorScheme.primary.withOpacity(0.2),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                      : null,
+                  boxShadow: boxShadow,
                 ),
                 child: Padding(
                   padding: EdgeInsets.symmetric(
@@ -439,22 +536,7 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
                         ? MainAxisAlignment.center
                         : MainAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: (_isPressed || _isHovered)
-                              ? colorScheme.primary.withOpacity(0.15)
-                              : colorScheme.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: FaIcon(
-                          widget.icon,
-                          color: (_isPressed || _isHovered)
-                              ? colorScheme.primary
-                              : colorScheme.onSurface.withOpacity(0.7),
-                          size: 16,
-                        ),
-                      ),
+                      FaIcon(widget.icon, color: iconColor, size: 16),
                       if (!widget.isCollapsed) ...[
                         const SizedBox(width: 12),
                         Expanded(
@@ -462,10 +544,9 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
                             widget.title,
                             style: widget.theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w600,
-                              color: (_isPressed || _isHovered)
-                                  ? colorScheme.primary
-                                  : widget.theme.colorScheme.onSurface.withOpacity(0.8),
+                              color: textColor,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -480,3 +561,4 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
     );
   }
 }
+

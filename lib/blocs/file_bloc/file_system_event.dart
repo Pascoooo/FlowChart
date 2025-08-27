@@ -36,4 +36,3 @@ class OpenFile extends FileSystemEvent {
 
 /// Evento interno per creare la cartella radice all'avvio.
 class CreateNewRoot extends FileSystemEvent {}
-

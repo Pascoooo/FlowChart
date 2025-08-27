@@ -21,19 +21,17 @@ class FileSystemInitial extends FileSystemState {
 class FileSystemLoaded extends FileSystemState {
   final Directory root;
   final String? _activeFileId;
-  final String? _error;
+  @override
+  final String? error;
 
   const FileSystemLoaded({
     required this.root,
     required String? activeFileId,
-    String? error,
-  }) : _activeFileId = activeFileId, _error = error;
+    this.error,
+  }) : _activeFileId = activeFileId;
 
   @override
   String? get activeFileId => _activeFileId;
-
-  @override
-  String? get error => _error;
 
   /// Crea una copia dello stato con nuovi valori.
   FileSystemLoaded copyWith({
@@ -49,7 +47,7 @@ class FileSystemLoaded extends FileSystemState {
   }
 
   @override
-  List<Object> get props => [root, _activeFileId ?? '', _error ?? ''];
+  List<Object> get props => [root, _activeFileId ?? '', error ?? ''];
 }
 
 /// Stato che rappresenta un errore del filesystem.

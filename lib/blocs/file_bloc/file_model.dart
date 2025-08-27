@@ -43,3 +43,4 @@ class Directory extends FileSystemEntry {
   @override
   List<Object> get props => [id, name, parentId, children];
 }
+
