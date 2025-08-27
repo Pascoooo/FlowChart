@@ -1,56 +1,21 @@
-part of 'file_system_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:file_repository/file_repository.dart';
+import 'package:flutter/material.dart';
 
 @immutable
 abstract class FileSystemState extends Equatable {
   const FileSystemState();
 
   @override
-  List<Object> get props => [];
-
-  String? get activeFileId => null;
-
-  String? get error => null;
+  List<Object?> get props => [];
 }
 
-/// Stato iniziale del filesystem.
+/// Stato iniziale del filesystem
 class FileSystemInitial extends FileSystemState {
   const FileSystemInitial();
 }
 
-/// Stato che rappresenta il filesystem caricato.
-class FileSystemLoaded extends FileSystemState {
-  final Directory root;
-  final String? _activeFileId;
-  @override
-  final String? error;
-
-  const FileSystemLoaded({
-    required this.root,
-    required String? activeFileId,
-    this.error,
-  }) : _activeFileId = activeFileId;
-
-  @override
-  String? get activeFileId => _activeFileId;
-
-  /// Crea una copia dello stato con nuovi valori.
-  FileSystemLoaded copyWith({
-    Directory? root,
-    String? activeFileId,
-    String? error,
-  }) {
-    return FileSystemLoaded(
-      root: root ?? this.root,
-      activeFileId: activeFileId ?? _activeFileId,
-      error: error,
-    );
-  }
-
-  @override
-  List<Object> get props => [root, _activeFileId ?? '', error ?? ''];
-}
-
-/// Stato che rappresenta un errore del filesystem.
+/// Stato che rappresenta un errore del filesystem
 class FileSystemError extends FileSystemState {
   final String message;
 
@@ -58,4 +23,46 @@ class FileSystemError extends FileSystemState {
 
   @override
   List<Object> get props => [message];
+}
+
+/// Stato di caricamento
+class FileSystemLoading extends FileSystemState {
+  const FileSystemLoading();
+}
+
+/// Stato che rappresenta il filesystem caricato con la lista dei file
+class FileSystemLoaded extends FileSystemState {
+  final List<MyFile> files;
+  final String? activeFileId;
+  final String? error;
+  final String? successMessage;
+
+  const FileSystemLoaded({
+    required this.files,
+    this.activeFileId,
+    this.error,
+    this.successMessage,
+  });
+
+  FileSystemLoaded copyWith({
+    List<MyFile>? files,
+    String? activeFileId,
+    String? error,
+    String? successMessage,
+  }) {
+    return FileSystemLoaded(
+      files: files ?? this.files,
+      activeFileId: activeFileId ?? this.activeFileId,
+      error: error,
+      successMessage: successMessage,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+    files,
+    activeFileId,
+    error,
+    successMessage,
+  ];
 }

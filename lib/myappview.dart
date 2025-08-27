@@ -13,9 +13,9 @@ class MyAppView extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AuthenticationBloc, AuthenticationState>(
       builder: (context, state) {
+        final router = AppRouter.getRouter(context.read<AuthenticationBloc>());
         return MaterialApp.router(
-          routerConfig: AppRouter.getRouter(
-              context.read<AuthenticationBloc>()),
+          routerConfig: router,
           debugShowCheckedModeBanner: false,
           theme: Provider.of<ThemeProvider>(context).themeData,
           title: 'Flowchart Thesis',

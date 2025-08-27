@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flowchart_thesis/screens/auth/pages/auth_page.dart';
 import 'package:flowchart_thesis/screens/error/error_page.dart';
@@ -9,7 +8,6 @@ import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_sketch.dart';
 import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
-import '../../blocs/file_bloc/file_system_bloc.dart';
 
 class AppRoutes {
   // Nomi delle rotte per la navigazione type-safe
@@ -32,11 +30,8 @@ class AppRouter {
     GoRoute(
       path: AppRoutes.homePath,
       name: AppRoutes.homeName,
-      builder: (context, state) => BlocProvider<FileSystemBloc>(
-        create: (context) => FileSystemBloc()..add(CreateNewRoot()),
-        child: const DashboardPage(),
+      builder: (context, state) => const DashboardPage(),
       ),
-    ),
     GoRoute(
       path: AppRoutes.authPath,
       name: AppRoutes.authName,

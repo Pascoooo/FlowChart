@@ -1,116 +1,113 @@
 import 'package:bloc/bloc.dart';
-import 'package:equatable/equatable.dart';
-import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
-import 'file_model.dart';
+import 'package:file_repository/file_repository.dart';
+import 'package:flutter/foundation.dart';
+import 'file_system_event.dart';
+import 'file_system_state.dart';
 
-part 'file_system_event.dart';
-part 'file_system_state.dart';
 
 class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
-  final Uuid _uuid = const Uuid();
+  final FirebaseFileRepo fileRepository;
 
-  FileSystemBloc() : super(const FileSystemInitial()) {
-    on<CreateNewEntry>(_onCreateNewEntry);
+  FileSystemBloc({required this.fileRepository})
+      : super(const FileSystemInitial()) {
+
+    on<RefreshFileSystem>(_onRefreshFileSystem);
+    on<CreateNewFile>(_onCreateNewFile);
     on<OpenFile>(_onOpenFile);
-    on<CreateNewRoot>(_onCreateNewRoot);
+    on<DeleteFile>(_onDeleteFile);
+    on<RenameFile>(_onRenameFile);
+
+    // Esegui l'aggiornamento iniziale all'avvio
+    add(const RefreshFileSystem());
   }
 
-  // La cartella radice viene gestita dal BLoC
-  late Directory _root;
-
-  /// Inizializza il filesystem con una cartella radice.
-  Future<void> _onCreateNewRoot(
-      CreateNewRoot event,
+  /// Ricarica l'intero filesystem
+  Future<void> _onRefreshFileSystem(
+      RefreshFileSystem event,
       Emitter<FileSystemState> emit,
       ) async {
-    _root = Directory(
-      id: 'root',
-      name: 'Progetti',
-      parentId: '',
-      children: [],
-    );
-    emit(FileSystemLoaded(root: _root, activeFileId: null));
+    emit(const FileSystemLoading());
+    try {
+      final List<MyFile> files = await fileRepository.getFiles();
+      emit(FileSystemLoaded(files: files, activeFileId: null));
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace, 'Errore nel caricamento dei file', emit);
+    }
   }
 
-  /// Gestisce la creazione di un nuovo file o directory.
-  Future<void> _onCreateNewEntry(
-      CreateNewEntry event,
+  /// Gestisce la creazione di un nuovo file
+  Future<void> _onCreateNewFile(
+      CreateNewFile event,
       Emitter<FileSystemState> emit,
       ) async {
-    if (state is! FileSystemLoaded) {
-      emit(const FileSystemError(message: 'Filesystem non caricato.'));
-      return;
+    emit(const FileSystemLoading());
+    try {
+      // Validazione del nome
+      if (event.fileName.trim().isEmpty) {
+        throw Exception('Il nome del file non può essere vuoto.');
+      }
+
+      String fileName = event.fileName.trim();
+      await fileRepository.createFile(name: fileName);
+      final List<MyFile> files = await fileRepository.getFiles();
+      emit(FileSystemLoaded(files: files));
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace, 'Errore nella creazione del file', emit);
     }
-
-    final loadedState = state as FileSystemLoaded;
-
-    // Trova il genitore corretto usando un metodo di ricerca.
-    final Directory? parent = _findDirectoryById(loadedState.root, event.parentId);
-
-    if (parent == null) {
-      emit(loadedState.copyWith(
-        error: 'Impossibile trovare la cartella di destinazione.',
-      ));
-      return;
-    }
-
-    // Controlla se il nome esiste già
-    bool nameExists = parent.children.any((entry) => entry.name == event.name);
-    if (nameExists) {
-      emit(loadedState.copyWith(
-        error: 'Esiste già un file o cartella con questo nome.',
-      ));
-      return;
-    }
-
-    // Crea la nuova entry
-    FileSystemEntry newEntry;
-    if (event.isDir) {
-      newEntry = Directory(
-        id: _uuid.v4(),
-        name: event.name,
-        parentId: event.parentId,
-        children: [],
-      );
-    } else {
-      newEntry = File(
-        id: _uuid.v4(),
-        name: event.name,
-        parentId: event.parentId,
-      );
-    }
-
-    // Aggiungi la nuova entry ai figli del genitore
-    parent.children.add(newEntry);
-
-    // Emette un nuovo stato con la lista di figli aggiornata.
-    // Viene creata una nuova copia dello stato per garantire l'immutabilità.
-    emit(FileSystemLoaded(root: loadedState.root, activeFileId: loadedState.activeFileId));
   }
 
-  /// Gestisce l'apertura di un file.
-  Future<void> _onOpenFile(OpenFile event, Emitter<FileSystemState> emit) async {
+  /// Gestisce l'apertura di un file
+  void _onOpenFile(OpenFile event, Emitter<FileSystemState> emit) {
     if (state is FileSystemLoaded) {
       final loadedState = state as FileSystemLoaded;
-      emit(loadedState.copyWith(activeFileId: event.file.id));
+      emit(loadedState.copyWith(
+        activeFileId: event.fileId,
+        successMessage: 'File "${event.fileName}" aperto.',
+      ));
     }
   }
 
-  /// Metodo ricorsivo per trovare una directory per ID.
-  Directory? _findDirectoryById(Directory currentDir, String id) {
-    if (currentDir.id == id) {
-      return currentDir;
+  /// Elimina un file
+  Future<void> _onDeleteFile(
+      DeleteFile event,
+      Emitter<FileSystemState> emit,
+      ) async {
+    emit(const FileSystemLoading());
+    try {
+      await fileRepository.deleteFile(fileId: event.fileId);
+      final List<MyFile> files = await fileRepository.getFiles();
+      emit(FileSystemLoaded(files: files));
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace, 'Errore nell\'eliminazione del file', emit);
     }
+  }
 
-    for (final child in currentDir.children) {
-      if (child is Directory) {
-        final foundDir = _findDirectoryById(child, id);
-        if (foundDir != null) {
-          return foundDir;
-        }
+  /// Rinomina un file
+  Future<void> _onRenameFile(
+      RenameFile event,
+      Emitter<FileSystemState> emit,
+      ) async {
+    emit(const FileSystemLoading());
+    try {
+      if (event.newName.trim().isEmpty) {
+        throw Exception('Il nuovo nome non può essere vuoto.');
       }
+      await fileRepository.renameFile(
+          fileId: event.fileId, newName: event.newName.trim());
+      final List<MyFile> files = await fileRepository.getFiles();
+      emit(FileSystemLoaded(files: files));
+    } catch (e, stackTrace) {
+      _handleError(e, stackTrace, 'Errore nella ridenominazione', emit);
     }
-    return null;
+  }
+
+  /// Funzione helper per la gestione degli errori
+  void _handleError(
+      Object e, StackTrace stackTrace, String prefix, Emitter<FileSystemState> emit) {
+    if (kDebugMode) {
+      debugPrint('$prefix: $e');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+    emit(FileSystemError(message: '$prefix: $e'));
   }
 }

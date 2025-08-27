@@ -1,38 +1,57 @@
-part of 'file_system_bloc.dart';
+import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
 
 @immutable
 abstract class FileSystemEvent extends Equatable {
   const FileSystemEvent();
 
   @override
-  List<Object> get props => [];
+  List<Object?> get props => [];
 }
 
-/// Evento per creare un nuovo file o una nuova directory.
-class CreateNewEntry extends FileSystemEvent {
-  final String name;
-  final String parentId;
-  final bool isDir;
+/// Evento per inizializzare il filesystem e caricare i file
+class RefreshFileSystem extends FileSystemEvent {
+  const RefreshFileSystem();
+}
 
-  const CreateNewEntry({
-    required this.name,
-    required this.parentId,
-    required this.isDir,
-  });
+/// Evento per creare un nuovo file
+class CreateNewFile extends FileSystemEvent {
+  final String fileName;
+
+  const CreateNewFile({required this.fileName});
 
   @override
-  List<Object> get props => [name, parentId, isDir];
+  List<Object> get props => [fileName];
 }
 
-/// Evento per aprire un file esistente.
+/// Evento per aprire un file
 class OpenFile extends FileSystemEvent {
-  final File file;
+  final String fileId;
+  final String fileName;
 
-  const OpenFile({required this.file});
+  const OpenFile({required this.fileId, required this.fileName});
 
   @override
-  List<Object> get props => [file];
+  List<Object> get props => [fileId, fileName];
 }
 
-/// Evento interno per creare la cartella radice all'avvio.
-class CreateNewRoot extends FileSystemEvent {}
+/// Evento per eliminare un file
+class DeleteFile extends FileSystemEvent {
+  final String fileId;
+
+  const DeleteFile({required this.fileId});
+
+  @override
+  List<Object> get props => [fileId];
+}
+
+/// Evento per rinominare un file
+class RenameFile extends FileSystemEvent {
+  final String fileId;
+  final String newName;
+
+  const RenameFile({required this.fileId, required this.newName});
+
+  @override
+  List<Object> get props => [fileId, newName];
+}

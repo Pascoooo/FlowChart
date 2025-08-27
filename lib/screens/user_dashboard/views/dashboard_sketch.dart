@@ -1,39 +1,66 @@
+// dart
 import 'dart:math' as math;
+import 'package:file_repository/file_repository.dart';
+import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../../blocs/file_bloc/file_model.dart';
+import '../../../blocs/auth_bloc/authentication_bloc.dart';
+import '../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../blocs/file_bloc/file_system_bloc.dart';
+import '../../../blocs/file_bloc/file_system_event.dart';
+import '../../../blocs/file_bloc/file_system_state.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/workarea_toolbar.dart';
 
-class DashboardPage extends StatefulWidget {
+class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
   @override
-  State<DashboardPage> createState() => _DashboardPageState();
+  Widget build(BuildContext context) {
+    return BlocBuilder<AuthenticationBloc, AuthenticationState>(
+      builder: (context, authState) {
+        if (authState.status == AuthenticationStatus.authenticated) {
+          return BlocProvider<FileSystemBloc>(
+            create: (context) {
+              return FileSystemBloc(
+                fileRepository: FirebaseFileRepo(uid: authState.user.userId),
+              );
+            },
+            child: DashboardView(),
+          );
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            AppRouter.goToAuth(context);
+          });
+          return const SizedBox.shrink();
+        }
+      },
+    );
+  }
 }
 
-class _DashboardPageState extends State<DashboardPage>
+class DashboardView extends StatefulWidget {
+  const DashboardView({super.key});
+
+  @override
+  State<DashboardView> createState() => _DashboardViewState();
+}
+
+class _DashboardViewState extends State<DashboardView>
     with TickerProviderStateMixin {
-  bool _projectActive = false;
   bool _editingMode = false;
-  String? _projectListType;
+  bool _sidebarCollapsed = false;
 
   late AnimationController _backgroundController;
   late AnimationController _contentController;
-  late AnimationController _createButtonController;
   late Animation<double> _backgroundAnimation;
   late Animation<double> _contentAnimation;
-  late Animation<double> _createButtonScale;
 
   @override
   void initState() {
     super.initState();
     _initAnimations();
-    if (mounted) {
-      context.read<FileSystemBloc>().add( CreateNewRoot());
-    }
   }
 
   void _initAnimations() {
@@ -43,10 +70,6 @@ class _DashboardPageState extends State<DashboardPage>
     );
     _contentController = AnimationController(
       duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _createButtonController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
 
@@ -66,102 +89,91 @@ class _DashboardPageState extends State<DashboardPage>
       curve: Curves.easeOutCubic,
     ));
 
-    _createButtonScale = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _createButtonController,
-      curve: Curves.elasticOut,
-    ));
-
     _backgroundController.repeat();
     _contentController.forward();
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) {
-        _createButtonController.forward();
-      }
-    });
   }
 
   @override
   void dispose() {
     _backgroundController.dispose();
     _contentController.dispose();
-    _createButtonController.dispose();
     super.dispose();
-  }
-
-  void _setProjectActive(bool isActive) {
-    setState(() {
-      _projectActive = isActive;
-      if (isActive) {
-        _projectListType = null;
-      }
-    });
-  }
-
-  void _setProjectListType(String type) {
-    setState(() {
-      _projectActive = false;
-      _projectListType = type;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    return BlocBuilder<FileSystemBloc, FileSystemState>(
+      builder: (context, state) {
+        final theme = Theme.of(context);
 
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.surface,
-              theme.colorScheme.surface.withOpacity(0.98),
-              theme.colorScheme.surfaceVariant.withOpacity(0.05),
-            ],
-          ),
-        ),
-        child: Stack(
-          children: [
-            _buildAnimatedBackground(theme),
-            Row(
+        print("Stato FileSystemBloc nella dashboard: ${state.runtimeType}");
+
+        return Scaffold(
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.surface,
+                  theme.colorScheme.surface.withOpacity(0.98),
+                  theme.colorScheme.surfaceVariant.withOpacity(0.05),
+                ],
+              ),
+            ),
+            child: Stack(
               children: [
-                Sidebar(
-                  isCollapsed: false,
-                  projectActive: _projectActive,
-                  onProjectStateChanged: _setProjectActive,
-                  onProjectListRequested: _setProjectListType,
-                  onCreateProject: () => _showCreateProjectDialog(context),
-                  onNewFile: () => _showCreateDialog(context, false),
-                  onNewDirectory: () => _showCreateDialog(context, true),
-                ),
-                Expanded(
-                  child: AnimatedBuilder(
-                    animation: _contentAnimation,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(30 * (1 - _contentAnimation.value), 0),
-                        child: Opacity(
-                          opacity: _contentAnimation.value,
-                          child: Column(
-                            children: [
-                              _buildTopBar(context),
-                              Expanded(child: _buildMainContent()),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                _buildAnimatedBackground(theme),
+                Row(
+                  children: [
+                    ProjectSidebar(isCollapsed: _sidebarCollapsed),
+                    Expanded(
+                      child: AnimatedBuilder(
+                        animation: _contentAnimation,
+                        builder: (context, child) {
+                          return Transform.translate(
+                            offset: Offset(30 * (1 - _contentAnimation.value), 0),
+                            child: Opacity(
+                              opacity: _contentAnimation.value,
+                              child: Column(
+                                children: [
+                                  _buildTopBar(context),
+                                  Expanded(
+                                    child: (() {
+                                      // Logica di _buildMainContent incorporata qui
+                                      if (state is FileSystemLoading) {
+                                        return const Center(child: CircularProgressIndicator());
+                                      }
+
+                                      if (state is FileSystemError) {
+                                        return _buildErrorView(state.message);
+                                      }
+
+                                      if (state is FileSystemLoaded) {
+                                        if (state.activeFileId != null) {
+                                          return _buildProjectView(state);
+                                        } else {
+                                          return _buildWelcomeView(state);
+                                        }
+                                      }
+
+                                      return _buildWelcomeView(null);
+                                    })(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -184,43 +196,68 @@ class _DashboardPageState extends State<DashboardPage>
   Widget _buildTopBar(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      height: 80,
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withOpacity(0.8),
-        border: Border(
-          bottom: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.1),
-            width: 1,
+    return BlocBuilder<FileSystemBloc, FileSystemState>(
+      builder: (context, state) {
+        final bool hasActiveFile =
+            state is FileSystemLoaded && state.activeFileId != null;
+
+        return Container(
+          height: 80,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface.withOpacity(0.8),
+            border: Border(
+              bottom: BorderSide(
+                color: theme.colorScheme.outline.withOpacity(0.1),
+                width: 1,
+              ),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.shadow.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+          child: Row(
+            children: [
+              _buildBreadcrumb(theme, state),
+              const Spacer(),
+              if (hasActiveFile) ...[
+                IconButton(
+                  onPressed: () =>
+                      setState(() => _sidebarCollapsed = !_sidebarCollapsed),
+                  icon: Icon(
+                    _sidebarCollapsed ? Icons.menu_open : Icons.menu,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                  tooltip: _sidebarCollapsed
+                      ? 'Espandi Sidebar'
+                      : 'Comprimi Sidebar',
+                ),
+              ],
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          _buildBreadcrumb(theme),
-          const Spacer(),
-          // I pulsanti di creazione sono stati spostati nella sidebar
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildBreadcrumb(ThemeData theme) {
+  Widget _buildBreadcrumb(ThemeData theme, FileSystemState state) {
     String currentPage = "Dashboard";
-    if (_projectActive) {
-      currentPage = "Progetto";
-    } else if (_projectListType != null) {
-      currentPage = _projectListType == "recent"
-          ? "Progetti Recenti"
-          : "Tutti i Progetti";
+
+    if (state is FileSystemLoaded) {
+      final activeFileId = state.activeFileId;
+      if (activeFileId != null) {
+        try {
+          final activeFile =
+          state.files.firstWhere((f) => f.fileId == activeFileId);
+          currentPage = activeFile.name;
+        } catch (e) {
+          currentPage = "File non trovato";
+        }
+      }
     }
 
     return Row(
@@ -239,31 +276,20 @@ class _DashboardPageState extends State<DashboardPage>
           color: theme.colorScheme.onSurface.withOpacity(0.4),
         ),
         const SizedBox(width: 8),
-        Text(
-          currentPage,
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: theme.colorScheme.primary,
-            fontWeight: FontWeight.w600,
+        Flexible(
+          child: Text(
+            currentPage,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
     );
   }
-
-  Widget _buildMainContent() {
-    if (_projectActive) {
-      return _buildProjectView();
-    } else if (_projectListType != null) {
-      return ProjectListView(
-        type: _projectListType!,
-        onOpenProject: () => _setProjectActive(true),
-      );
-    } else {
-      return _buildWelcomeView();
-    }
-  }
-
-  Widget _buildProjectView() {
+  Widget _buildProjectView(FileSystemLoaded state) {
     final theme = Theme.of(context);
 
     return Padding(
@@ -364,7 +390,7 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Widget _buildWelcomeView() {
+  Widget _buildWelcomeView(FileSystemLoaded? state) {
     final theme = Theme.of(context);
 
     return Column(
@@ -409,22 +435,16 @@ class _DashboardPageState extends State<DashboardPage>
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          "Seleziona un progetto dalla sidebar per iniziare",
+                          "Crea un nuovo progetto o selezionane uno esistente dalla sidebar",
+                          textAlign: TextAlign.center,
                           style: theme.textTheme.titleLarge?.copyWith(
                             color: theme.colorScheme.onSurface.withOpacity(0.7),
                           ),
                         ),
-                        const SizedBox(height: 32),
-                        BlocBuilder<FileSystemBloc, FileSystemState>(
-                          builder: (context, state) {
-                            if (state is FileSystemLoaded) {
-                              return _buildFileSystemView(theme, state);
-                            } else if (state is FileSystemError) {
-                              return _buildErrorView(theme, state.message);
-                            }
-                            return const CircularProgressIndicator();
-                          },
-                        ),
+                        if (state != null) ...[
+                          const SizedBox(height: 32),
+                          _buildQuickProjectsView(theme, state),
+                        ],
                       ],
                     ),
                   ),
@@ -437,13 +457,54 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Widget _buildFileSystemView(ThemeData theme, FileSystemLoaded state) {
+  Widget _buildQuickProjectsView(ThemeData theme, FileSystemLoaded state) {
+    final recentProjects = state.files.take(3).toList();
+
+    if (recentProjects.isEmpty) {
+      return Container(
+        constraints: const BoxConstraints(maxWidth: 400),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: theme.colorScheme.outline.withOpacity(0.2),
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.folder_open_rounded,
+              size: 48,
+              color: theme.colorScheme.onSurface.withOpacity(0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Nessun progetto',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Crea il tuo primo progetto dalla sidebar',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
-      constraints: const BoxConstraints(maxWidth: 600, maxHeight: 300),
+      constraints: const BoxConstraints(maxWidth: 500),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.colorScheme.outline.withOpacity(0.2),
         ),
@@ -451,127 +512,137 @@ class _DashboardPageState extends State<DashboardPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'I tuoi progetti',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (state.root.children.isEmpty)
-            Expanded(
-              child: Center(
-                child: Text(
-                  'Nessun progetto ancora',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  ),
+          Row(
+            children: [
+              Icon(
+                Icons.access_time_rounded,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Progetti recenti',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
-            )
-          else
-            Expanded(
-              child: ListView.builder(
-                itemCount: state.root.children.length,
-                itemBuilder: (context, index) {
-                  final child = state.root.children[index];
-                  return ListTile(
-                    leading: Icon(
-                      child is Directory
-                          ? Icons.folder
-                          : Icons.insert_drive_file,
-                      color: child is Directory
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.secondary,
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...recentProjects
+              .map((project) => _buildQuickProjectTile(theme, project)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickProjectTile(ThemeData theme, MyFile project) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            context.read<FileSystemBloc>().add(
+              OpenFile(fileId: project.fileId, fileName: project.name),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primaryContainer,
+                        theme.colorScheme.primaryContainer.withOpacity(0.7),
+                      ],
                     ),
-                    title: Text(child.name),
-                    onTap: () {
-                      if (child is! Directory) {
-                        context
-                            .read<FileSystemBloc>()
-                            .add(OpenFile(file: child as File));
-                      }
-                    },
-                  );
-                },
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.folder_rounded,
+                    color: theme.colorScheme.onPrimaryContainer,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        project.name,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'Modificato di recente', // Placeholder
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: theme.colorScheme.onSurface.withOpacity(0.4),
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorView(String message) {
+    final theme = Theme.of(context);
+
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.errorContainer,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              color: theme.colorScheme.error,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Errore',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.error,
+                fontWeight: FontWeight.w600,
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorView(ThemeData theme, String message) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.error_outline, color: theme.colorScheme.error, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            message,
-            style: TextStyle(color: theme.colorScheme.onErrorContainer),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCreateProjectDialog(BuildContext context) {
-    _showCreateDialog(context, true, isNewProject: true);
-  }
-
-  void _showCreateDialog(BuildContext context, bool isDirectory,
-      {bool isNewProject = false}) {
-    final nameController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(isNewProject
-            ? 'Nuovo Progetto'
-            : isDirectory
-            ? 'Nuova Cartella'
-            : 'Nuovo File'),
-        content: TextField(
-          controller: nameController,
-          decoration: InputDecoration(
-            labelText: isNewProject
-                ? 'Nome del progetto'
-                : isDirectory
-                ? 'Nome cartella'
-                : 'Nome file',
-            border: const OutlineInputBorder(),
-          ),
-          autofocus: true,
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onErrorContainer,
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Annulla'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty) {
-                context.read<FileSystemBloc>().add(
-                  CreateNewEntry(
-                    name: name,
-                    isDir: isDirectory,
-                    parentId: 'root',
-                  ),
-                );
-                Navigator.of(dialogContext).pop();
-              }
-            },
-            child: const Text('Crea'),
-          ),
-        ],
       ),
     );
   }
@@ -632,23 +703,6 @@ class WorkArea extends StatelessWidget {
       child: const Center(
         child: Text("Area di lavoro attiva"),
       ),
-    );
-  }
-}
-
-class ProjectListView extends StatelessWidget {
-  final String type;
-  final VoidCallback onOpenProject;
-  const ProjectListView({
-    super.key,
-    required this.type,
-    required this.onOpenProject,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text('Lista dei progetti di tipo: $type'),
     );
   }
 }
