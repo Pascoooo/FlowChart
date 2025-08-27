@@ -80,7 +80,7 @@ class AppRouter {
     GoRoute(
       path: AppRoutes.home,
       name: 'home',
-      builder: (context, state) => const DrawingEditorPage(),
+      builder: (context, state) => const DashboardPage(),
     ),
     GoRoute(
       path: AppRoutes.login,
