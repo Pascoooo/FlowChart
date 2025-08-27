@@ -2,90 +2,56 @@
 import 'package:equatable/equatable.dart';
 import 'package:user_repository/user_repository.dart';
 
-enum AuthenticationStatus { unknown, unauthenticated, emailNotVerified, authenticated }
-enum AuthProvider { google, emailPassword }
+enum AuthenticationStatus { unknown, authenticated, unauthenticated }
 
 class AuthenticationState extends Equatable {
   final AuthenticationStatus status;
-  final MyUser? user;
+  final MyUser user;
   final bool isLoading;
-  final AuthProvider? inProgressProvider;
-  final String? error;
+  final String? errorMessage;
 
-  const AuthenticationState({
+  const AuthenticationState._({
     required this.status,
-    this.user,
+    this.user = MyUser.empty,
     this.isLoading = false,
-    this.inProgressProvider,
-    this.error,
+    this.errorMessage,
   });
 
-  const AuthenticationState.unknown({
-    MyUser? user,
-    bool isLoading = false,
-    AuthProvider? inProgressProvider,
-    String? error,
-  }) : this(
-    status: AuthenticationStatus.unknown,
-    user: user,
-    isLoading: isLoading,
-    inProgressProvider: inProgressProvider,
-    error: error,
-  );
+  const AuthenticationState.unknown()
+      : this._(status: AuthenticationStatus.unknown);
 
-  const AuthenticationState.unauthenticated({
-    bool isLoading = false,
-    AuthProvider? inProgressProvider,
-    String? error,
-  }) : this(
-    status: AuthenticationStatus.unauthenticated,
-    isLoading: isLoading,
-    inProgressProvider: inProgressProvider,
-    error: error,
-  );
-
-  const AuthenticationState.emailNotVerified({
-    MyUser? user,
-    bool isLoading = false,
-    AuthProvider? inProgressProvider,
-    String? error,
-  }) : this(
-    status: AuthenticationStatus.emailNotVerified,
-    user: user,
-    isLoading: isLoading,
-    inProgressProvider: inProgressProvider,
-    error: error,
-  );
-
-  const AuthenticationState.authenticated(
-      MyUser user, {
-        bool isLoading = false,
-        AuthProvider? inProgressProvider,
-        String? error,
-      }) : this(
+  const AuthenticationState.authenticated(MyUser user)
+      : this._(
     status: AuthenticationStatus.authenticated,
     user: user,
-    isLoading: isLoading,
-    inProgressProvider: inProgressProvider,
-    error: error,
   );
 
+  const AuthenticationState.unauthenticated({String? errorMessage})
+      : this._(
+    status: AuthenticationStatus.unauthenticated,
+    errorMessage: errorMessage,
+  );
+
+  // 'copyWith' è essenziale per la manutenibilità
   AuthenticationState copyWith({
     AuthenticationStatus? status,
     MyUser? user,
     bool? isLoading,
-    AuthProvider? inProgressProvider,
-    String? error,
+    String? errorMessage,
   }) {
-    return AuthenticationState(
+    return AuthenticationState._(
       status: status ?? this.status,
       user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
-      inProgressProvider: inProgressProvider ?? this.inProgressProvider,
-      error: error ?? this.error,
+      errorMessage: errorMessage,
     );
   }
 
   @override
-  List<Object?> get props => [status, user, isLoading, inProgressProvider, error];
+  List<Object?> get props => [
+    status,
+    user,
+    isLoading,
+    errorMessage,
+  ];
 }

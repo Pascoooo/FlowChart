@@ -1,126 +1,110 @@
-// dart
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flowchart_thesis/screens/auth/views/login_page.dart';
-import 'package:flowchart_thesis/screens/auth/views/register_page.dart';
-import 'package:flowchart_thesis/screens/auth/views/forgot_password_page.dart';
-import 'package:flowchart_thesis/screens/auth/views/email_verification_page.dart';
+import 'package:flowchart_thesis/screens/auth/pages/auth_page.dart';
 import 'package:flowchart_thesis/screens/error/error_page.dart';
-import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_sketch.dart';
 import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
-
+import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_sketch.dart';
+import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
-import '../../screens/auth/views/splashpage.dart';
-import '../../screens/user_dashboard/sketch_edit/drawing_editor_page.dart';
 
 class AppRoutes {
-  static const String home = '/';
-  static const String login = '/login';
-  static const String register = '/register';
-  static const String forgotPassword = '/recover';
-  static const String emailVerification = '/verify-email';
-  static const String settings = '/settings';
-  static const String error = '/error';
-  static const String unknown = '/splash';
-  static const String drawingEditor = '/drawing-editor';
+  // Nomi delle rotte per la navigazione type-safe
+  static const String homeName = 'home';
+  static const String authName = 'auth';
+  static const String settingsName = 'settings';
+  static const String errorName = 'error';
 
-  static const Set<String> authRoutes = {login, register, forgotPassword};
+  // Percorsi delle rotte
+  static const String homePath = '/';
+  static const String authPath = '/auth';
+  static const String settingsPath = '/settings';
+  static const String errorPath = '/error';
 }
 
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
-  static final Map<String, GoRouter> _cache = {};
 
-  static GoRouter getRouter(AuthenticationState state) {
-    final cacheKey = switch (state.status) {
-      AuthenticationStatus.authenticated =>
-      'auth_${state.user?.userId ?? 'unknown'}',
-      AuthenticationStatus.emailNotVerified =>
-      'email_not_verified_${state.user?.userId ?? 'unknown'}',
-      AuthenticationStatus.unauthenticated => 'unauth',
-      AuthenticationStatus.unknown => 'unknown',
-    };
-
-    final existing = _cache[cacheKey];
-    if (existing != null) return existing;
-    if (_cache.length > 10) _cache.clear();
-
-    final router = GoRouter(
-      navigatorKey: _rootNavigatorKey,
-      routes: _routes,
-      errorBuilder: (context, state) => const ErrorPage(),
-        redirect: (context, goState) {
-          final path = goState.uri.path;
-          final isAuthRoute = AppRoutes.authRoutes.contains(path);
-
-          switch (state.status) {
-            case AuthenticationStatus.unknown:
-              return AppRoutes.unknown;
-            case AuthenticationStatus.unauthenticated:
-              return isAuthRoute ? null : AppRoutes.login;
-            case AuthenticationStatus.emailNotVerified:
-              return path == AppRoutes.emailVerification
-                  ? null
-                  : AppRoutes.emailVerification;
-            case AuthenticationStatus.authenticated:
-              if (isAuthRoute || path == AppRoutes.emailVerification) {
-                return AppRoutes.home;
-              }
-              return null;
-          }
-        }
-
-    );
-
-    _cache[cacheKey] = router;
-    return router;
-  }
-
-  static List<RouteBase> get _routes => [
+  static final List<RouteBase> _routes = [
     GoRoute(
-      path: AppRoutes.home,
-      name: 'home',
+      path: AppRoutes.homePath,
+      name: AppRoutes.homeName,
       builder: (context, state) => const DashboardPage(),
     ),
     GoRoute(
-      path: AppRoutes.login,
-      name: 'login',
-      builder: (context, state) => const LoginPage(),
+      path: AppRoutes.authPath,
+      name: AppRoutes.authName,
+      builder: (context, state) => const AuthPage(),
     ),
     GoRoute(
-      path: AppRoutes.register,
-      name: 'register',
-      builder: (context, state) => const RegisterPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.forgotPassword,
-      name: 'forgotPassword',
-      builder: (context, state) => const ForgotPasswordPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.emailVerification,
-      name: 'emailVerification',
-      builder: (context, state) => const EmailVerificationPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.settings,
-      name: 'settings',
+      path: AppRoutes.settingsPath,
+      name: AppRoutes.settingsName,
       builder: (context, state) => const SettingsPage(),
     ),
     GoRoute(
-      path: AppRoutes.error,
-      name: 'error',
-      builder: (context, state) => const ErrorPage(),
-    ),
-    GoRoute(
-    path: AppRoutes.unknown,
-    name: 'splash',
-    builder: (context, state) => const SplashPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.drawingEditor,
-      name: 'drawing-editor',
-      builder: (context, state) => const DrawingEditorPage(),
+      path: AppRoutes.errorPath,
+      name: AppRoutes.errorName,
+      builder: (context, state) {
+        final error = state.extra as String?;
+        return ErrorPage(
+          error: error ?? 'Errore generico',
+          onRetry: () => context.goNamed(AppRoutes.authName),
+        );
+      },
     ),
   ];
+
+  static GoRouter getRouter(AuthenticationBloc authBloc) {
+    return GoRouter(
+      navigatorKey: _rootNavigatorKey,
+      routes: _routes,
+      initialLocation: AppRoutes.authPath,
+      errorBuilder: (context, state) => ErrorPage(
+        error: state.error?.toString() ?? 'Errore di navigazione',
+        onRetry: () => context.goNamed(AppRoutes.homeName),
+      ),
+      redirect: (context, state) => _handleRedirect(authBloc.state, state),
+      redirectLimit: 5,
+      debugLogDiagnostics: kDebugMode,
+      refreshListenable: GoRouterRefreshStream(authBloc.stream),
+    );
+  }
+
+  static String? _handleRedirect(AuthenticationState authState, GoRouterState routerState) {
+    final currentPath = routerState.uri.path;
+    final isAuthPath = currentPath == AppRoutes.authPath;
+
+    if (authState.status == AuthenticationStatus.unauthenticated && !isAuthPath) {
+      return AppRoutes.authPath;
+    }
+
+    if (authState.status == AuthenticationStatus.authenticated && isAuthPath) {
+      return AppRoutes.homePath;
+    }
+
+    return null;
+  }
+
+  static void goToHome(BuildContext context) => context.goNamed(AppRoutes.homeName);
+  static void goToAuth(BuildContext context) => context.goNamed(AppRoutes.authName);
+  static void goToSettings(BuildContext context) => context.goNamed(AppRoutes.settingsName);
+  static void goToError(BuildContext context, {String? error}) => context.goNamed(AppRoutes.errorName, extra: error);
+}
+
+class GoRouterRefreshStream extends ChangeNotifier {
+  late final StreamSubscription<dynamic> _subscription;
+
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListeners();
+    _subscription = stream.asBroadcastStream().listen(
+          (dynamic _) => notifyListeners(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
 }

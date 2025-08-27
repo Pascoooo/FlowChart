@@ -8,7 +8,7 @@ class ErrorPage extends StatelessWidget {
 
   const ErrorPage({
     super.key,
-    this.error,
+    this.error, required void Function() onRetry,
   });
 
   @override

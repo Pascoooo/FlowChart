@@ -1,19 +1,38 @@
+// dart
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../user_repository.dart'; // MyUser, MyUserEntity, UserRepository
+import 'package:flutter/foundation.dart';
+import '../user_repository.dart';
 
 class FirebaseUserRepo implements UserRepository {
   final FirebaseAuth _firebaseAuth;
-  final usersCollection = FirebaseFirestore.instance.collection('users');
+  final FirebaseFirestore _firestore;
+  late final CollectionReference _usersCollection;
 
-  FirebaseUserRepo({FirebaseAuth? firebaseAuth})
-      : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  FirebaseUserRepo({
+    FirebaseAuth? firebaseAuth,
+    FirebaseFirestore? firestore,
+  })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+        _firestore = firestore ?? FirebaseFirestore.instance {
+    _usersCollection = _firestore.collection('users');
+  }
 
   @override
   Stream<MyUser?> get user {
-    return _firebaseAuth.authStateChanges().asyncMap((firebaseUser) async {
-      if (firebaseUser == null) return null;
+    return _firebaseAuth
+        .authStateChanges()
+        .distinct()
+        .asyncMap(_mapFirebaseUserToMyUser)
+        .handleError(_handleStreamError);
+  }
 
+  Future<MyUser?> _mapFirebaseUserToMyUser(User? firebaseUser) async {
+    if (firebaseUser == null) {
+      return null;
+    }
+
+    try {
       final myUser = MyUser(
         userId: firebaseUser.uid,
         email: firebaseUser.email ?? '',
@@ -21,94 +40,137 @@ class FirebaseUserRepo implements UserRepository {
         photoURL: firebaseUser.photoURL ?? '',
       );
 
-      // Aggiorna Firestore senza bloccare la risposta
-      usersCollection.doc(firebaseUser.uid).set(
-        myUser.toEntity().toDocument(),
-        SetOptions(merge: true),
-      );
+      if (myUser.isEmpty) {
+        if (kDebugMode) debugPrint('Invalid user data: $myUser');
+        return null;
+      }
 
+      await _saveUserToFirestore(myUser);
       return myUser;
-    });
-  }
-
-  @override
-  Future<String> getUid() async {
-    final u = _firebaseAuth.currentUser;
-    if (u == null) {
-      throw FirebaseAuthException(
-        code: 'no-current-user',
-        message: 'Nessun utente autenticato',
-      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error mapping Firebase user: $e');
+      }
+      rethrow;
     }
-    return u.uid;
   }
 
-  @override
-  Future<MyUser?> getCurrentUser() async {
-    final u = _firebaseAuth.currentUser;
-    if (u == null) return null;
-    return MyUser(
-      userId: u.uid,
-      email: u.email ?? '',
-      name: u.displayName ?? '',
-      photoURL: u.photoURL ?? '',
-    );
+  void _handleStreamError(Object error, StackTrace stackTrace) {
+    if (kDebugMode) {
+      debugPrint('User stream error: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
-
-  Future<MyUser> _saveFirebaseUser(User firebaseUser) async {
-    final myUser = MyUser(
-      userId: firebaseUser.uid,
-      email: firebaseUser.email ?? '',
-      name: firebaseUser.displayName ?? '',
-      photoURL: firebaseUser.photoURL ?? '',
-    );
-
-    await usersCollection
-        .doc(myUser.userId)
-        .set(myUser.toEntity().toDocument(), SetOptions(merge: true));
-
-    return myUser;
-  }
-
-  @override
-  Future<void> setUserData(MyUser user) async {
-    await usersCollection
-        .doc(user.userId)
-        .set(user.toEntity().toDocument(), SetOptions(merge: true));
-  }
-
-  @override
-  Future<void> signOut() async {
-    await _firebaseAuth.signOut(); // su web basta questo
-  }
-
-  /// Login con email/password
-  @override
-  Future<MyUser> signIn(String email, String password) async {
-    final userCred = await _firebaseAuth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-    return _saveFirebaseUser(userCred.user!);
-  }
-
-  /// Registrazione con email/password
-  @override
-  Future<MyUser> signUp(MyUser myUser, String password) async {
-    final userCred = await _firebaseAuth.createUserWithEmailAndPassword(
-      email: myUser.email,
-      password: password,
-    );
-    final createdUser = myUser..userId = userCred.user!.uid;
-    await setUserData(createdUser);
-    return createdUser;
+  Future<void> _saveUserToFirestore(MyUser user) async {
+    try {
+      await _usersCollection
+          .doc(user.userId)
+          .set(user.toEntity().toDocument(), SetOptions(merge: true))
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      if (kDebugMode) debugPrint('Failed to save user: $e');
+      rethrow;
+    }
   }
 
   @override
   Future<MyUser> signInWithGoogle() async {
-    final provider = GoogleAuthProvider();
-    final userCred = await _firebaseAuth.signInWithPopup(provider);
-    return _saveFirebaseUser(userCred.user!);
+    try {
+      final provider = GoogleAuthProvider()
+        ..addScope('email')
+        ..addScope('profile');
+
+      final credential = await _firebaseAuth.signInWithPopup(provider);
+
+      if (credential.user == null) {
+        throw const AuthenticationException('Google sign in fallito');
+      }
+
+      final firebaseUser = credential.user!;
+      final myUser = MyUser(
+        userId: firebaseUser.uid,
+        email: firebaseUser.email ?? '',
+        name: firebaseUser.displayName ?? '',
+        photoURL: firebaseUser.photoURL ?? '',
+      );
+
+      // Salva l'utente solo se i dati sono validi
+      if (myUser.isEmpty) {
+        throw const AuthenticationException('Dati utente Google non validi.');
+      }
+
+      await _saveUserToFirestore(myUser);
+      return myUser;
+    } on FirebaseAuthException catch (e) {
+      throw _mapFirebaseAuthException(e);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Google Sign In Error: $e');
+      }
+      throw const AuthenticationException('Errore di autenticazione Google.');
+    }
   }
+
+  @override
+  Future<void> signOut() async {
+    try {
+      await _firebaseAuth.signOut().timeout(const Duration(seconds: 10));
+    } on FirebaseAuthException catch (e) {
+      throw _mapFirebaseAuthException(e);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Sign out error: $e');
+      throw const AuthenticationException('Errore durante il logout.');
+    }
+  }
+
+  Exception _mapFirebaseAuthException(FirebaseAuthException e) {
+    return switch (e.code) {
+      'popup-closed-by-user' => const AuthenticationException('Login annullato dall\'utente.'),
+      'cancelled-popup-request' => const AuthenticationException('Login annullato.'),
+      'network-request-failed' => const AuthenticationException('Errore di connessione. Controlla la tua connessione e riprova.'),
+      _ => AuthenticationException('Errore di autenticazione: ${e.message}'),
+    };
+  }
+
+  // Metodi non più necessari per il flusso di autenticazione solo con Google
+  @override
+  Future<MyUser?> getCurrentUser() async => _mapFirebaseUserToMyUser(_firebaseAuth.currentUser);
+
+  @override
+  Future<void> setUserData(MyUser user) async => _saveUserToFirestore(user);
+
+  @override
+  Future<void> sendEmailLink(String email) async => throw UnimplementedError();
+
+  @override
+  Future<MyUser> signInWithEmailLink(String email, String emailLink) async => throw UnimplementedError();
+
+  @override
+  bool isEmailLink(String link) => throw UnimplementedError();
+
+  @override
+  Future<String> getUid() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw const AuthenticationException('Nessun utente autenticato');
+    }
+    return user.uid;
+  }
+}
+
+class AuthenticationException implements Exception {
+  final String message;
+  const AuthenticationException(this.message);
+
+  @override
+  String toString() => 'AuthenticationException: $message';
+}
+
+class ValidationException implements Exception {
+  final String message;
+  const ValidationException(this.message);
+
+  @override
+  String toString() => 'ValidationException: $message';
 }

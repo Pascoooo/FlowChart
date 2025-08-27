@@ -1,3 +1,5 @@
+// dart
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_ui_auth/firebase_ui_auth.dart';
 import 'package:firebase_ui_oauth_google/firebase_ui_oauth_google.dart';
@@ -14,7 +16,6 @@ void main() async {
   setUrlStrategy(const HashUrlStrategy());
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Configura una sola volta i provider di autenticazione
   FirebaseUIAuth.configureProviders([
     GoogleProvider(
       clientId: '641983601905-5m4om4subv34s6irtpejhjpd9u3d41e1.apps.googleusercontent.com',
@@ -22,9 +23,12 @@ void main() async {
   ]);
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
-      child: MyApp(FirebaseUserRepo()),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        Provider<UserRepository>(create: (_) => FirebaseUserRepo()),
+      ],
+      child: const MyApp(),
     ),
   );
 }
