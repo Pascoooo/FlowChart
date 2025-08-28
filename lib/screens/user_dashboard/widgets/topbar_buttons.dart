@@ -53,11 +53,11 @@ class TopbarButtons extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
-        ModernMenuItem(
-          icon: Icons.edit,
-          title: "Modifica",
-          isPrimaryAction: true,
-          onTap: () {
+        // Sostituisci con ModernButton quando possibile
+        IconButton(
+          icon: const Icon(Icons.edit, size: 20),
+          color: onSurfaceColor.withOpacity(0.6),
+          onPressed: () {
             final baseUrl = Uri.base.toString().split('#')[0];
             js.context.callMethod('open', [
               '$baseUrl#/drawing-editor',
