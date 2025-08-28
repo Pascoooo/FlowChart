@@ -1,16 +1,13 @@
 import 'package:flowchart_thesis/screens/user_dashboard/views/workarea.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
 
 class ProjectView extends StatefulWidget {
   final FileSystemLoaded state;
-  final bool editingMode;
 
   const ProjectView({
     super.key,
     required this.state,
-    required this.editingMode,
   });
 
   @override
@@ -60,10 +57,10 @@ class _ProjectViewState extends State<ProjectView> {
                     ),
                   ],
                 ),
-                child: Column(
+                child: const Column(
                   children: [
                     Expanded(
-                      child: widget.editingMode ? const WorkArea() : _buildEmptyState(theme),
+                      child: WorkArea(),
                     ),
                   ],
                 ),
@@ -75,45 +72,4 @@ class _ProjectViewState extends State<ProjectView> {
     );
   }
 
-  Widget _buildEmptyState(ThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  theme.colorScheme.primary.withOpacity(0.1),
-                  theme.colorScheme.primary.withOpacity(0.05),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: FaIcon(
-              FontAwesomeIcons.penToSquare,
-              size: 48,
-              color: theme.colorScheme.primary.withOpacity(0.7),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            "Inizia a creare",
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            "Clicca su Edit per iniziare a disegnare il tuo diagramma",
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

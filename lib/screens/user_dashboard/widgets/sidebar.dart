@@ -1,4 +1,6 @@
+// lib/screens/user_dashboard/widgets/sidebar.dart
 import 'package:file_repository/file_repository.dart';
+import 'package:flowchart_thesis/config/widgets/buttons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -8,11 +10,14 @@ import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../blocs/file_bloc/file_system_event.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
+import '../../../blocs/project_bloc/project_state.dart';
 
 class ProjectSidebar extends StatefulWidget {
+  final ProjectState state;
 
   const ProjectSidebar({
     super.key,
+    required this.state,
   });
 
   @override
@@ -49,7 +54,6 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       curve: Curves.easeInOut,
     ));
 
-
     _floatingController.repeat(reverse: true);
     _shimmerController.repeat();
   }
@@ -65,93 +69,50 @@ class _ProjectSidebarState extends State<ProjectSidebar>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return BlocListener<FileSystemBloc, FileSystemState>(
-      listener: (context, state) {
-        if (state is FileSystemLoaded) {
-          if (state.successMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.successMessage!),
-                backgroundColor: theme.colorScheme.primary,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            );
-          }
-
-          if (state.error != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.error!),
-                backgroundColor: theme.colorScheme.error,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            );
-          }
-        } else if (state is FileSystemError) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: theme.colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          );
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-        width: 320,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              theme.colorScheme.surface,
-              theme.colorScheme.surface.withOpacity(0.95),
-              theme.colorScheme.surfaceVariant.withOpacity(0.1),
-            ],
-          ),
-          border: Border(
-            right: BorderSide(
-              color: theme.colorScheme.outline.withOpacity(0.1),
-              width: 1,
-            ),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.shadow.withOpacity(0.08),
-              blurRadius: 24,
-              offset: const Offset(4, 0),
-            ),
+    // BlocListener è stato spostato in _buildFileSystemView per una gestione più locale
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
+      width: 320,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            theme.colorScheme.surface,
+            theme.colorScheme.surface.withOpacity(0.95),
+            theme.colorScheme.surfaceVariant.withOpacity(0.1),
           ],
         ),
-        child: Column(
-          children: [
-            _buildHeader(context),
-            _buildDivider(context),
-            _buildCreateProjectButton(context),
-            _buildDivider(context),
-            Expanded(child: _buildFileSystemView()),
-            _buildDivider(context),
-            _buildBottomActions(context),
-          ],
+        border: Border(
+          right: BorderSide(
+            color: theme.colorScheme.outline.withOpacity(0.1),
+            width: 1,
+          ),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.08),
+            blurRadius: 24,
+            offset: const Offset(4, 0),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _buildHeader(theme),
+          _buildDivider(theme),
+          _buildCreateFileButton(theme), // Modificato in "file"
+          _buildDivider(theme),
+          Expanded(child: _buildFileSystemView(theme)),
+          _buildMainDivider(theme),
+          _buildBottomActions(),
+        ],
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    final theme = Theme.of(context);
-
+  Widget _buildHeader(ThemeData theme) {
     return Container(
       height: 100,
       padding: const EdgeInsets.symmetric(
@@ -179,6 +140,13 @@ class _ProjectSidebarState extends State<ProjectSidebar>
                     theme.colorScheme.secondary,
                   ],
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: const Icon(
                 Icons.auto_awesome,
@@ -187,144 +155,212 @@ class _ProjectSidebarState extends State<ProjectSidebar>
               ),
             ),
           ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Unichart",
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
-                    ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  "Unichart",
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
                   ),
-                  Text(
-                    "AI-Powered Diagrams",
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
+                ),
+                Text(
+                  "AI-Powered Diagrams",
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildCreateProjectButton(BuildContext context) {
+  Widget _buildCreateFileButton(ThemeData theme) {
+    final selectedProject = (widget.state as ProjectsLoaded).selectedProject;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: _buildModernMenuItem(
-        context,
+      child: ModernMenuItem(
         icon: FontAwesomeIcons.plus,
         title: "Nuovo File",
-        onTap: () => _showCreateDialog(context, false, null),
+        onTap: selectedProject != null
+            ? () => _showCreateFileDialog(context, selectedProject.projectId)
+            : () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Seleziona un progetto per creare un nuovo file.'),
+            ),
+          );
+        },
         isPrimaryAction: true,
       ),
     );
   }
 
-  Widget _buildFileSystemView() {
-    return BlocBuilder<FileSystemBloc, FileSystemState>(
-      builder: (context, state) {
-        if (state is FileSystemLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (state is FileSystemError) {
-          return _buildErrorView(state.message);
-        }
-
+  // Corretta la logica per usare il FileSystemBloc
+  Widget _buildFileSystemView(ThemeData theme) {
+    return BlocConsumer<FileSystemBloc, FileSystemState>(
+      listener: (context, state) {
         if (state is FileSystemLoaded) {
-          final projects = state.files;
-
-          if (projects.isEmpty) {
-            return _buildEmptyProjectsView();
+          if (state.successMessage != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.successMessage!),
+                backgroundColor: theme.colorScheme.primary,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            );
           }
-
+        } else if (state is FileSystemError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: theme.colorScheme.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+        }
+      },
+      builder: (context, fileState) {
+        if (fileState is FileSystemLoading) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Caricamento file...",
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        if (fileState is FileSystemError) {
+          return _buildErrorView(theme, fileState.message);
+        }
+        if (fileState is FileSystemLoaded) {
+          final files = fileState.files;
+          if (files.isEmpty) {
+            return _buildEmptyFilesView(theme); // Modificato in "files"
+          }
           return ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            itemCount: projects.length,
+            itemCount: files.length,
             itemBuilder: (context, index) {
-              final project = projects[index];
-              return _buildProjectTile(project);
+              final file = files[index];
+              final isSelected = file.fileId == fileState.activeFileId;
+              return _buildFileTile(theme, file, isSelected);
             },
           );
         }
-
         return const SizedBox.shrink();
       },
     );
   }
 
-  Widget _buildErrorView(String message) {
-    final theme = Theme.of(context);
-
+  Widget _buildErrorView(ThemeData theme, String message) {
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            color: theme.colorScheme.error,
-            size: 48,
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.errorContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.error_outline,
+              color: theme.colorScheme.error,
+              size: 32,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
             'Errore',
-            style: theme.textTheme.titleMedium
-                ?.copyWith(color: theme.colorScheme.error),
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.error,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onErrorContainer),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onErrorContainer,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyProjectsView() {
-    final theme = Theme.of(context);
-
+  Widget _buildEmptyFilesView(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.folder_open_rounded,
-            size: 64,
-            color: theme.colorScheme.onSurface.withOpacity(0.3),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary.withOpacity(0.1),
+                  theme.colorScheme.primary.withOpacity(0.05),
+                ],
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.folder_open_rounded,
+              size: 40,
+              color: theme.colorScheme.primary.withOpacity(0.7),
+            ),
           ),
           const SizedBox(height: 16),
           Text(
             'Nessun File',
-            style: theme.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Crea il tuo primo file per iniziare',
+            'Inizia creando il tuo\nprimo file',
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.5)),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              height: 1.4,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildProjectTile(MyFile project) {
-    final theme = Theme.of(context);
-
+  Widget _buildFileTile(ThemeData theme, MyFile file, bool isSelected) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
       child: Material(
@@ -333,24 +369,70 @@ class _ProjectSidebarState extends State<ProjectSidebar>
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () {
-            context.read<FileSystemBloc>().add(
-              OpenFile(fileId: project.fileId, fileName: project.name),
-            );
+            // Invia l'evento per aprire un file
+            //context.read<FileSystemBloc>().add(OpenFile(fileId: file.fileId, projectId: '', fileName: ''));
           },
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: isSelected
+                  ? LinearGradient(
+                colors: [
+                  theme.colorScheme.primary.withOpacity(0.15),
+                  theme.colorScheme.primary.withOpacity(0.08),
+                ],
+              )
+                  : null,
+              border: isSelected
+                  ? Border.all(
+                color: theme.colorScheme.primary.withOpacity(0.3),
+                width: 1,
+              )
+                  : null,
+            ),
             child: Row(
               children: [
-                Icon(Icons.folder_rounded, color: theme.colorScheme.primary),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? theme.colorScheme.primary.withOpacity(0.2)
+                        : theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.description_rounded,
+                    size: 16,
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    project.name,
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w500),
+                    file.name,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurface,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (isSelected)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -359,9 +441,46 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
   }
 
-  Widget _buildDivider(BuildContext context) {
-    final theme = Theme.of(context);
+  Future<void> _showCreateFileDialog(BuildContext context, String projectId) async {
+    final nameController = TextEditingController();
 
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Nuovo File'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(hintText: 'Nome file'),
+          autofocus: true,
+          onSubmitted: (value) {
+            if (value.isNotEmpty) {
+              context.read<FileSystemBloc>().add(CreateNewFile(fileName: value, projectId: projectId));
+              Navigator.of(dialogContext).pop();
+            }
+          },
+        ),
+        actions: <Widget>[
+          TextButton(
+            child: const Text('Annulla'),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+            },
+          ),
+          TextButton(
+            child: const Text('Crea'),
+            onPressed: () {
+              if (nameController.text.isNotEmpty) {
+                context.read<FileSystemBloc>().add(CreateNewFile(fileName: nameController.text, projectId: projectId));
+                Navigator.of(dialogContext).pop();
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDivider(ThemeData theme) {
     return Container(
       height: 1,
       margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -377,20 +496,62 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
   }
 
-  Widget _buildBottomActions(BuildContext context) {
-    return Padding(
+  Widget _buildMainDivider(ThemeData theme) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    theme.colorScheme.outline.withOpacity(0.2),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Icon(
+              Icons.more_horiz,
+              size: 16,
+              color: theme.colorScheme.outline.withOpacity(0.4),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    theme.colorScheme.outline.withOpacity(0.2),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomActions() {
+    return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildModernMenuItem(
-            context,
+          ModernMenuItem(
             icon: FontAwesomeIcons.gear,
             title: "Impostazioni",
             onTap: () => context.go('/settings'),
           ),
           const SizedBox(height: 8),
-          _buildModernMenuItem(
-            context,
+          ModernMenuItem(
             icon: FontAwesomeIcons.rightFromBracket,
             title: "Logout",
             onTap: () {
@@ -403,219 +564,4 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
   }
 
-  Widget _buildModernMenuItem(
-      BuildContext context, {
-        required IconData icon,
-        required String title,
-        required VoidCallback onTap,
-        bool isDestructive = false,
-        bool isPrimaryAction = false,
-      }) {
-    final theme = Theme.of(context);
-
-    return _ModernMenuItem(
-      icon: icon,
-      title: title,
-      onTap: onTap,
-      isDestructive: isDestructive,
-      isPrimaryAction: isPrimaryAction,
-      theme: theme,
-    );
-  }
-
-  void _showCreateDialog(BuildContext context, bool isDirectory, String? parentId) {
-    final nameController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(isDirectory ? 'Nuova Cartella' : 'Nuovo File'),
-        content: TextField(
-          controller: nameController,
-          decoration: InputDecoration(
-            labelText: isDirectory ? 'Nome cartella' : 'Nome file',
-            border: const OutlineInputBorder(),
-            hintText: isDirectory ? 'Es. Documenti' : 'Es. diagramma.draw',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Annulla'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty) {
-                context
-                    .read<FileSystemBloc>()
-                    .add(CreateNewFile(fileName: nameController.text));
-                Navigator.of(dialogContext).pop();
-              }
-            },
-            child: const Text('Crea'),
-          ),
-        ],
-      ),
-    );
-  }
 }
-
-class _ModernMenuItem extends StatefulWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-  final bool isDestructive;
-  final bool isPrimaryAction;
-  final ThemeData theme;
-
-  const _ModernMenuItem({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    required this.isDestructive,
-    required this.isPrimaryAction,
-    required this.theme,
-  });
-
-  @override
-  State<_ModernMenuItem> createState() => _ModernMenuItemState();
-}
-
-class _ModernMenuItemState extends State<_ModernMenuItem>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _scaleController;
-  late Animation<double> _scaleAnimation;
-  bool _isPressed = false;
-  bool _isHovered = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 150),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(
-      parent: _scaleController,
-      curve: Curves.easeInOut,
-    ));
-  }
-
-  @override
-  void dispose() {
-    _scaleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final baseColorScheme = widget.theme.colorScheme;
-    final colorScheme = widget.isDestructive
-        ? ColorScheme.fromSeed(seedColor: Colors.red, brightness: widget.theme.brightness)
-        : baseColorScheme;
-
-    final bool isHighlighted = _isHovered || _isPressed;
-
-    final Color iconColor;
-    final Color textColor;
-    final Gradient? backgroundGradient;
-    final List<BoxShadow>? boxShadow;
-
-    if (widget.isPrimaryAction) {
-      iconColor = baseColorScheme.onPrimary;
-      textColor = baseColorScheme.onPrimary;
-      backgroundGradient = LinearGradient(
-        colors: [
-          baseColorScheme.primary,
-          baseColorScheme.secondary,
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
-      boxShadow = [
-        BoxShadow(
-          color: baseColorScheme.primary.withOpacity(0.3),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ];
-    } else {
-      iconColor = isHighlighted
-          ? colorScheme.primary
-          : colorScheme.onSurface.withOpacity(0.7);
-      textColor = isHighlighted
-          ? colorScheme.primary
-          : baseColorScheme.onSurface.withOpacity(0.8);
-      backgroundGradient = isHighlighted
-          ? LinearGradient(colors: [
-        colorScheme.primary.withOpacity(0.1),
-        colorScheme.primary.withOpacity(0.05),
-      ])
-          : null;
-      boxShadow = null;
-    }
-
-    return AnimatedBuilder(
-      animation: _scaleAnimation,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: _scaleAnimation.value,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => _isHovered = true),
-            onExit: (_) => setState(() => _isHovered = false),
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTapDown: (_) {
-                setState(() => _isPressed = true);
-                _scaleController.forward();
-              },
-              onTapUp: (_) {
-                setState(() => _isPressed = false);
-                _scaleController.reverse();
-                widget.onTap();
-              },
-              onTapCancel: () {
-                setState(() => _isPressed = false);
-                _scaleController.reverse();
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  gradient: backgroundGradient,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: boxShadow,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    FaIcon(widget.icon, size: 18, color: iconColor),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          widget.title,
-                          style: widget.theme.textTheme.labelLarge?.copyWith(
-                            color: textColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-

@@ -1,5 +1,5 @@
-name: file_repository
-description: The Repo that handles files
+name: project_repository
+description: The Repo that handles projects
 publish_to: 'none'
 version: 0.0.1
 
@@ -14,6 +14,8 @@ dependencies:
   firebase_auth:
   cloud_firestore:
   google_sign_in:
+  file_repository:
+    path: ../file_repository
 
   # utils
   rxdart: ^0.27.7

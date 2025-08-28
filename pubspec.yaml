@@ -26,6 +26,8 @@ dependencies:
     path: packages/user_repository
   file_repository:
     path: packages/file_repository
+  project_repository:
+    path: packages/project_repository
 
 dev_dependencies:
   flutter_test:

@@ -12,30 +12,36 @@ class DashboardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const TopBar(),
-        Expanded(
-          child: BlocBuilder<FileSystemBloc, FileSystemState>(
-            builder: (context, state) {
-              if (state is FileSystemLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (state is FileSystemError) {
-                return ErrorView(message: state.message);
-              }
-              if (state is FileSystemLoaded) {
-                if (state.activeFileId != null) {
-                  return ProjectView(state: state, editingMode: false);
-                } else {
-                  return ProjectView(state: state, editingMode: true);
-                }
-              }
-              return const Center(child: Text('Unknown state', style: TextStyle(color: Colors.red)));
-            },
-          ),
-        ),
-      ],
+    return BlocBuilder<FileSystemBloc, FileSystemState>(
+      builder: (context, state) {
+        return Column(
+          children: [
+            TopBar(state: state as FileSystemLoaded),
+            Expanded(
+              child: _buildContent(state),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  Widget _buildContent(FileSystemState state) {
+    if (state is FileSystemLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (state is FileSystemError) {
+      return ErrorView(message: state.message);
+    }
+    if (state is FileSystemLoaded) {
+      if (state.activeFileId != null) {
+        return ProjectView(state: state);
+      } else {
+        return const Center(
+          child: Text("Nessun progetto aperto"),
+        );
+      }
+    }
+    return const Center(child: Text("Stato sconosciuto"));
   }
 }
