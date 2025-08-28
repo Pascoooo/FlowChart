@@ -5,8 +5,13 @@ import '../../../blocs/file_bloc/file_system_state.dart';
 
 class TopBar extends StatefulWidget {
   final FileSystemLoaded state;
+  final VoidCallback onBackToProjects;
 
-  const TopBar({super.key, required this.state});
+  const TopBar({
+    super.key,
+    required this.state,
+    required this.onBackToProjects,
+  });
 
   @override
   State<TopBar> createState() => _TopBarState();
@@ -85,7 +90,7 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
             children: [
               _buildBreadcrumb(theme),
               const Spacer(),
-              TopbarButtons(state: widget.state),
+              TopbarButtons(state: widget.state, onBackToProjects: widget.onBackToProjects),
             ],
           ),
         ),
@@ -139,7 +144,6 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
             fontWeight: FontWeight.w600,
           ),
         ),
-
         // Status indicator
         if (hasSelectedFile) ...[
           const SizedBox(width: 12),

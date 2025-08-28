@@ -1,4 +1,3 @@
-// lib/screens/user_dashboard/widgets/topbar_buttons.dart
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
@@ -6,8 +5,13 @@ import 'dart:js' as js;
 
 class TopbarButtons extends StatelessWidget {
   final FileSystemLoaded state;
+  final VoidCallback onBackToProjects;
 
-  const TopbarButtons({super.key, required this.state});
+  const TopbarButtons({
+    super.key,
+    required this.state,
+    required this.onBackToProjects,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,16 +21,15 @@ class TopbarButtons extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Basic project actions (always available when there are files)
-        _TopBarButton(
-          icon: FontAwesomeIcons.folderOpen,
-          tooltip: "Proprietà progetto",
-          onPressed: () => _onProjectProperties(context),
-          theme: theme,
+        IconButton(
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            size: 16,
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
+          tooltip: "Torna ai Progetti",
+          onPressed: onBackToProjects,
         ),
-
-        const SizedBox(width: 8),
-
         // File-specific actions (only when file is selected)
         if (hasSelectedFile) ...[
           _TopBarButton(
@@ -73,52 +76,11 @@ class TopbarButtons extends StatelessWidget {
               ),
             ),
           ),
-
-          const SizedBox(width: 16),
-
-          _TopBarButton(
-            icon: FontAwesomeIcons.ellipsisVertical,
-            tooltip: "Altre azioni",
-            onPressed: () => _onMoreActions(context),
-            theme: theme,
-          ),
-        ] else ...[
-          // When no file is selected, show a hint
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 14,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  "Seleziona un file per vedere più opzioni",
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ],
     );
   }
 
-  void _onProjectProperties(BuildContext context) {
-    // Implementa logica per proprietà progetto
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Proprietà progetto - Da implementare")),
-    );
-  }
 
   void _onEdit(BuildContext context) {
     final baseUrl = Uri.base.toString().split('#')[0];
@@ -140,14 +102,6 @@ class TopbarButtons extends StatelessWidget {
     // Implementa logica per condivisione
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Condividi file - Da implementare")),
-    );
-  }
-
-  void _onMoreActions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _MoreActionsSheet(state: state),
     );
   }
 }
@@ -267,143 +221,6 @@ class _TopBarButtonState extends State<_TopBarButton>
           ),
         );
       },
-    );
-  }
-}
-
-class _MoreActionsSheet extends StatelessWidget {
-  final FileSystemLoaded state;
-
-  const _MoreActionsSheet({required this.state});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.onSurface.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _MoreActionItem(
-                  icon: FontAwesomeIcons.copy,
-                  title: "Duplica file",
-                  onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Duplica file - Da implementare")),
-                    );
-                  },
-                ),
-
-                _MoreActionItem(
-                  icon: FontAwesomeIcons.clock,
-                  title: "Cronologia versioni",
-                  onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Cronologia - Da implementare")),
-                    );
-                  },
-                ),
-
-                _MoreActionItem(
-                  icon: FontAwesomeIcons.tags,
-                  title: "Rinomina",
-                  onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Rinomina - Da implementare")),
-                    );
-                  },
-                ),
-
-                const Divider(),
-
-                _MoreActionItem(
-                  icon: FontAwesomeIcons.trash,
-                  title: "Elimina",
-                  onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Elimina - Da implementare")),
-                    );
-                  },
-                  isDestructive: true,
-                ),
-              ],
-            ),
-          ),
-
-          // Safe area padding
-          SizedBox(height: MediaQuery.of(context).padding.bottom),
-        ],
-      ),
-    );
-  }
-}
-
-class _MoreActionItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-  final bool isDestructive;
-
-  const _MoreActionItem({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.isDestructive = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = isDestructive
-        ? theme.colorScheme.error
-        : theme.colorScheme.onSurface;
-
-    return ListTile(
-      leading: FaIcon(
-        icon,
-        size: 18,
-        color: color.withOpacity(0.7),
-      ),
-      title: Text(
-        title,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      onTap: onTap,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
     );
   }
 }

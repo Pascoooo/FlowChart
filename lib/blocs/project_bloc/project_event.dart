@@ -1,3 +1,4 @@
+// lib/blocs/project_bloc/project_event.dart (Updated)
 import 'package:equatable/equatable.dart';
 import 'package:project_repository/project_repository.dart';
 
@@ -44,6 +45,7 @@ class LoadProjects extends ProjectEvent {
   const LoadProjects();
 }
 
+/// Evento per selezionare un progetto
 class SelectProject extends ProjectEvent {
   final MyProject project;
 
@@ -51,4 +53,9 @@ class SelectProject extends ProjectEvent {
 
   @override
   List<Object> get props => [project];
+}
+
+/// Evento per deselezionare il progetto corrente e tornare alla vista progetti
+class DeselectProject extends ProjectEvent {
+  const DeselectProject();
 }
