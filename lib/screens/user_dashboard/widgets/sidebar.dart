@@ -1,5 +1,4 @@
 import 'package:file_repository/file_repository.dart';
-import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -11,11 +10,9 @@ import '../../../blocs/file_bloc/file_system_event.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
 
 class ProjectSidebar extends StatefulWidget {
-  final bool isCollapsed;
 
   const ProjectSidebar({
     super.key,
-    this.isCollapsed = false,
   });
 
   @override
@@ -112,7 +109,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOutCubic,
-        width: widget.isCollapsed ? 80 : 320,
+        width: 320,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -157,8 +154,8 @@ class _ProjectSidebarState extends State<ProjectSidebar>
 
     return Container(
       height: 100,
-      padding: EdgeInsets.symmetric(
-        horizontal: widget.isCollapsed ? 16 : 24,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 24,
         vertical: 20,
       ),
       child: Row(
@@ -190,7 +187,6 @@ class _ProjectSidebarState extends State<ProjectSidebar>
               ),
             ),
           ),
-          if (!widget.isCollapsed) ...[
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -214,7 +210,6 @@ class _ProjectSidebarState extends State<ProjectSidebar>
               ),
             ),
           ],
-        ],
       ),
     );
   }
@@ -369,7 +364,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
 
     return Container(
       height: 1,
-      margin: EdgeInsets.symmetric(horizontal: widget.isCollapsed ? 16 : 24),
+      margin: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -422,7 +417,6 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       icon: icon,
       title: title,
       onTap: onTap,
-      isCollapsed: widget.isCollapsed,
       isDestructive: isDestructive,
       isPrimaryAction: isPrimaryAction,
       theme: theme,
@@ -471,7 +465,6 @@ class _ModernMenuItem extends StatefulWidget {
   final IconData icon;
   final String title;
   final VoidCallback onTap;
-  final bool isCollapsed;
   final bool isDestructive;
   final bool isPrimaryAction;
   final ThemeData theme;
@@ -480,7 +473,6 @@ class _ModernMenuItem extends StatefulWidget {
     required this.icon,
     required this.title,
     required this.onTap,
-    required this.isCollapsed,
     required this.isDestructive,
     required this.isPrimaryAction,
     required this.theme,
@@ -602,12 +594,9 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
                   boxShadow: boxShadow,
                 ),
                 child: Row(
-                  mainAxisAlignment: widget.isCollapsed
-                      ? MainAxisAlignment.center
-                      : MainAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     FaIcon(widget.icon, size: 18, color: iconColor),
-                    if (!widget.isCollapsed) ...[
                       const SizedBox(width: 16),
                       Expanded(
                         child: Text(
@@ -620,7 +609,6 @@ class _ModernMenuItemState extends State<_ModernMenuItem>
                         ),
                       ),
                     ],
-                  ],
                 ),
               ),
             ),

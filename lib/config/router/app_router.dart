@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flowchart_thesis/screens/auth/pages/auth_page.dart';
 import 'package:flowchart_thesis/screens/error/error_page.dart';
 import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
-import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_sketch.dart';
+import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_page.dart';
 import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
 
@@ -65,8 +65,6 @@ class AppRouter {
         onRetry: () => context.goNamed(AppRoutes.homeName),
       ),
       redirect: (context, state) => _handleRedirect(authBloc.state, state),
-      redirectLimit: 5,
-      debugLogDiagnostics: kDebugMode,
       refreshListenable: GoRouterRefreshStream(authBloc.stream),
     );
   }

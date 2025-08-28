@@ -2,11 +2,9 @@
 import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:user_repository/user_repository.dart';
-import '../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../config/constants/theme_switch.dart';
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
