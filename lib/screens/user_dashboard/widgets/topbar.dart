@@ -1,7 +1,8 @@
-// lib/screens/user_dashboard/widgets/topbar.dart
 import 'package:flowchart_thesis/screens/user_dashboard/widgets/topbar_buttons.dart';
 import 'package:flutter/material.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
+import '../../../config/services/export_service.dart';
+import '../views/workarea.dart';
 
 class TopBar extends StatefulWidget {
   final FileSystemLoaded state;
@@ -71,18 +72,17 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
           height: 80,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withOpacity(0.9),
-            border: Border(
-              bottom: BorderSide(
-                color: theme.colorScheme.outline.withOpacity(0.1),
-                width: 1,
-              ),
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(20), // Bordi arrotondati
+            border: Border.all(
+              color: theme.colorScheme.outline.withOpacity(0.1),
+              width: 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.shadow.withOpacity(0.08),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
+                color: theme.colorScheme.shadow.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -90,12 +90,46 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
             children: [
               _buildBreadcrumb(theme),
               const Spacer(),
-              TopbarButtons(state: widget.state, onBackToProjects: widget.onBackToProjects),
+              TopbarButtons(
+                state: widget.state,
+                onBackToProjects: widget.onBackToProjects,
+                onExport: _handleExport,
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _handleExport() async {
+    try {
+      await ExportService.showExportDialog(
+        context: context,
+        workareaKey: WorkArea.workareaKey,
+        defaultFileName: _getCurrentFileName(),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Errore nell\'esportazione: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  String _getCurrentFileName() {
+    if (widget.state.activeFileId != null && widget.state.files.isNotEmpty) {
+      final matchingFiles = widget.state.files.where(
+              (f) => f.fileId == widget.state.activeFileId);
+      if (matchingFiles.isNotEmpty) {
+        return matchingFiles.first.name.replaceAll(' ', '_').toLowerCase();
+      }
+    }
+    return 'unichart_diagram';
   }
 
   Widget _buildBreadcrumb(ThemeData theme) {

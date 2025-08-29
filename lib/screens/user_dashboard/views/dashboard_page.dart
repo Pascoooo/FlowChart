@@ -55,28 +55,33 @@ class _DashboardPageState extends State<DashboardPage>
         child: Stack(
           children: [
             const AnimatedBackground(),
-            BlocBuilder<ProjectBloc, ProjectState>(
-              builder: (context, state) {
-                if (state is ProjectLoading) {
-                  return _buildLoadingView(theme);
+            BlocListener<ProjectBloc, ProjectState>(
+              listener: (context, state) {
+                // Se lo stato cambia in ProjectsLoaded e selectedProject è null,
+                // assicurati che le animazioni si invertano.
+                if (state is ProjectsLoaded && state.selectedProject == null) {
+                  _transitionController.reverse();
                 }
-                if (state is ProjectError) {
-                  return ErrorView(message: state.message);
-                }
-                if (state is ProjectsLoaded) {
-                  if (state.selectedProject != null) {
-                    // Quando un progetto è selezionato, avvia l'animazione forward
-                    _transitionController.forward();
-                    return _buildWorkspace(state);
-                  } else {
-                    // Quando nessun progetto è selezionato, avvia l'animazione reverse
-                    _transitionController.reverse();
-                    return _buildProjectSelector(state);
-                  }
-                }
-                // Stato di fallback iniziale (es. ProjectInitial)
-                return _buildLoadingView(theme);
               },
+              child: BlocBuilder<ProjectBloc, ProjectState>(
+                builder: (context, state) {
+                  if (state is ProjectLoading) {
+                    return _buildLoadingView(theme);
+                  }
+                  if (state is ProjectError) {
+                    return ErrorView(message: state.message);
+                  }
+                  if (state is ProjectsLoaded) {
+                    if (state.selectedProject != null) {
+                      _transitionController.forward();
+                      return _buildWorkspace(state);
+                    } else {
+                      return _buildProjectSelector(state);
+                    }
+                  }
+                  return _buildLoadingView(theme);
+                },
+              ),
             ),
           ],
         ),
@@ -131,4 +136,5 @@ class _DashboardPageState extends State<DashboardPage>
       ),
     );
   }
+
 }

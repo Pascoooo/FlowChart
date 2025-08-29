@@ -6,11 +6,13 @@ import 'dart:js' as js;
 class TopbarButtons extends StatelessWidget {
   final FileSystemLoaded state;
   final VoidCallback onBackToProjects;
+  final VoidCallback? onExport;
 
   const TopbarButtons({
     super.key,
     required this.state,
     required this.onBackToProjects,
+    this.onExport,
   });
 
   @override
@@ -21,15 +23,6 @@ class TopbarButtons extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          icon: Icon(
-            Icons.arrow_back_rounded,
-            size: 16,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-          ),
-          tooltip: "Torna ai Progetti",
-          onPressed: onBackToProjects,
-        ),
         // File-specific actions (only when file is selected)
         if (hasSelectedFile) ...[
           _TopBarButton(
@@ -45,7 +38,7 @@ class TopbarButtons extends StatelessWidget {
           _TopBarButton(
             icon: FontAwesomeIcons.download,
             tooltip: "Esporta",
-            onPressed: () => _onExport(context),
+            onPressed: () => onExport?.call(),
             theme: theme,
           ),
 
@@ -57,30 +50,10 @@ class TopbarButtons extends StatelessWidget {
             onPressed: () => _onShare(context),
             theme: theme,
           ),
-
-          const SizedBox(width: 16),
-
-          // Divider
-          Container(
-            width: 1,
-            height: 24,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  theme.colorScheme.outline.withOpacity(0.3),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
         ],
       ],
     );
   }
-
 
   void _onEdit(BuildContext context) {
     final baseUrl = Uri.base.toString().split('#')[0];
@@ -89,13 +62,6 @@ class TopbarButtons extends StatelessWidget {
       '_blank',
       'width=1200,height=800,left=100,top=100,resizable=yes,scrollbars=yes,status=yes'
     ]);
-  }
-
-  void _onExport(BuildContext context) {
-    // Implementa logica per esportazione
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Esporta file - Da implementare")),
-    );
   }
 
   void _onShare(BuildContext context) {

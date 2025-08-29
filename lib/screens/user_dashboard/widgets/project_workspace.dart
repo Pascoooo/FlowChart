@@ -111,7 +111,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     super.dispose();
   }
 
-  @override
   Widget build(BuildContext context) {
     return BlocProvider<FileSystemBloc>(
       key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
@@ -143,31 +142,42 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
                   // Main content area
                   Expanded(
-                    child: Column(
-                      children: [
-                        // Topbar with slide animation
-                        SlideTransition(
-                          position: _topbarSlideAnimation,
-                          child: FadeTransition(
-                            opacity: _fadeAnimation,
-                            child: _buildTopbar(),
+                    child: Padding(
+                      // Aggiungi un padding globale a tutta l'area di lavoro
+                      padding: const EdgeInsets.only(
+                        top: 16.0,
+                        right: 16.0,
+                        bottom: 16.0,
+                      ),
+                      child: Column(
+                        children: [
+                          // Topbar with slide animation
+                          SlideTransition(
+                            position: _topbarSlideAnimation,
+                            child: FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: _buildTopbar(),
+                            ),
                           ),
-                        ),
 
-                        // Workarea with slide and scale animation
-                        Expanded(
-                          child: SlideTransition(
-                            position: _workareaSlideAnimation,
-                            child: ScaleTransition(
-                              scale: _workareaScaleAnimation,
-                              child: FadeTransition(
-                                opacity: _fadeAnimation,
-                                child: _buildWorkarea(),
+                          // Aggiungi uno spazio esplicito tra la topbar e l'area di lavoro
+                          const SizedBox(height: 16),
+
+                          // Workarea con slide e scale animation
+                          Expanded(
+                            child: SlideTransition(
+                              position: _workareaSlideAnimation,
+                              child: ScaleTransition(
+                                scale: _workareaScaleAnimation,
+                                child: FadeTransition(
+                                  opacity: _fadeAnimation,
+                                  child: _buildWorkarea(),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -178,6 +188,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       ),
     );
   }
+
 
   Widget _buildTopbar() {
     return BlocBuilder<FileSystemBloc, FileSystemState>(

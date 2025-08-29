@@ -22,6 +22,12 @@ dependencies:
   firebase_ui_auth: ^3.0.0
   firebase_ui_oauth_google: ^2.0.0
   url_launcher: ^6.2.5
+  pdf: ^3.10.4
+  universal_html: ^2.2.4
+  image: ^4.1.7
+
+    # Per screenshot della workarea
+  screenshot: ^2.3.0
   user_repository:
     path: packages/user_repository
   file_repository:

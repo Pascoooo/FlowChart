@@ -1,4 +1,4 @@
-// lib/screens/user_dashboard/widgets/sidebar.dart (Fixed)
+// lib/screens/user_dashboard/widgets/sidebar.dart (Updated)
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_thesis/config/widgets/buttons.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +11,8 @@ import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../blocs/file_bloc/file_system_event.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
+import '../../../blocs/project_bloc/project_bloc.dart';
+import '../../../blocs/project_bloc/project_event.dart';
 import '../../../config/router/app_router.dart';
 
 class ProjectSidebar extends StatefulWidget {
@@ -74,6 +76,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeInOutCubic,
       width: 320,
+      margin: const EdgeInsets.all(16), // Margine esterno per separazione
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -84,15 +87,14 @@ class _ProjectSidebarState extends State<ProjectSidebar>
             theme.colorScheme.surfaceVariant.withOpacity(0.1),
           ],
         ),
-        border: Border(
-          right: BorderSide(
-            color: theme.colorScheme.outline.withOpacity(0.1),
-            width: 1,
-          ),
+        borderRadius: BorderRadius.circular(24), // Bordi arrotondati
+        border: Border.all(
+          color: theme.colorScheme.outline.withOpacity(0.1),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.08),
+            color: theme.colorScheme.shadow.withOpacity(0.1),
             blurRadius: 24,
             offset: const Offset(4, 0),
           ),
@@ -102,13 +104,15 @@ class _ProjectSidebarState extends State<ProjectSidebar>
         children: [
           _buildHeader(theme),
           _buildDivider(theme),
+          _buildBackButton(theme), // Nuovo bottone "Torna ai Progetti"
+          _buildDivider(theme),
           _buildProjectInfo(theme),
           _buildDivider(theme),
           _buildCreateFileButton(theme),
           _buildDivider(theme),
           Expanded(child: _buildFileSystemView(theme)),
           _buildMainDivider(theme),
-          _buildBottomActions(),
+          _buildBottomActions(theme),
         ],
       ),
     );
@@ -180,6 +184,64 @@ class _ProjectSidebarState extends State<ProjectSidebar>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBackButton(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              theme.colorScheme.secondary.withOpacity(0.1),
+              theme.colorScheme.secondary.withOpacity(0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.colorScheme.secondary.withOpacity(0.2),
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              // Fix: Usa l'evento corretto per tornare ai progetti
+              context.read<ProjectBloc>().add(const DeselectProject());
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.secondary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.arrow_back_rounded,
+                      size: 16,
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    "Torna ai Progetti",
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -313,14 +375,17 @@ class _ProjectSidebarState extends State<ProjectSidebar>
           if (files.isEmpty) {
             return _buildEmptyFilesView(theme);
           }
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            itemCount: files.length,
-            itemBuilder: (context, index) {
-              final file = files[index];
-              final isSelected = file.fileId == fileState.activeFileId;
-              return _buildFileTile(theme, file, isSelected);
-            },
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: files.length,
+              itemBuilder: (context, index) {
+                final file = files[index];
+                final isSelected = file.fileId == fileState.activeFileId;
+                return _buildFileTile(theme, file, isSelected);
+              },
+            ),
           );
         }
         return const SizedBox.shrink();
@@ -661,7 +726,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
   Widget _buildDivider(ThemeData theme) {
     return Container(
       height: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 24),
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -676,19 +741,20 @@ class _ProjectSidebarState extends State<ProjectSidebar>
 
   Widget _buildMainDivider(ThemeData theme) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Row(
         children: [
           Expanded(
             child: Container(
-              height: 1,
+              height: 2,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
                     Colors.transparent,
-                    theme.colorScheme.outline.withOpacity(0.2),
+                    Colors.white.withOpacity(0.3), // Linea bianca
                   ],
                 ),
+                borderRadius: BorderRadius.circular(1),
               ),
             ),
           ),
@@ -697,19 +763,20 @@ class _ProjectSidebarState extends State<ProjectSidebar>
             child: Icon(
               Icons.more_horiz,
               size: 16,
-              color: theme.colorScheme.outline.withOpacity(0.4),
+              color: Colors.white.withOpacity(0.4),
             ),
           ),
           Expanded(
             child: Container(
-              height: 1,
+              height: 2,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    theme.colorScheme.outline.withOpacity(0.2),
+                    Colors.white.withOpacity(0.3), // Linea bianca
                     Colors.transparent,
                   ],
                 ),
+                borderRadius: BorderRadius.circular(1),
               ),
             ),
           ),
@@ -718,9 +785,23 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
   }
 
-  Widget _buildBottomActions() {
+  Widget _buildBottomActions(ThemeData theme) {
     return Container(
+      margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.surfaceVariant.withOpacity(0.3),
+            theme.colorScheme.surfaceVariant.withOpacity(0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16), // Contorno tondeggiante
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2), // Contorno bianco sottile
+          width: 1,
+        ),
+      ),
       child: Column(
         children: [
           ModernMenuItem(
