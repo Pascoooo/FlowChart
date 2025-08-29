@@ -79,12 +79,7 @@ class AppRouter {
       AuthenticationState authState, GoRouterState routerState) {
     final currentPath = routerState.uri.path;
     final isAuthPath = currentPath == AppRoutes.authPath;
-    final isDrawingEditorPath = currentPath == AppRoutes.drawingEditorPath;
 
-    // Priorità: se siamo sulla drawing page, non fare redirect
-    if (isDrawingEditorPath) {
-      return null;
-    }
 
     if (authState.status == AuthenticationStatus.unauthenticated &&
         !isAuthPath) {
@@ -108,6 +103,7 @@ class AppRouter {
   static void goToError(BuildContext context, {String? error}) =>
       context.goNamed(AppRoutes.errorName, extra: error);
 }
+
 
 class GoRouterRefreshStream extends ChangeNotifier {
   late final StreamSubscription<dynamic> _subscription;
