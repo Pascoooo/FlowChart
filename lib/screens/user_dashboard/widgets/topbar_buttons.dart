@@ -23,7 +23,6 @@ class TopbarButtons extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // File-specific actions (only when file is selected)
         if (hasSelectedFile) ...[
           _TopBarButton(
             icon: FontAwesomeIcons.penToSquare,
@@ -32,9 +31,7 @@ class TopbarButtons extends StatelessWidget {
             theme: theme,
             isPrimary: true,
           ),
-
           const SizedBox(width: 8),
-
           _TopBarButton(
             icon: FontAwesomeIcons.download,
             tooltip: "Esporta",
@@ -42,14 +39,6 @@ class TopbarButtons extends StatelessWidget {
             theme: theme,
           ),
 
-          const SizedBox(width: 8),
-
-          _TopBarButton(
-            icon: FontAwesomeIcons.share,
-            tooltip: "Condividi",
-            onPressed: () => _onShare(context),
-            theme: theme,
-          ),
         ],
       ],
     );
@@ -64,12 +53,6 @@ class TopbarButtons extends StatelessWidget {
     ]);
   }
 
-  void _onShare(BuildContext context) {
-    // Implementa logica per condivisione
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Condividi file - Da implementare")),
-    );
-  }
 }
 
 class _TopBarButton extends StatefulWidget {

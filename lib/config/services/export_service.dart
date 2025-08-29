@@ -1,66 +1,11 @@
-// lib/services/export_service.dart
 import 'dart:html' as html;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:universal_html/html.dart' as universal_html;
 import 'dart:ui' as ui;
 
 class ExportService {
   static const String _downloadName = 'unichart_export';
-
-  /// Esporta la WorkArea come PDF
-  static Future<void> exportToPdf({
-    required GlobalKey workareaKey,
-    String? fileName,
-  }) async {
-    try {
-      // Cattura screenshot della workarea
-      final boundary = workareaKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) {
-        throw Exception('Impossibile trovare la workarea per l\'esportazione');
-      }
-
-      final image = await boundary.toImage(pixelRatio: 2.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-
-      if (byteData == null) {
-        throw Exception('Errore nella generazione dell\'immagine');
-      }
-
-      final imageBytes = byteData.buffer.asUint8List();
-
-      // Crea il PDF
-      final pdf = pw.Document();
-
-      final pdfImage = pw.MemoryImage(imageBytes);
-
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          build: (pw.Context context) {
-            return pw.Center(
-              child: pw.Image(pdfImage, fit: pw.BoxFit.contain),
-            );
-          },
-        ),
-      );
-
-      // Genera i bytes del PDF
-      final pdfBytes = await pdf.save();
-
-      // Download del file
-      _downloadFile(
-        pdfBytes,
-        fileName ?? '${_downloadName}_${DateTime.now().millisecondsSinceEpoch}.pdf',
-        'application/pdf',
-      );
-    } catch (e) {
-      rethrow;
-    }
-  }
 
   /// Esporta la WorkArea come JPG
   static Future<void> exportToJpg({
@@ -207,44 +152,6 @@ class ExportService {
                   ),
                 ),
                 const SizedBox(height: 32),
-
-                // Opzioni di esportazione
-                _buildExportOption(
-                  context: dialogContext,
-                  theme: theme,
-                  icon: Icons.picture_as_pdf,
-                  title: 'PDF',
-                  description: 'Documento portatile',
-                  onTap: () async {
-                    Navigator.pop(dialogContext);
-                    try {
-                      await exportToPdf(
-                        workareaKey: workareaKey,
-                        fileName: defaultFileName,
-                      );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('PDF esportato con successo'),
-                            backgroundColor: theme.colorScheme.primary,
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Errore nell\'esportazione: $e'),
-                            backgroundColor: theme.colorScheme.error,
-                          ),
-                        );
-                      }
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 12),
-
                 _buildExportOption(
                   context: dialogContext,
                   theme: theme,
@@ -278,9 +185,7 @@ class ExportService {
                     }
                   },
                 ),
-
                 const SizedBox(height: 12),
-
                 _buildExportOption(
                   context: dialogContext,
                   theme: theme,
