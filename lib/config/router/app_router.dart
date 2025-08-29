@@ -6,21 +6,22 @@ import 'package:flowchart_thesis/screens/auth/pages/auth_page.dart';
 import 'package:flowchart_thesis/screens/error/error_page.dart';
 import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_page.dart';
+import 'package:flowchart_thesis/screens/user_dashboard/sketch_edit/drawing_editor_page.dart'; // <-- FIX
 import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
 
 class AppRoutes {
-  // Nomi delle rotte per la navigazione type-safe
   static const String homeName = 'home';
   static const String authName = 'auth';
   static const String settingsName = 'settings';
   static const String errorName = 'error';
+  static const String drawingEditorName = 'drawing-editor';
 
-  // Percorsi delle rotte
   static const String homePath = '/';
   static const String authPath = '/auth';
   static const String settingsPath = '/settings';
   static const String errorPath = '/error';
+  static const String drawingEditorPath = '/drawing-editor';
 }
 
 class AppRouter {
@@ -31,7 +32,7 @@ class AppRouter {
       path: AppRoutes.homePath,
       name: AppRoutes.homeName,
       builder: (context, state) => const DashboardPage(),
-      ),
+    ),
     GoRoute(
       path: AppRoutes.authPath,
       name: AppRoutes.authName,
@@ -41,6 +42,11 @@ class AppRouter {
       path: AppRoutes.settingsPath,
       name: AppRoutes.settingsName,
       builder: (context, state) => const SettingsPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.drawingEditorPath,
+      name: AppRoutes.drawingEditorName,
+      builder: (context, state) => const DrawingEditorPage(),
     ),
     GoRoute(
       path: AppRoutes.errorPath,
@@ -73,13 +79,20 @@ class AppRouter {
       AuthenticationState authState, GoRouterState routerState) {
     final currentPath = routerState.uri.path;
     final isAuthPath = currentPath == AppRoutes.authPath;
+    final isDrawingEditorPath = currentPath == AppRoutes.drawingEditorPath;
+
+    // Priorità: se siamo sulla drawing page, non fare redirect
+    if (isDrawingEditorPath) {
+      return null;
+    }
 
     if (authState.status == AuthenticationStatus.unauthenticated &&
         !isAuthPath) {
       return AppRoutes.authPath;
     }
 
-    if (authState.status == AuthenticationStatus.authenticated && isAuthPath) {
+    if (authState.status == AuthenticationStatus.authenticated &&
+        isAuthPath) {
       return AppRoutes.homePath;
     }
 
@@ -103,7 +116,7 @@ class GoRouterRefreshStream extends ChangeNotifier {
     notifyListeners();
     _subscription = stream.asBroadcastStream().listen(
           (dynamic _) => notifyListeners(),
-        );
+    );
   }
 
   @override
