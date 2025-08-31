@@ -2,6 +2,7 @@
 import 'package:bloc/bloc.dart';
 import 'package:flutter/foundation.dart';
 import 'package:project_repository/project_repository.dart';
+import '../file_bloc/file_system_state.dart';
 import 'project_event.dart';
 import 'project_state.dart';
 
@@ -26,10 +27,11 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     try {
       final projects = await projectRepository.getProjects();
       emit(ProjectsLoaded(projects: projects, selectedProject: null));
-    } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nel caricamento dei progetti', emit);
+    } catch (e) {
+      emit(const ProjectError(message: 'Errore nel caricamento del progetto.'));
     }
   }
+
 
   void _onSelectProject(
       SelectProject event,
@@ -55,7 +57,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       CreateProject event,
       Emitter<ProjectState> emit,
       ) async {
-    // Mantieni lo stato corrente durante la creazione
+    // Mantieni lo stato corrente
     final currentState = state;
 
     emit(const ProjectLoading());
@@ -63,7 +65,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       await projectRepository.createProject(name: event.projectName);
       final projects = await projectRepository.getProjects();
 
-      // Trova il progetto appena creato e selezionalo automaticamente
       final newProject = projects.firstWhere(
             (p) => p.name == event.projectName,
         orElse: () => projects.last,
@@ -71,15 +72,16 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
 
       emit(ProjectsLoaded(
         projects: projects,
-        selectedProject: newProject, // Seleziona automaticamente il nuovo progetto
+        selectedProject: newProject,
         successMessage: 'Progetto "${event.projectName}" creato con successo.',
       ));
-    } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nella creazione del progetto', emit);
+    } catch (e) {
+      emit(const ProjectError(message: 'Errore nella creazione del progetto.'));
 
-      // Ripristina lo stato precedente in caso di errore
       if (currentState is ProjectsLoaded) {
         emit(currentState);
+      } else {
+        emit(const ProjectInitial());
       }
     }
   }
@@ -107,8 +109,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         selectedProject: selectedProject,
         successMessage: 'Progetto eliminato con successo.',
       ));
-    } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nell\'eliminazione del progetto', emit);
+    } catch (e) {
+      emit(const ProjectError(message: 'Errore nella cancellazione del progetto.'));
 
       if (currentState is ProjectsLoaded) {
         emit(currentState);
@@ -150,8 +152,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         selectedProject: selectedProject,
         successMessage: 'Progetto rinominato con successo.',
       ));
-    } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nella ridenominazione', emit);
+    } catch (e) {
+      emit(const ProjectError(message: 'Errore nella rinominazione del progetto.'));
 
       if (currentState is ProjectsLoaded) {
         emit(currentState);

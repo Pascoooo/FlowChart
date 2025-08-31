@@ -41,14 +41,15 @@ class AuthenticationBloc
     emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
       await _userRepository.signInWithGoogle();
-      // Non è necessario emettere uno stato qui,
-      // lo stream dell'utente attiverà _onUserChanged
+      // Non è necessario emettere uno stato qui, lo stream dell'utente attiverà _onUserChanged
     } catch (e) {
       if (kDebugMode) {
         print('Errore di autenticazione Google: $e');
       }
-      emit(const AuthenticationState.unauthenticated(
-          errorMessage: 'Errore di autenticazione Google.'));
+      // Emetti stato con messaggio di errore invece di mostrare un dialogo
+      emit(AuthenticationState.unauthenticated(
+          errorMessage: 'Errore di autenticazione Google.'
+      ));
     }
   }
 
@@ -58,14 +59,15 @@ class AuthenticationBloc
     emit(state.copyWith(isLoading: true));
     try {
       await _userRepository.signOut();
-      // Lo stream dell'utente attiverà _onUserChanged con utente nullo
     } catch (e) {
       if (kDebugMode) {
         print('Errore durante il logout: $e');
       }
-      // Se il logout fallisce, torniamo allo stato precedente ma senza caricamento
+      // Emetti stato con messaggio di errore invece di mostrare un dialogo
       emit(state.copyWith(
-          isLoading: false, errorMessage: 'Errore durante il logout.'));
+          isLoading: false,
+          errorMessage: 'Errore durante il logout.'
+      ));
     }
   }
 

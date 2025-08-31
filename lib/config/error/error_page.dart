@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ErrorPage extends StatelessWidget {
   final String? error;
+  final VoidCallback? onRetry;
 
   const ErrorPage({
     super.key,
-    this.error, required void Function() onRetry,
+    this.error,
+    this.onRetry,
   });
 
   @override
@@ -32,17 +35,15 @@ class ErrorPage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      // Sfondo colorato per tutta la pagina - stesso stile login/register
       backgroundColor: isDark
-          ? const Color(0xFF0F1419) // Blu scuro elegante per tema scuro
-          : const Color(0xFFF8FAFC), // Grigio chiaro per tema chiaro
-
+          ? const Color(0xFF0F1419)
+          : const Color(0xFFF8FAFC),
       body: SafeArea(
         child: Center(
           child: Container(
             constraints: const BoxConstraints(
-              maxWidth: 800, // Larghezza massima del riquadro
-              maxHeight: 600, // Altezza massima del riquadro
+              maxWidth: 800,
+              maxHeight: 600,
             ),
             margin: const EdgeInsets.all(32),
             padding: const EdgeInsets.all(40),
@@ -75,7 +76,6 @@ class ErrorPage extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Icona di errore con lo stesso stile del design
                 Container(
                   width: 100,
                   height: 100,
@@ -99,10 +99,7 @@ class ErrorPage extends StatelessWidget {
                         : Colors.red[600],
                   ),
                 ),
-
                 const SizedBox(height: 32),
-
-                // Titolo - stesso stile delle altre pagine
                 const Text(
                   'Oops! Qualcosa è andato storto',
                   style: TextStyle(
@@ -112,10 +109,7 @@ class ErrorPage extends StatelessWidget {
                   ),
                   textAlign: TextAlign.center,
                 ),
-
                 const SizedBox(height: 16),
-
-                // Descrizione
                 Text(
                   'Si è verificato un errore imprevisto.\nNon preoccuparti, stiamo lavorando per risolverlo.',
                   style: TextStyle(
@@ -127,8 +121,6 @@ class ErrorPage extends StatelessWidget {
                   ),
                   textAlign: TextAlign.center,
                 ),
-
-                // Messaggio di errore (se presente) - stesso stile
                 if (error != null) ...[
                   const SizedBox(height: 24),
                   Container(
@@ -158,13 +150,9 @@ class ErrorPage extends StatelessWidget {
                     ),
                   ),
                 ],
-
                 const SizedBox(height: 40),
-
-                // Pulsanti - stesso stile delle altre pagine
                 Row(
                   children: [
-                    // Pulsante principale - Torna alla Home
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () => _goHome(context),
@@ -184,13 +172,10 @@ class ErrorPage extends StatelessWidget {
                         ),
                       ),
                     ),
-
                     const SizedBox(width: 16),
-
-                    // Pulsante secondario - Riprova
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _retry(context),
+                        onPressed: onRetry ?? () => _goHome(context),
                         icon: const Icon(Icons.refresh, size: 20),
                         label: const Text(
                           'Riprova',
@@ -209,15 +194,9 @@ class ErrorPage extends StatelessWidget {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 24),
-
-                // Separatore OR - stesso stile della pagina di registrazione
                 _buildOrDivider(context),
-
                 const SizedBox(height: 24),
-
-                // Messaggio di supporto
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -285,14 +264,5 @@ class ErrorPage extends StatelessWidget {
 
   void _goHome(BuildContext context) {
     context.go('/');
-  }
-
-  void _retry(BuildContext context) {
-    // Prova a ricaricare la pagina corrente o torna indietro
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/');
-    }
   }
 }

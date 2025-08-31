@@ -3,12 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flowchart_thesis/screens/auth/pages/auth_page.dart';
-import 'package:flowchart_thesis/screens/error/error_page.dart';
+
 import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_page.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/sketch_edit/drawing_editor_page.dart'; // <-- FIX
 import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
+import '../error/error_page.dart';
 
 class AppRoutes {
   static const String homeName = 'home';

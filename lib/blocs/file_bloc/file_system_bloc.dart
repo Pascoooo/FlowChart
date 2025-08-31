@@ -29,8 +29,8 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     try {
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);
       emit(FileSystemLoaded(files: files, activeFileId: null));
-    } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nel caricamento dei file', emit);
+    } catch (e) {
+      emit(FileSystemError(message: e.toString()));
     }
   }
 
@@ -42,9 +42,9 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     emit(const FileSystemLoading());
     try {
       if (event.fileName.trim().isEmpty) {
+        // Lancia un'eccezione specifica che ErrorService può riconoscere
         throw Exception('Il nome del file non può essere vuoto.');
       }
-
       String fileName = event.fileName.trim();
       await projectRepository.addFileToProject(
         projectId: event.projectId,
@@ -54,7 +54,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);
       emit(FileSystemLoaded(files: files));
     } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nella creazione del file', emit);
+      _handleError(e, stackTrace, 'Errore nella creazione del file...', emit);
     }
   }
 
@@ -80,7 +80,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);
       emit(FileSystemLoaded(files: files));
     } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nell\'eliminazione del file', emit);
+      _handleError(e, stackTrace, 'Errore nella eliminazione del file...', emit);
     }
   }
 
@@ -99,7 +99,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);
       emit(FileSystemLoaded(files: files));
     } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nella ridenominazione', emit);
+      _handleError(e, stackTrace, 'Errore nella rinominazione del file...', emit);
     }
   }
 
@@ -118,7 +118,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         emit(loadedState.copyWith(
             successMessage: 'Contenuto salvato con successo.'));
       } catch (e, stackTrace) {
-        _handleError(e, stackTrace, 'Errore nel salvataggio del contenuto', emit);
+        _handleError(e, stackTrace, 'Errore ...', emit);
       }
     }
   }

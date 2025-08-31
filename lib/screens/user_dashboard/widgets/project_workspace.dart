@@ -9,7 +9,7 @@ import '../../../blocs/project_bloc/project_bloc.dart';
 import '../views/workarea.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/topbar.dart';
-import '../error/error_view.dart';
+
 
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
@@ -207,7 +207,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
         }
 
         if (fileState is FileSystemError) {
-          return ErrorView(message: fileState.message);
+         // return ErrorView(message: fileState.message);
         }
 
         if (fileState is FileSystemLoaded) {

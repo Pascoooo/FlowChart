@@ -4,9 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../blocs/project_bloc/project_bloc.dart';
 import '../../../blocs/project_bloc/project_event.dart';
 import '../../../blocs/project_bloc/project_state.dart';
+import '../../../config/error/error_page.dart';
 import '../animations/background_animation.dart';
 import '../widgets/project_selector.dart';
-import '../error/error_view.dart';
 import '../widgets/project_workspace.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -45,7 +45,21 @@ class _DashboardPageState extends State<DashboardPage> {
             const AnimatedBackground(),
             BlocBuilder<ProjectBloc, ProjectState>(
               builder: (context, state) {
-                return _buildContent(context, state, theme);
+                switch (state.runtimeType) {
+                  case ProjectLoading:
+                    return _buildLoadingView(theme);
+                  case ProjectError:
+                    return ErrorPage(
+                      error: (state as ProjectError).message,
+                      onRetry: () {
+                        context.read<ProjectBloc>().add(const LoadProjects());
+                      },
+                    );
+                  case ProjectsLoaded:
+                    return _buildProjectsLoadedView(state as ProjectsLoaded);
+                  default:
+                    return const CupertinoActivityIndicator(radius: 16);
+                }
               },
             ),
           ],
@@ -54,18 +68,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildContent(BuildContext context, ProjectState state, ThemeData theme) {
-    switch (state.runtimeType) {
-      case ProjectLoading:
-        return _buildLoadingView(theme);
-      case ProjectError:
-        return _buildErrorView(state as ProjectError);
-      case ProjectsLoaded:
-        return _buildProjectsLoadedView(state as ProjectsLoaded);
-      default:
-        return const CupertinoActivityIndicator(radius: 16);
-    }
-  }
 
   Widget _buildLoadingView(ThemeData theme) {
     return Center(
@@ -88,9 +90,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildErrorView(ProjectError state) {
-    return ErrorView(message: state.message);
-  }
 
   Widget _buildProjectsLoadedView(ProjectsLoaded state) {
     if (state.selectedProject != null) {
