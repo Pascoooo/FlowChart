@@ -394,7 +394,7 @@ class _ProjectSelectorState extends State<ProjectSelector>
   }
 
   Future<void> _showCreateProjectDialog(BuildContext context) async {
-    final result = await DialogService.showStyledInputDialog(
+    await DialogService.showStyledInputDialog(
       context,
       title: "Nuovo Progetto",
       subtitle: "Dai un nome al tuo progetto per iniziare",
@@ -402,11 +402,13 @@ class _ProjectSelectorState extends State<ProjectSelector>
       icon: FontAwesomeIcons.folderPlus,
       isFontAwesome: true,
       confirmText: "Crea Progetto",
-      onConfirm: (value) {}, // Puoi lasciarlo vuoto, gestiamo sotto
+      onConfirm: (value) {
+        if (value.trim().isNotEmpty) {
+          widget.onCreateProject(value.trim());
+        }
+      },
     );
-    if (result != null && result.trim().isNotEmpty) {
-      widget.onCreateProject(result.trim());
-    }
   }
+
 
 }

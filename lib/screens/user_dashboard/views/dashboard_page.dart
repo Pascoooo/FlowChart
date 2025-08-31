@@ -95,6 +95,9 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildProjectsLoadedView(ProjectsLoaded state) {
     if (state.selectedProject != null) {
       return ProjectWorkspace(
+        onBackToProjects: () {
+          context.read<ProjectBloc>().add(const DeselectProject());
+        },
         selectedProject: state.selectedProject!,
       );
     } else {
