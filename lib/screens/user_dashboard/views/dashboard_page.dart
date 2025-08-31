@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../blocs/project_bloc/project_bloc.dart';
@@ -15,24 +16,11 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage>
-    with TickerProviderStateMixin {
-  late AnimationController _transitionController;
-
+class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    _transitionController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
     context.read<ProjectBloc>().add(const LoadProjects());
-  }
-
-  @override
-  void dispose() {
-    _transitionController.dispose();
-    super.dispose();
   }
 
   @override
@@ -48,40 +36,17 @@ class _DashboardPageState extends State<DashboardPage>
             colors: [
               theme.colorScheme.surface,
               theme.colorScheme.surface.withOpacity(0.98),
-              theme.colorScheme.surfaceVariant.withOpacity(0.05),
+              theme.colorScheme.surfaceContainerHighest.withOpacity(0.05),
             ],
           ),
         ),
         child: Stack(
           children: [
             const AnimatedBackground(),
-            BlocListener<ProjectBloc, ProjectState>(
-              listener: (context, state) {
-                // Se lo stato cambia in ProjectsLoaded e selectedProject è null,
-                // assicurati che le animazioni si invertano.
-                if (state is ProjectsLoaded && state.selectedProject == null) {
-                  _transitionController.reverse();
-                }
+            BlocBuilder<ProjectBloc, ProjectState>(
+              builder: (context, state) {
+                return _buildContent(context, state, theme);
               },
-              child: BlocBuilder<ProjectBloc, ProjectState>(
-                builder: (context, state) {
-                  if (state is ProjectLoading) {
-                    return _buildLoadingView(theme);
-                  }
-                  if (state is ProjectError) {
-                    return ErrorView(message: state.message);
-                  }
-                  if (state is ProjectsLoaded) {
-                    if (state.selectedProject != null) {
-                      _transitionController.forward();
-                      return _buildWorkspace(state);
-                    } else {
-                      return _buildProjectSelector(state);
-                    }
-                  }
-                  return _buildLoadingView(theme);
-                },
-              ),
             ),
           ],
         ),
@@ -89,14 +54,27 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
+  Widget _buildContent(BuildContext context, ProjectState state, ThemeData theme) {
+    switch (state.runtimeType) {
+      case ProjectLoading:
+        return _buildLoadingView(theme);
+      case ProjectError:
+        return _buildErrorView(state as ProjectError);
+      case ProjectsLoaded:
+        return _buildProjectsLoadedView(state as ProjectsLoaded);
+      default:
+        return const CupertinoActivityIndicator(radius: 16);
+    }
+  }
+
   Widget _buildLoadingView(ThemeData theme) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
+          CupertinoActivityIndicator(
             color: theme.colorScheme.primary,
-            strokeWidth: 2,
+            radius: 16,
           ),
           const SizedBox(height: 24),
           Text(
@@ -110,10 +88,17 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Widget _buildProjectSelector(ProjectsLoaded state) {
-    return FadeTransition(
-      opacity: Tween<double>(begin: 1.0, end: 0.0).animate(_transitionController),
-      child: ProjectSelector(
+  Widget _buildErrorView(ProjectError state) {
+    return ErrorView(message: state.message);
+  }
+
+  Widget _buildProjectsLoadedView(ProjectsLoaded state) {
+    if (state.selectedProject != null) {
+      return ProjectWorkspace(
+        selectedProject: state.selectedProject!,
+      );
+    } else {
+      return ProjectSelector(
         projects: state.projects,
         onProjectSelected: (project) {
           context.read<ProjectBloc>().add(SelectProject(project: project));
@@ -121,20 +106,7 @@ class _DashboardPageState extends State<DashboardPage>
         onCreateProject: (name) {
           context.read<ProjectBloc>().add(CreateProject(projectName: name));
         },
-      ),
-    );
+      );
+    }
   }
-
-  Widget _buildWorkspace(ProjectsLoaded state) {
-    return FadeTransition(
-      opacity: Tween<double>(begin: 0.0, end: 1.0).animate(_transitionController),
-      child: ProjectWorkspace(
-        selectedProject: state.selectedProject!,
-        onBackToProjects: () {
-          context.read<ProjectBloc>().add(const DeselectProject());
-        },
-      ),
-    );
-  }
-
 }
