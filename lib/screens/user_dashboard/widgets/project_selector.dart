@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import '../../../config/widgets/show_dialogs.dart';
+
 class ProjectSelector extends StatefulWidget {
   final List<MyProject> projects;
   final Function(MyProject) onProjectSelected;
@@ -392,153 +394,19 @@ class _ProjectSelectorState extends State<ProjectSelector>
   }
 
   Future<void> _showCreateProjectDialog(BuildContext context) async {
-    final TextEditingController nameController = TextEditingController();
-    final theme = Theme.of(context);
-
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.surface,
-                  theme.colorScheme.surface.withOpacity(0.95),
-                ],
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.primary.withOpacity(0.2),
-                        theme.colorScheme.primary.withOpacity(0.1),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: FaIcon(
-                    FontAwesomeIcons.folderPlus,
-                    size: 32,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Nuovo Progetto',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Dai un nome al tuo progetto per iniziare',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: nameController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'es. Il mio diagramma di flusso',
-                    filled: true,
-                    fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.5),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                  ),
-                  onSubmitted: (value) {
-                    if (value.trim().isNotEmpty) {
-                      widget.onCreateProject(value.trim());
-                      Navigator.of(dialogContext).pop();
-                    }
-                  },
-                ),
-                const SizedBox(height: 32),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Annulla',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              theme.colorScheme.primary,
-                              theme.colorScheme.secondary,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (nameController.text.trim().isNotEmpty) {
-                              widget.onCreateProject(nameController.text.trim());
-                              Navigator.of(dialogContext).pop();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            'Crea Progetto',
-                            style: TextStyle(
-                              color: theme.colorScheme.onPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    final result = await DialogService.showStyledInputDialog(
+      context,
+      title: "Nuovo Progetto",
+      subtitle: "Dai un nome al tuo progetto per iniziare",
+      hintText: "es. Il mio diagramma di flusso",
+      icon: FontAwesomeIcons.folderPlus,
+      isFontAwesome: true,
+      confirmText: "Crea Progetto",
+      onConfirm: (value) {}, // Puoi lasciarlo vuoto, gestiamo sotto
     );
+    if (result != null && result.trim().isNotEmpty) {
+      widget.onCreateProject(result.trim());
+    }
   }
+
 }

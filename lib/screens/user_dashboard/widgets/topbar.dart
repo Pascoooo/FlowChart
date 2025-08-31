@@ -104,7 +104,7 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
 
   void _handleExport() async {
     try {
-      await ExportService.showExportDialog(
+      await ExportService.exportDirectlyToJpg(
         context: context,
         workareaKey: WorkArea.workareaKey,
         defaultFileName: _getCurrentFileName(),

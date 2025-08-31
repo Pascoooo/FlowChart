@@ -1,3 +1,5 @@
+import 'package:flowchart_thesis/config/widgets/show_dialogs.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class DrawingEditorPage extends StatefulWidget {
@@ -53,27 +55,15 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
   }
 
   void _clearAllStrokes() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Cancella tutto"),
-        content: const Text("Vuoi davvero cancellare tutto il disegno?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Annulla"),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _strokes.clear();
-              });
-              Navigator.pop(context);
-            },
-            child: const Text("Cancella"),
-          ),
-        ],
-      ),
+    DialogService.showConfirmationDialog(
+      context,
+      title: "Conferma",
+      content: "Sei sicuro di voler cancellare tutto il disegno?",
+      confirmText: "Conferma",
+      cancelText: "Annulla",
+      onConfirm: () {
+        setState(() => _strokes.clear());
+      },
     );
   }
 

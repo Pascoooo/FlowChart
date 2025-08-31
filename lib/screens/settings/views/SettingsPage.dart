@@ -1,12 +1,12 @@
-// dart
-// file: 'lib/screens/settings/views/SettingsPage.dart'
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../config/constants/theme_switch.dart';
+import '../../../config/widgets/show_dialogs.dart';
 import '../widgets/SettingsSection.dart';
 import '../widgets/SettingsSwitchTile.dart';
 import '../widgets/SettingsTile.dart';
+
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -177,67 +177,42 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _confirmResetSettings() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ripristinare le impostazioni?'),
-        content: const Text(
-          'Questa operazione ripristinerà tutte le preferenze ai valori predefiniti.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annulla'),
-          ),
-          FilledButton.tonal(
-            onPressed: () {
-              setState(() {
-                _notificationsEnabled = true;
-                _autoSaveEnabled = true;
-                _analyticsEnabled = false;
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Impostazioni ripristinate')),
-              );
-            },
-            child: const Text('Conferma'),
-          ),
-        ],
-      ),
+    DialogService.showConfirmationDialog(
+      context,
+      title: 'Ripristinare le impostazioni?',
+      content: 'Questa operazione ripristinerà tutte le preferenze ai valori predefiniti.',
+      confirmText: 'Conferma',
+      useFilledButton: true,
+      onConfirm: () {
+        setState(() {
+          _notificationsEnabled = true;
+          _autoSaveEnabled = true;
+          _analyticsEnabled = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Impostazioni ripristinate')),
+        );
+      },
     );
   }
 
   void _showAppInfoDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.info),
-            SizedBox(width: 8),
-            Text('Informazioni App'),
-          ],
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('FlowChart Thesis', style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
-            Text('Versione: 1.0.0'),
-            Text('Build: 100'),
-            Text('Flutter SDK: 3.24.0'),
-            SizedBox(height: 12),
-            Text('© 2024 FlowChart Thesis Team'),
-            Text('Tutti i diritti riservati'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
+    DialogService.showInfoDialog(
+      context,
+      title: 'Informazioni App',
+      icon: Icons.info,
+      content: const Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('FlowChart Thesis', style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(height: 8),
+          Text('Versione: 1.0.0'),
+          Text('Build: 100'),
+          Text('Flutter SDK: 3.24.0'),
+          SizedBox(height: 12),
+          Text('© 2024 FlowChart Thesis Team'),
+          Text('Tutti i diritti riservati'),
         ],
       ),
     );

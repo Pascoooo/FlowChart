@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
+import 'package:universal_html/html.dart';
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/file_bloc/file_system_bloc.dart';
@@ -14,6 +15,7 @@ import '../../../blocs/file_bloc/file_system_state.dart';
 import '../../../blocs/project_bloc/project_bloc.dart';
 import '../../../blocs/project_bloc/project_event.dart';
 import '../../../config/router/app_router.dart';
+import '../../../config/widgets/show_dialogs.dart';
 
 class ProjectSidebar extends StatefulWidget {
   final MyProject selectedProject;
@@ -563,165 +565,26 @@ class _ProjectSidebarState extends State<ProjectSidebar>
   }
 
   Future<void> _showCreateFileDialog(BuildContext context, String projectId) async {
-    final nameController = TextEditingController();
-    final theme = Theme.of(context);
-
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.surface,
-                  theme.colorScheme.surface.withOpacity(0.95),
-                ],
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.primary.withOpacity(0.2),
-                        theme.colorScheme.primary.withOpacity(0.1),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: FaIcon(
-                    FontAwesomeIcons.plus,
-                    size: 32,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Nuovo File',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Dai un nome al tuo file per iniziare a creare',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: nameController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'es. Diagramma principale',
-                    filled: true,
-                    fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.5),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                  ),
-                  onSubmitted: (value) {
-                    if (value.trim().isNotEmpty) {
-                      context.read<FileSystemBloc>().add(
-                        CreateNewFile(
-                          fileName: value.trim(),
-                          projectId: projectId,
-                        ),
-                      );
-                      Navigator.of(dialogContext).pop();
-                    }
-                  },
-                ),
-                const SizedBox(height: 32),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Annulla',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              theme.colorScheme.primary,
-                              theme.colorScheme.secondary,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (nameController.text.trim().isNotEmpty) {
-                              context.read<FileSystemBloc>().add(
-                                CreateNewFile(
-                                  fileName: nameController.text.trim(),
-                                  projectId: projectId,
-                                ),
-                              );
-                              Navigator.of(dialogContext).pop();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            'Crea File',
-                            style: TextStyle(
-                              color: theme.colorScheme.onPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
+    await DialogService.showStyledInputDialog(
+      context,
+      title: 'Crea Nuovo File',
+      subtitle: 'Inserisci il nome del nuovo file',
+      hintText: 'Nome del File',
+      icon: FontAwesomeIcons.file,
+      isFontAwesome: true,
+      confirmText: 'Crea',
+      cancelText: 'Annulla',
+      onConfirm: (fileName) {
+        if (fileName.isNotEmpty) {
+          context.read<FileSystemBloc>().add(CreateNewFile(
+            projectId: projectId,
+            fileName: fileName,
+          ));
+        }
       },
     );
   }
+
 
   Widget _buildDivider(ThemeData theme) {
     return Container(
