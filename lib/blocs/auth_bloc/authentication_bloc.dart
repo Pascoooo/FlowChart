@@ -47,7 +47,7 @@ class AuthenticationBloc
         print('Errore di autenticazione Google: $e');
       }
       // Emetti stato con messaggio di errore invece di mostrare un dialogo
-      emit(AuthenticationState.unauthenticated(
+      emit(const AuthenticationState.unauthenticated(
           errorMessage: 'Errore di autenticazione Google.'
       ));
     }

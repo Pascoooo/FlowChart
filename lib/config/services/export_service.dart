@@ -95,7 +95,7 @@ class ExportService {
         }
       } catch (e) {
         if (context.mounted) {
-          Navigator.of(context).pop(); // Chiudi l'overlay
+          Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Errore nell\'esportazione: $e'),
@@ -106,6 +106,5 @@ class ExportService {
       }
     });
   }
-
 }
 

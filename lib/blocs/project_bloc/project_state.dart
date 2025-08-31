@@ -44,13 +44,11 @@ class ProjectsLoaded extends ProjectState {
   final List<MyProject> projects;
   final MyProject? selectedProject;
   final String? error;
-  final String? successMessage;
 
   const ProjectsLoaded({
     required this.projects,
     this.selectedProject,
     this.error,
-    this.successMessage,
   });
 
   ProjectsLoaded copyWith({
@@ -63,7 +61,6 @@ class ProjectsLoaded extends ProjectState {
       projects: projects ?? this.projects,
       selectedProject: selectedProject ?? this.selectedProject,
       error: error,
-      successMessage: successMessage,
     );
   }
 
@@ -72,6 +69,5 @@ class ProjectsLoaded extends ProjectState {
     projects,
     selectedProject,
     error,
-    successMessage,
   ];
 }

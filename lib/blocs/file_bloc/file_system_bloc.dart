@@ -1,6 +1,5 @@
 import 'package:bloc/bloc.dart';
 import 'package:file_repository/file_repository.dart';
-import 'package:flutter/foundation.dart';
 import 'package:project_repository/project_repository.dart';
 import 'file_system_event.dart';
 import 'file_system_state.dart';
@@ -30,7 +29,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);
       emit(FileSystemLoaded(files: files, activeFileId: null));
     } catch (e) {
-      emit(FileSystemError(message: e.toString()));
+      emit(const FileSystemError(message: 'Errore nel caricamento dei file'));
     }
   }
 
@@ -53,8 +52,8 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       );
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);
       emit(FileSystemLoaded(files: files));
-    } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nella creazione del file...', emit);
+    } catch (e) {
+      emit (const FileSystemError(message: 'Errore nella creazione del file'));
     }
   }
 
@@ -64,7 +63,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       final loadedState = state as FileSystemLoaded;
       emit(loadedState.copyWith(
         activeFileId: event.fileId,
-        successMessage: 'File "${event.fileName}" aperto.',
       ));
     }
   }
@@ -79,8 +77,8 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       await projectRepository.deleteFile(fileId: event.fileId, projectId: event.projectId);
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);
       emit(FileSystemLoaded(files: files));
-    } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nella eliminazione del file...', emit);
+    } catch (e) {
+      emit (const FileSystemError(message: 'Errore nella cancellazione del file'));
     }
   }
 
@@ -98,8 +96,8 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
           fileId: event.fileId, newName: event.newName.trim(), projectId: event.projectId);
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);
       emit(FileSystemLoaded(files: files));
-    } catch (e, stackTrace) {
-      _handleError(e, stackTrace, 'Errore nella rinominazione del file...', emit);
+    } catch (e) {
+      emit (const FileSystemError(message: 'Errore nella rinominazione del file'));
     }
   }
 
@@ -115,21 +113,10 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
             projectId: event.projectId,
             fileId: event.fileId,
             newContent: event.newContent);
+      } catch (e) {
         emit(loadedState.copyWith(
-            successMessage: 'Contenuto salvato con successo.'));
-      } catch (e, stackTrace) {
-        _handleError(e, stackTrace, 'Errore ...', emit);
+            error: 'Errore nel salvataggio del contenuto.'));
       }
     }
-  }
-
-  /// Funzione helper per la gestione degli errori
-  void _handleError(
-      Object e, StackTrace stackTrace, String prefix, Emitter<FileSystemState> emit) {
-    if (kDebugMode) {
-      debugPrint('$prefix: $e');
-      debugPrintStack(stackTrace: stackTrace);
-    }
-    emit(FileSystemError(message: '$prefix: $e'));
   }
 }

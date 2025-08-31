@@ -1,8 +1,5 @@
-// lib/blocs/project_bloc/project_bloc.dart (Updated)
 import 'package:bloc/bloc.dart';
-import 'package:flutter/foundation.dart';
 import 'package:project_repository/project_repository.dart';
-import '../file_bloc/file_system_state.dart';
 import 'project_event.dart';
 import 'project_state.dart';
 
@@ -73,7 +70,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       emit(ProjectsLoaded(
         projects: projects,
         selectedProject: newProject,
-        successMessage: 'Progetto "${event.projectName}" creato con successo.',
       ));
     } catch (e) {
       emit(const ProjectError(message: 'Errore nella creazione del progetto.'));
@@ -107,7 +103,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       emit(ProjectsLoaded(
         projects: projects,
         selectedProject: selectedProject,
-        successMessage: 'Progetto eliminato con successo.',
       ));
     } catch (e) {
       emit(const ProjectError(message: 'Errore nella cancellazione del progetto.'));
@@ -150,7 +145,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       emit(ProjectsLoaded(
         projects: projects,
         selectedProject: selectedProject,
-        successMessage: 'Progetto rinominato con successo.',
       ));
     } catch (e) {
       emit(const ProjectError(message: 'Errore nella rinominazione del progetto.'));
@@ -161,12 +155,4 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
-  void _handleError(
-      Object e, StackTrace stackTrace, String prefix, Emitter<ProjectState> emit) {
-    if (kDebugMode) {
-      debugPrint('$prefix: $e');
-      debugPrintStack(stackTrace: stackTrace);
-    }
-    emit(ProjectError(message: '$prefix: $e'));
-  }
 }

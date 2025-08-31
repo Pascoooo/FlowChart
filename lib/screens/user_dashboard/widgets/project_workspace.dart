@@ -14,6 +14,7 @@ import '../widgets/topbar.dart';
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
 
+
   const ProjectWorkspace({
     super.key,
     required this.selectedProject,
@@ -207,7 +208,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
         }
 
         if (fileState is FileSystemError) {
-         // return ErrorView(message: fileState.message);
+          // return ErrorView(message: fileState.message);
         }
 
         if (fileState is FileSystemLoaded) {

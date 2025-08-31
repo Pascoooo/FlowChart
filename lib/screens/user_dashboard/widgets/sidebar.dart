@@ -178,7 +178,6 @@ class _ProjectSidebarState extends State<ProjectSidebar>
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
               onTap: () {
-                // Usa il BLoC per tornare ai progetti - NO animazioni manuali
                 context.read<ProjectBloc>().add(const DeselectProject());
               },
               child: Container(
@@ -400,279 +399,42 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
   }
 
-  void _showRenameFileDialog(BuildContext context, MyFile file) {
-    final nameController = TextEditingController(text: file.name);
-    final theme = Theme.of(context);
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.surface,
-                  theme.colorScheme.surface.withOpacity(0.95),
-                ],
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.primary.withOpacity(0.2),
-                        theme.colorScheme.primary.withOpacity(0.1),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    Icons.edit,
-                    size: 32,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Rinomina File',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: nameController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Nuovo nome file',
-                    filled: true,
-                    fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.5),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                  ),
-                  onSubmitted: (value) {
-                    if (value.trim().isNotEmpty && value.trim() != file.name) {
-                      context.read<FileSystemBloc>().add(
-                        RenameFile(
-                          fileId: file.fileId,
-                          newName: value.trim(), projectId: widget.selectedProject.projectId
-                        ),
-                      );
-                      Navigator.of(dialogContext).pop();
-                    }
-                  },
-                ),
-                const SizedBox(height: 32),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Annulla',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              theme.colorScheme.primary,
-                              theme.colorScheme.secondary,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: () {
-                            final newName = nameController.text.trim();
-                            if (newName.isNotEmpty && newName != file.name) {
-                              context.read<FileSystemBloc>().add(
-                                RenameFile(
-                                  fileId: file.fileId,
-                                  newName: newName, projectId: widget.selectedProject.projectId
-                                ),
-                              );
-                              Navigator.of(dialogContext).pop();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            'Rinomina',
-                            style: TextStyle(
-                              color: theme.colorScheme.onPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  void _showRenameFileDialog(BuildContext context, MyFile file) async {
+    final String? newName = await DialogService.showInputDialog(
+      context,
+      title: "Rinomina File",
+      initialValue: file.name,
+      hintText: "es. Diagramma Riveduto",
+      confirmText: "Rinomina",
     );
+
+    if (newName != null && newName.trim().isNotEmpty && newName.trim() != file.name) {
+      context.read<FileSystemBloc>().add(
+        RenameFile(
+          fileId: file.fileId,
+          newName: newName.trim(),
+          projectId: widget.selectedProject.projectId,
+        ),
+      );
+    }
   }
 
-  void _showDeleteConfirmationDialog(BuildContext context, MyFile file) {
-    final theme = Theme.of(context);
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.surface,
-                  theme.colorScheme.surface.withOpacity(0.95),
-                ],
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.error.withOpacity(0.2),
-                        theme.colorScheme.error.withOpacity(0.1),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    Icons.warning_amber_rounded,
-                    size: 32,
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Elimina File',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Sei sicuro di voler eliminare "${file.name}"? Questa azione è irreversibile.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Annulla',
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.error,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: () {
-                            context.read<FileSystemBloc>().add(
-                              DeleteFile(
-                                fileId: file.fileId, projectId: widget.selectedProject.projectId
-                              ),
-                            );
-                            Navigator.of(dialogContext).pop();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            'Elimina',
-                            style: TextStyle(
-                              color: theme.colorScheme.onError,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  void _showDeleteConfirmationDialog(BuildContext context, MyFile file) async {
+    final bool? confirmed = await DialogService.showConfirmationDialog(
+      context,
+      title: "Elimina File",
+      message: 'Sei sicuro di voler eliminare "${file.name}"? Questa azione è irreversibile.',
+      confirmText: "Elimina",
     );
+
+    if (confirmed == true) {
+      context.read<FileSystemBloc>().add(
+        DeleteFile(
+          fileId: file.fileId,
+          projectId: widget.selectedProject.projectId,
+        ),
+      );
+    }
   }
 
   Widget _buildCreateFileButton(ThemeData theme) {

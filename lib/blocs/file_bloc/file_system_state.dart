@@ -35,13 +35,11 @@ class FileSystemLoaded extends FileSystemState {
   final List<MyFile> files;
   final String? activeFileId;
   final String? error;
-  final String? successMessage;
 
   const FileSystemLoaded({
     required this.files,
     this.activeFileId,
     this.error,
-    this.successMessage,
   });
 
   FileSystemLoaded copyWith({
@@ -54,7 +52,6 @@ class FileSystemLoaded extends FileSystemState {
       files: files ?? this.files,
       activeFileId: activeFileId ?? this.activeFileId,
       error: error,
-      successMessage: successMessage,
     );
   }
 
@@ -63,6 +60,5 @@ class FileSystemLoaded extends FileSystemState {
     files,
     activeFileId,
     error,
-    successMessage,
   ];
 }

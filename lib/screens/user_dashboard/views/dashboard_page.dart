@@ -1,3 +1,5 @@
+// ... (omitted imports)
+import 'package:flowchart_thesis/screens/user_dashboard/views/workspace.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -43,31 +45,60 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Stack(
           children: [
             const AnimatedBackground(),
-            BlocBuilder<ProjectBloc, ProjectState>(
-              builder: (context, state) {
-                switch (state.runtimeType) {
-                  case ProjectLoading:
-                    return _buildLoadingView(theme);
-                  case ProjectError:
-                    return ErrorPage(
-                      error: (state as ProjectError).message,
-                      onRetry: () {
-                        context.read<ProjectBloc>().add(const LoadProjects());
-                      },
-                    );
-                  case ProjectsLoaded:
-                    return _buildProjectsLoadedView(state as ProjectsLoaded);
-                  default:
-                    return const CupertinoActivityIndicator(radius: 16);
+            BlocListener<ProjectBloc, ProjectState>(
+              listener: (context, state) {
+                if (state is ProjectsLoaded && state.error != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(state.error!),
+                      backgroundColor: theme.colorScheme.error,
+                      behavior: SnackBarBehavior.floating,
+                      margin: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  );
                 }
               },
+              child: BlocBuilder<ProjectBloc, ProjectState>(
+                buildWhen: (previous, current) {
+                  if (previous.runtimeType != current.runtimeType) return true;
+                  if (previous is ProjectsLoaded && current is ProjectsLoaded) {
+                    return previous.selectedProject != current.selectedProject ||
+                        previous.projects.length != current.projects.length;
+                  }
+                  return true;
+                },
+                builder: (context, state) {
+                  switch (state.runtimeType) {
+                    case ProjectLoading:
+                      return _buildLoadingView(theme);
+                    case ProjectError:
+                      return ErrorPage(
+                        error: (state as ProjectError).message,
+                        onRetry: () {
+                          context.read<ProjectBloc>().add(const LoadProjects());
+                        },
+                      );
+                    case ProjectsLoaded:
+                      return _buildProjectsLoadedView(state as ProjectsLoaded, theme);
+                    default:
+                      return Center(
+                        child: CupertinoActivityIndicator(
+                          radius: 16,
+                          color: theme.colorScheme.primary,
+                        ),
+                      );
+                  }
+                },
+              ),
             ),
           ],
         ),
       ),
     );
   }
-
 
   Widget _buildLoadingView(ThemeData theme) {
     return Center(
@@ -90,25 +121,57 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildProjectsLoadedView(ProjectsLoaded state, ThemeData theme) {
+    debugPrint('=== DashboardPage DEBUG ===');
+    debugPrint('selectedProject = ${state.selectedProject?.name ?? 'NULL'}');
+    debugPrint('selectedProject ID = ${state.selectedProject?.projectId ?? 'NULL'}');
+    debugPrint('projects count = ${state.projects.length}');
+    debugPrint('========================');
 
-  Widget _buildProjectsLoadedView(ProjectsLoaded state) {
-    if (state.selectedProject != null) {
-      return ProjectWorkspace(
-       // onBackToProjects: () {
-         // context.read<ProjectBloc>().add(const DeselectProject());
-        //},
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        if (child.key == const ValueKey('project-selector')) {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(-1.0, 0.0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            )),
+            child: FadeTransition(opacity: animation, child: child),
+          );
+        } else {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1.0, 0.0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            )),
+            child: FadeTransition(opacity: animation, child: child),
+          );
+        }
+      },
+      child: state.selectedProject != null
+          ? Workspace(
+        key: ValueKey('workspace-${state.selectedProject!.projectId}'),
         selectedProject: state.selectedProject!,
-      );
-    } else {
-      return ProjectSelector(
+      )
+          : ProjectSelector(
+        key: const ValueKey('project-selector'),
         projects: state.projects,
         onProjectSelected: (project) {
+          debugPrint('DashboardPage: Selecting project ${project.name}');
           context.read<ProjectBloc>().add(SelectProject(project: project));
         },
         onCreateProject: (name) {
+          debugPrint('DashboardPage: Creating project $name');
           context.read<ProjectBloc>().add(CreateProject(projectName: name));
         },
-      );
-    }
+      ),
+    );
   }
 }

@@ -70,7 +70,10 @@ class DialogService {
     return _showCenteredDialog<bool?>(
       context: context,
       child: CupertinoAlertDialog(
-        title: Text(title),
+        title: Text(
+          title,
+          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+        ),
         content: Text(message),
         actions: [
           CupertinoDialogAction(
@@ -112,10 +115,16 @@ class DialogService {
                 ? FaIcon(icon, color: Theme.of(context).colorScheme.primary)
                 : Icon(icon, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 8),
-            Text(title),
+            Text(
+              title,
+              style: TextStyle(color: Theme.of(context).colorScheme.primary),
+            ),
           ],
         )
-            : Text(title),
+            : Text(
+          title,
+          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+        ),
         content: content,
         actions: [
           CupertinoDialogAction(
@@ -144,7 +153,10 @@ class DialogService {
     return _showCenteredDialog<String?>(
       context: context,
       child: CupertinoAlertDialog(
-        title: Text(title),
+        title: Text(
+          title,
+          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -188,7 +200,12 @@ class DialogService {
       context: context,
       barrierDismissible: barrierDismissible,
       child: CupertinoAlertDialog(
-        title: title,
+        title: title != null
+            ? DefaultTextStyle(
+          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          child: title,
+        )
+            : null,
         content: content,
         actions: actions ??
             [
