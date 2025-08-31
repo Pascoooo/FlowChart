@@ -1,4 +1,6 @@
-// lib/screens/user_dashboard/widgets/project_workspace.dart (Refactored)
+// lib/screens/user_dashboard/project_workspace.dart (Updated)
+import 'package:flowchart_thesis/screens/user_dashboard/widgets/topbar.dart';
+import 'package:flowchart_thesis/screens/user_dashboard/widgets/sidebar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
@@ -6,19 +8,15 @@ import '../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../blocs/file_bloc/file_system_event.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
 import '../../../blocs/project_bloc/project_bloc.dart';
-import '../views/workarea.dart';
-import '../widgets/sidebar.dart';
-import '../widgets/topbar.dart';
+import 'dart:js' as js;
 
+import '../../../config/services/export_service.dart';
+import '../views/workarea.dart';
 
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
 
-
-  const ProjectWorkspace({
-    super.key,
-    required this.selectedProject,
-  });
+  const ProjectWorkspace({super.key, required this.selectedProject});
 
   @override
   State<ProjectWorkspace> createState() => _ProjectWorkspaceState();
@@ -37,10 +35,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   void initState() {
     super.initState();
     _initAnimations();
-    // Avvia l'animazione di entrata
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _slideInController.forward();
-    });
+    _slideInController.forward();
   }
 
   void _initAnimations() {
@@ -49,39 +44,36 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       vsync: this,
     );
 
-    // Sidebar slides in from left
     _sidebarSlideAnimation = Tween<Offset>(
-      begin: const Offset(-1.0, 0.0),
+      begin: const Offset(-1, 0),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _slideInController,
-      curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic),
+      curve: Curves.easeOutCubic,
     ));
 
-    // Topbar slides down from top
     _topbarSlideAnimation = Tween<Offset>(
-      begin: const Offset(0.0, -1.0),
+      begin: const Offset(0, -1),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _slideInController,
-      curve: const Interval(0.2, 0.8, curve: Curves.easeOutCubic),
+      curve: Curves.easeOutCubic,
     ));
 
-    // Workarea slides in from right with scale
     _workareaSlideAnimation = Tween<Offset>(
-      begin: const Offset(0.3, 0.0),
+      begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _slideInController,
-      curve: const Interval(0.4, 1.0, curve: Curves.easeOutCubic),
+      curve: Curves.easeOutCubic,
     ));
 
     _workareaScaleAnimation = Tween<double>(
-      begin: 0.8,
+      begin: 0.9,
       end: 1.0,
     ).animate(CurvedAnimation(
       parent: _slideInController,
-      curve: const Interval(0.4, 1.0, curve: Curves.easeOutBack),
+      curve: Curves.easeOutCubic,
     ));
 
     _fadeAnimation = Tween<double>(
@@ -89,7 +81,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       end: 1.0,
     ).animate(CurvedAnimation(
       parent: _slideInController,
-      curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
+      curve: const Interval(0.4, 1.0, curve: Curves.easeIn),
     ));
   }
 
@@ -97,6 +89,51 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   void dispose() {
     _slideInController.dispose();
     super.dispose();
+  }
+
+  // Metodo per gestire l'azione di modifica
+  void _onEdit() {
+    final baseUrl = Uri.base.toString().split('#')[0];
+    js.context.callMethod('open', [
+      '$baseUrl#/drawing-editor',
+      '_blank',
+      'width=1200,height=800,left=100,top=100,resizable=yes,scrollbars=yes,status=yes'
+    ]);
+  }
+
+  // Metodo per gestire l'azione di esportazione
+  void _handleExport() async {
+    final state = BlocProvider.of<FileSystemBloc>(context).state;
+    if (state is FileSystemLoaded) {
+      try {
+        await ExportService.exportDirectlyToJpg(
+          context: context,
+          workareaKey: WorkArea.workareaKey,
+          defaultFileName: _getCurrentFileName(state),
+        );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Errore nell\'esportazione: $e'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  String _getCurrentFileName(FileSystemLoaded state) {
+    if (state.activeFileId != null && state.files.isNotEmpty) {
+      final matchingFiles = state.files.where(
+            (f) => f.fileId == state.activeFileId,
+      );
+      if (matchingFiles.isNotEmpty) {
+        return matchingFiles.first.name.replaceAll(' ', '_').toLowerCase();
+      }
+    }
+    return 'unichart_diagram';
   }
 
   @override
@@ -110,274 +147,90 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
         bloc.add(RefreshFileSystem(projectId: widget.selectedProject.projectId));
         return bloc;
       },
-      child: AnimatedBuilder(
-        animation: _slideInController,
-        builder: (context, child) {
-          return Row(
-            children: [
-              // Sidebar with slide animation
-              SlideTransition(
-                position: _sidebarSlideAnimation,
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: ProjectSidebar(
-                    selectedProject: widget.selectedProject,
+      child: BlocListener<FileSystemBloc, FileSystemState>(
+        listener: (context, state) {
+          if (state is FileSystemError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+          }
+        },
+        child: AnimatedBuilder(
+          animation: _slideInController,
+          builder: (context, child) {
+            return Row(
+              children: [
+                SlideTransition(
+                  position: _sidebarSlideAnimation,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: ProjectSidebar(
+                      selectedProject: widget.selectedProject,
+                    ),
                   ),
                 ),
-              ),
-
-              // Main content area
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    top: 16.0,
-                    right: 16.0,
-                    bottom: 16.0,
-                  ),
-                  child: Column(
-                    children: [
-                      // Topbar with slide animation
-                      SlideTransition(
-                        position: _topbarSlideAnimation,
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: _buildTopbar(),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Workarea with slide and scale animation
-                      Expanded(
-                        child: SlideTransition(
-                          position: _workareaSlideAnimation,
-                          child: ScaleTransition(
-                            scale: _workareaScaleAnimation,
-                            child: FadeTransition(
-                              opacity: _fadeAnimation,
-                              child: _buildWorkarea(),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      top: 16.0,
+                      right: 16.0,
+                      bottom: 16.0,
+                    ),
+                    child: Column(
+                      children: [
+                        SlideTransition(
+                          position: _topbarSlideAnimation,
+                          child: FadeTransition(
+                            opacity: _fadeAnimation,
+                            // Passa le funzioni di callback alla TopBar
+                            child: TopBar(
+                              selectedProject: widget.selectedProject,
+                              onEdit: _onEdit,
+                              onExport: _handleExport,
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: SlideTransition(
+                            position: _workareaSlideAnimation,
+                            child: ScaleTransition(
+                              scale: _workareaScaleAnimation,
+                              child: FadeTransition(
+                                opacity: _fadeAnimation,
+                                child: _buildWorkarea(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
-    );
-  }
-
-  Widget _buildTopbar() {
-    return BlocBuilder<FileSystemBloc, FileSystemState>(
-      builder: (context, state) {
-        if (state is FileSystemLoaded) {
-          return TopBar(
-            state: state,
-            selectedProject: widget.selectedProject,
-          );
-        }
-        return Container(
-          height: 80,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-            ),
-          ),
-          child: Center(
-            child: Text(
-              widget.selectedProject.name,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-        );
-      },
     );
   }
 
   Widget _buildWorkarea() {
     return BlocBuilder<FileSystemBloc, FileSystemState>(
-      builder: (context, fileState) {
-        if (fileState is FileSystemLoading) {
-          return _buildLoadingWorkarea();
-        }
-
-        if (fileState is FileSystemError) {
-          // return ErrorView(message: fileState.message);
-        }
-
-        if (fileState is FileSystemLoaded) {
-          final hasFiles = fileState.files.isNotEmpty;
-          final hasSelectedFile = fileState.activeFileId != null;
-
-          if (!hasFiles) {
-            return _buildNoFilesView();
-          }
-
-          if (!hasSelectedFile) {
-            return _buildSelectFileView();
-          }
-
+      builder: (context, state) {
+        if (state is FileSystemLoaded && state.activeFileId != null) {
           return const WorkArea();
         }
-
-        return _buildLoadingWorkarea();
+        return const Center(
+          child: Text(
+            'Seleziona o crea un file per iniziare a lavorare.',
+            style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+        );
       },
-    );
-  }
-
-  Widget _buildLoadingWorkarea() {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              "Caricamento file...",
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoFilesView() {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary.withOpacity(0.1),
-                    theme.colorScheme.primary.withOpacity(0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Icon(
-                Icons.create_new_folder_rounded,
-                size: 64,
-                color: theme.colorScheme.primary.withOpacity(0.7),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              "Questo progetto non ha file",
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              "Crea il tuo primo file dalla sidebar\nper cominciare a disegnare",
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSelectFileView() {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.secondary.withOpacity(0.1),
-                    theme.colorScheme.secondary.withOpacity(0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Icon(
-                Icons.touch_app_rounded,
-                size: 48,
-                color: theme.colorScheme.secondary.withOpacity(0.7),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              "Seleziona un file",
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              "Clicca su un file dalla sidebar per iniziare\na modificare i tuoi diagrammi",
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -407,6 +407,4 @@ class _ProjectSelectorState extends State<ProjectSelector>
       widget.onCreateProject(projectName);
     }
   }
-
-
 }

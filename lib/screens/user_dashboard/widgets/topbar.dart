@@ -1,19 +1,23 @@
 // lib/screens/user_dashboard/widgets/topbar.dart (Updated)
-import 'package:flowchart_thesis/screens/user_dashboard/widgets/topbar_buttons.dart';
+import 'package:file_repository/file_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
+import '../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
-import '../../../config/services/export_service.dart';
-import '../views/workarea.dart';
+import 'topbar_buttons.dart';
 
 class TopBar extends StatefulWidget {
-  final FileSystemLoaded state;
   final MyProject selectedProject;
+  final VoidCallback onEdit;
+  final VoidCallback onExport;
 
   const TopBar({
     super.key,
-    required this.state,
     required this.selectedProject,
+    required this.onEdit,
+    required this.onExport,
   });
 
   @override
@@ -29,6 +33,7 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     _initAnimations();
+    _slideController.forward();
   }
 
   void _initAnimations() {
@@ -52,8 +57,6 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
       parent: _slideController,
       curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
     ));
-
-    _slideController.forward();
   }
 
   @override
@@ -64,82 +67,131 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return SlideTransition(
-      position: _slideAnimation,
-      child: FadeTransition(
-        opacity: _opacityAnimation,
-        child: Container(
-          height: 80,
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: theme.colorScheme.outline.withOpacity(0.1),
-              width: 1,
+    return BlocBuilder<FileSystemBloc, FileSystemState>(
+      builder: (context, state) {
+        final theme = Theme.of(context);
+        if (state is FileSystemLoaded) {
+          return SlideTransition(
+            position: _slideAnimation,
+            child: FadeTransition(
+              opacity: _opacityAnimation,
+              child: _buildAdvancedTopbar(theme, state),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.shadow.withOpacity(0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+          );
+        }
+        return SlideTransition(
+          position: _slideAnimation,
+          child: FadeTransition(
+            opacity: _opacityAnimation,
+            child: _buildSimpleTopbar(theme),
           ),
-          child: Row(
-            children: [
-              _buildBreadcrumb(theme),
-              const Spacer(),
-              TopbarButtons(
-                state: widget.state,
-                onExport: _handleExport,
-              ),
-            ],
-          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAdvancedTopbar(ThemeData theme, FileSystemLoaded state) {
+    return Container(
+      height: 80,
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outline.withOpacity(0.1),
+          width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildBreadcrumb(theme, state),
+          ),
+          // Passa le callback ai bottoni
+          TopbarButtons(
+            state: state,
+            onEdit: widget.onEdit,
+            onExport: widget.onExport,
+          ),
+        ],
       ),
     );
   }
 
-  void _handleExport() async {
-    try {
-      await ExportService.exportDirectlyToJpg(
-        context: context,
-        workareaKey: WorkArea.workareaKey,
-        defaultFileName: _getCurrentFileName(),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Errore nell\'esportazione: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+  Widget _buildSimpleTopbar(ThemeData theme) {
+    return Container(
+      height: 80,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.outline.withOpacity(0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-        );
-      }
-    }
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.folder_open_rounded,
+            color: theme.colorScheme.primary,
+            size: 24,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  widget.selectedProject.name,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                Text(
+                  "Caricamento...",
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  String _getCurrentFileName() {
-    if (widget.state.activeFileId != null && widget.state.files.isNotEmpty) {
-      final matchingFiles = widget.state.files.where(
-              (f) => f.fileId == widget.state.activeFileId);
-      if (matchingFiles.isNotEmpty) {
-        return matchingFiles.first.name.replaceAll(' ', '_').toLowerCase();
-      }
-    }
-    return 'unichart_diagram';
-  }
-
-  Widget _buildBreadcrumb(ThemeData theme) {
-    final hasSelectedFile = widget.state.activeFileId != null;
+  Widget _buildBreadcrumb(ThemeData theme, FileSystemLoaded state) {
+    final hasSelectedFile = state.activeFileId != null;
     String currentFileName = "";
 
-    if (hasSelectedFile && widget.state.files.isNotEmpty) {
-      final matchingFiles = widget.state.files.where(
-              (f) => f.fileId == widget.state.activeFileId
+    if (hasSelectedFile && state.files.isNotEmpty) {
+      final matchingFiles = state.files.where(
+            (f) => f.fileId == state.activeFileId,
       );
       if (matchingFiles.isNotEmpty) {
         currentFileName = matchingFiles.first.name;
@@ -151,23 +203,26 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
     );
     return Row(
       children: [
-        // Unichart
+        Icon(
+          Icons.auto_awesome,
+          size: 16,
+          color: theme.colorScheme.primary.withOpacity(0.7),
+        ),
+        const SizedBox(width: 8),
         Text(
           "Unichart",
           style: textStyle?.copyWith(
             color: theme.colorScheme.onSurface.withOpacity(0.6),
           ),
         ),
-        // Separator
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Icon(
-            Icons.chevron_right,
-            size: 12,
+            Icons.chevron_right_rounded,
+            size: 14,
             color: theme.colorScheme.onSurface.withOpacity(0.4),
           ),
         ),
-        // Project name
         Flexible(
           child: Text(
             widget.selectedProject.name,
@@ -179,17 +234,21 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        // File name if active
         if (hasSelectedFile) ...[
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Icon(
-              Icons.chevron_right,
-              size: 12,
+              Icons.chevron_right_rounded,
+              size: 14,
               color: theme.colorScheme.onSurface.withOpacity(0.4),
             ),
           ),
-          Flexible(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
             child: Text(
               currentFileName,
               style: textStyle?.copyWith(
@@ -198,6 +257,23 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+        if (!hasSelectedFile && state.files.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              "${state.files.length} file${state.files.length != 1 ? 's' : ''}",
+              style: textStyle?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                fontSize: 11,
+              ),
             ),
           ),
         ],

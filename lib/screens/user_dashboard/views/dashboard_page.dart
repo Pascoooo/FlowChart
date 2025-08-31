@@ -1,5 +1,4 @@
 // ... (omitted imports)
-import 'package:flowchart_thesis/screens/user_dashboard/views/workspace.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -129,34 +128,71 @@ class _DashboardPageState extends State<DashboardPage> {
     debugPrint('========================');
 
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 800),
+      reverseDuration: const Duration(milliseconds: 600),
+      switchInCurve: Curves.easeOutExpo,
+      switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (Widget child, Animation<double> animation) {
-        if (child.key == const ValueKey('project-selector')) {
+        final isProjectSelector = child.key == const ValueKey('project-selector');
+
+        if (isProjectSelector) {
+          // Animazione per tornare alla dashboard (ProjectSelector)
           return SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(-1.0, 0.0),
+              begin: const Offset(0.0, -0.3), // Entra dall'alto
               end: Offset.zero,
             ).animate(CurvedAnimation(
               parent: animation,
-              curve: Curves.easeOutCubic,
+              curve: const Interval(0.0, 0.8, curve: Curves.easeOutExpo),
             )),
-            child: FadeTransition(opacity: animation, child: child),
+            child: ScaleTransition(
+              scale: Tween<double>(
+                begin: 0.85,
+                end: 1.0,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: const Interval(0.2, 1.0, curve: Curves.easeOutBack),
+              )),
+              child: FadeTransition(
+                opacity: Tween<double>(
+                  begin: 0.0,
+                  end: 1.0,
+                ).animate(CurvedAnimation(
+                  parent: animation,
+                  curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
+                )),
+                child: child,
+              ),
+            ),
           );
         } else {
+          // Animazione per andare al workspace
           return SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(1.0, 0.0),
+              begin: const Offset(1.2, 0.0),
               end: Offset.zero,
             ).animate(CurvedAnimation(
               parent: animation,
-              curve: Curves.easeOutCubic,
+              curve: const Interval(0.0, 0.9, curve: Curves.easeOutCubic),
             )),
-            child: FadeTransition(opacity: animation, child: child),
+            child: ScaleTransition(
+              scale: Tween<double>(
+                begin: 0.92,
+                end: 1.0,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: const Interval(0.1, 1.0, curve: Curves.easeOutQuart),
+              )),
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+            ),
           );
         }
       },
       child: state.selectedProject != null
-          ? Workspace(
+          ? ProjectWorkspace(
         key: ValueKey('workspace-${state.selectedProject!.projectId}'),
         selectedProject: state.selectedProject!,
       )

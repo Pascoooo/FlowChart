@@ -100,7 +100,7 @@ class AppRouter {
   static void goToAuth(BuildContext context) =>
       context.goNamed(AppRoutes.authName);
   static void goToSettings(BuildContext context) =>
-      context.goNamed(AppRoutes.settingsName);
+      context.pushNamed(AppRoutes.settingsName);
   static void goToError(BuildContext context, {String? error}) =>
       context.goNamed(AppRoutes.errorName, extra: error);
 }

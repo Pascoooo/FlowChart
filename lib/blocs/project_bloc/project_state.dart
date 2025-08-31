@@ -56,10 +56,11 @@ class ProjectsLoaded extends ProjectState {
     MyProject? selectedProject,
     String? error,
     String? successMessage,
+    bool clearSelectedProject = false,
   }) {
     return ProjectsLoaded(
       projects: projects ?? this.projects,
-      selectedProject: selectedProject ?? this.selectedProject,
+      selectedProject: clearSelectedProject ? null : (selectedProject ?? this.selectedProject),
       error: error,
     );
   }

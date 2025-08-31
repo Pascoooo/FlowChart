@@ -68,38 +68,39 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     return Container(
       width: 320,
       margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            theme.colorScheme.surface,
-            theme.colorScheme.surface.withOpacity(0.95),
-            theme.colorScheme.surfaceVariant.withOpacity(0.1),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: theme.colorScheme.outline.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.1),
-            blurRadius: 24,
-            offset: const Offset(4, 0),
-          ),
-        ],
-      ),
       child: Column(
         children: [
-          _buildHeader(theme),
-          _buildDivider(theme),
-          Expanded(child: _buildFileSystemView(theme)),
-          // Nuovo file button alla fine della lista files
-          _buildCreateFileButton(theme),
-          // Separatore principale prima dei bottoni in basso
-          _buildMainDivider(theme),
+          // Primo Container: Contiene la lista dei file ed è espanso per occupare lo spazio rimanente.
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withOpacity(0.1),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.shadow.withOpacity(0.1),
+                    blurRadius: 24,
+                    offset: const Offset(4, 0),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  _buildHeader(theme),
+                  _buildDivider(theme),
+                  Expanded(child: _buildFileSystemView(theme)),
+                  _buildCreateFileButton(theme),
+                ],
+              ),
+            ),
+          ),
+          // Spazio tra i due riquadri
+          const SizedBox(height: 16),
+          // Secondo Container: Contiene solo i bottoni e ha altezza fissa.
           _buildBottomActions(theme),
         ],
       ),
@@ -115,6 +116,29 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       ),
       child: Row(
         children: [
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () {
+                context.read<ProjectBloc>().add(const DeselectProject());
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.arrow_back_rounded,
+                  size: 20,
+                  color: theme.colorScheme.secondary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
           AnimatedBuilder(
             animation: _floatingAnimation,
             builder: (context, child) {
@@ -171,29 +195,6 @@ class _ProjectSidebarState extends State<ProjectSidebar>
               ],
             ),
           ),
-          // Bottone per tornare ai progetti usando il BLoC
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () {
-                context.read<ProjectBloc>().add(const DeselectProject());
-              },
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  size: 20,
-                  color: theme.colorScheme.secondary,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -215,69 +216,24 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
   }
 
-  Widget _buildMainDivider(ThemeData theme) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      height: 32, // Altezza fissa per il separatore
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 2,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    theme.colorScheme.outline.withOpacity(0.5),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Icon(
-              Icons.more_horiz,
-              size: 16,
-              color: theme.colorScheme.outline.withOpacity(0.4),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              height: 2,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.outline.withOpacity(0.5),
-                    Colors.transparent,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildBottomActions(ThemeData theme) {
     return Container(
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.surfaceVariant.withOpacity(0.3),
-            theme.colorScheme.surfaceVariant.withOpacity(0.1),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: theme.colorScheme.outline.withOpacity(0.2),
+          color: theme.colorScheme.outline.withOpacity(0.1),
           width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.1),
+            blurRadius: 24,
+            offset: const Offset(4, 0),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -290,9 +246,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
           ModernMenuItem(
             icon: FontAwesomeIcons.rightFromBracket,
             title: "Logout",
-            onTap: () {
-              context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
-            },
+            onTap: _confirmLogout,
             isDestructive: true,
           ),
         ],
@@ -486,6 +440,23 @@ class _ProjectSidebarState extends State<ProjectSidebar>
           fileName: fileName,
         ),
       );
+    }
+  }
+
+  void _confirmLogout() async {
+    final bool? confirmed = await DialogService.showConfirmationDialog(
+      context,
+      title: 'Logout',
+      message: 'Sei sicuro di voler effettuare il logout?',
+      confirmText: 'Logout',
+      cancelText: 'Annulla',
+    );
+
+    if (confirmed == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
+      });
     }
   }
 }

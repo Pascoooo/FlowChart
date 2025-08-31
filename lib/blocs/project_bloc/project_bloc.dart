@@ -46,9 +46,10 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       ) {
     if (state is ProjectsLoaded) {
       final currentState = state as ProjectsLoaded;
-      emit(currentState.copyWith(selectedProject: null));
+      emit(currentState.copyWith(clearSelectedProject: true));
     }
   }
+
 
   Future<void> _onCreateProject(
       CreateProject event,

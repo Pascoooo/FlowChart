@@ -45,12 +45,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 decoration: BoxDecoration(
                   color: cs.surface,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: cs.outlineVariant.withOpacity(0.4)),
+                  border: Border.all(color: cs.outlineVariant.withAlpha((0.4 * 255).round())),
                   boxShadow: [
                     BoxShadow(
                       color: isDark
-                          ? Colors.black.withOpacity(0.25)
-                          : Colors.grey.withOpacity(0.08),
+                          ? Colors.black.withAlpha((0.25 * 255).round())
+                          : Colors.grey.withAlpha((0.08 * 255).round()),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -103,7 +103,7 @@ class _SettingsPageState extends State<SettingsPage> {
             Text(
               'Personalizza la tua esperienza',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).round()),
               ),
             ),
           ],
