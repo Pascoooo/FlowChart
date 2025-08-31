@@ -1,4 +1,4 @@
-import 'package:flowchart_thesis/config/widgets/show_dialogs.dart';
+import 'package:flowchart_thesis/config/services/dialog_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -58,7 +58,7 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
     DialogService.showConfirmationDialog(
       context,
       title: "Conferma",
-      content: "Sei sicuro di voler cancellare tutto il disegno?",
+      message: "Sei sicuro di voler cancellare tutto il disegno?",
       confirmText: "Conferma",
       cancelText: "Annulla",
       onConfirm: () {

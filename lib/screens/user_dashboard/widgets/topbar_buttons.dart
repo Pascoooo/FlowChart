@@ -1,3 +1,4 @@
+// lib/screens/user_dashboard/widgets/topbar_buttons.dart (Refactored)
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
@@ -5,13 +6,11 @@ import 'dart:js' as js;
 
 class TopbarButtons extends StatelessWidget {
   final FileSystemLoaded state;
-  final VoidCallback onBackToProjects;
   final VoidCallback? onExport;
 
   const TopbarButtons({
     super.key,
     required this.state,
-    required this.onBackToProjects,
     this.onExport,
   });
 
@@ -38,7 +37,6 @@ class TopbarButtons extends StatelessWidget {
             onPressed: () => onExport?.call(),
             theme: theme,
           ),
-
         ],
       ],
     );
@@ -52,8 +50,9 @@ class TopbarButtons extends StatelessWidget {
       'width=1200,height=800,left=100,top=100,resizable=yes,scrollbars=yes,status=yes'
     ]);
   }
-
 }
+
+
 
 class _TopBarButton extends StatefulWidget {
   final IconData icon;

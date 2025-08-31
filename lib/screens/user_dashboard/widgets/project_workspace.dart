@@ -1,4 +1,4 @@
-// lib/screens/user_dashboard/views/project_workspace.dart (Fixed)
+// lib/screens/user_dashboard/widgets/project_workspace.dart (Refactored)
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
@@ -13,12 +13,10 @@ import '../error/error_view.dart';
 
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
-  final VoidCallback onBackToProjects;
 
   const ProjectWorkspace({
     super.key,
     required this.selectedProject,
-    required this.onBackToProjects,
   });
 
   @override
@@ -28,7 +26,6 @@ class ProjectWorkspace extends StatefulWidget {
 class _ProjectWorkspaceState extends State<ProjectWorkspace>
     with TickerProviderStateMixin {
   late AnimationController _slideInController;
-  late AnimationController _scaleController;
   late Animation<Offset> _sidebarSlideAnimation;
   late Animation<Offset> _topbarSlideAnimation;
   late Animation<Offset> _workareaSlideAnimation;
@@ -39,17 +36,15 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   void initState() {
     super.initState();
     _initAnimations();
-    _slideInController.forward();
+    // Avvia l'animazione di entrata
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _slideInController.forward();
+    });
   }
 
   void _initAnimations() {
     _slideInController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
 
@@ -95,22 +90,15 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       parent: _slideInController,
       curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
     ));
-
-    // Start scale animation after slide in
-    _slideInController.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _scaleController.forward();
-      }
-    });
   }
 
   @override
   void dispose() {
     _slideInController.dispose();
-    _scaleController.dispose();
     super.dispose();
   }
 
+  @override
   Widget build(BuildContext context) {
     return BlocProvider<FileSystemBloc>(
       key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
@@ -124,63 +112,56 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       child: AnimatedBuilder(
         animation: _slideInController,
         builder: (context, child) {
-          return Stack(
+          return Row(
             children: [
-              // Main workspace layout
-              Row(
-                children: [
-                  // Sidebar with slide animation
-                  SlideTransition(
-                    position: _sidebarSlideAnimation,
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: ProjectSidebar(
-                        selectedProject: widget.selectedProject,
-                      ),
-                    ),
+              // Sidebar with slide animation
+              SlideTransition(
+                position: _sidebarSlideAnimation,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: ProjectSidebar(
+                    selectedProject: widget.selectedProject,
                   ),
+                ),
+              ),
 
-                  // Main content area
-                  Expanded(
-                    child: Padding(
-                      // Aggiungi un padding globale a tutta l'area di lavoro
-                      padding: const EdgeInsets.only(
-                        top: 16.0,
-                        right: 16.0,
-                        bottom: 16.0,
+              // Main content area
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    top: 16.0,
+                    right: 16.0,
+                    bottom: 16.0,
+                  ),
+                  child: Column(
+                    children: [
+                      // Topbar with slide animation
+                      SlideTransition(
+                        position: _topbarSlideAnimation,
+                        child: FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: _buildTopbar(),
+                        ),
                       ),
-                      child: Column(
-                        children: [
-                          // Topbar with slide animation
-                          SlideTransition(
-                            position: _topbarSlideAnimation,
+
+                      const SizedBox(height: 16),
+
+                      // Workarea with slide and scale animation
+                      Expanded(
+                        child: SlideTransition(
+                          position: _workareaSlideAnimation,
+                          child: ScaleTransition(
+                            scale: _workareaScaleAnimation,
                             child: FadeTransition(
                               opacity: _fadeAnimation,
-                              child: _buildTopbar(),
+                              child: _buildWorkarea(),
                             ),
                           ),
-
-                          // Aggiungi uno spazio esplicito tra la topbar e l'area di lavoro
-                          const SizedBox(height: 16),
-
-                          // Workarea con slide e scale animation
-                          Expanded(
-                            child: SlideTransition(
-                              position: _workareaSlideAnimation,
-                              child: ScaleTransition(
-                                scale: _workareaScaleAnimation,
-                                child: FadeTransition(
-                                  opacity: _fadeAnimation,
-                                  child: _buildWorkarea(),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ],
           );
@@ -189,21 +170,22 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     );
   }
 
-
   Widget _buildTopbar() {
     return BlocBuilder<FileSystemBloc, FileSystemState>(
       builder: (context, state) {
         if (state is FileSystemLoaded) {
-          return TopBar(state: state, onBackToProjects: widget.onBackToProjects);
+          return TopBar(
+            state: state,
+            selectedProject: widget.selectedProject,
+          );
         }
         return Container(
           height: 80,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
-            border: Border(
-              bottom: BorderSide(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-              ),
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
             ),
           ),
           child: Center(
@@ -253,10 +235,14 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Center(
         child: Column(
@@ -283,10 +269,14 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Center(
         child: Column(
@@ -337,10 +327,14 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Center(
         child: Column(

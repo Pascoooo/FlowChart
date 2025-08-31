@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import '../../../config/widgets/show_dialogs.dart';
+import '../../../config/services/dialog_service.dart';
 
 class ProjectSelector extends StatefulWidget {
   final List<MyProject> projects;
@@ -394,20 +394,18 @@ class _ProjectSelectorState extends State<ProjectSelector>
   }
 
   Future<void> _showCreateProjectDialog(BuildContext context) async {
-    await DialogService.showStyledInputDialog(
+    final String? projectName = await DialogService.showInputDialog(
       context,
       title: "Nuovo Progetto",
-      subtitle: "Dai un nome al tuo progetto per iniziare",
+      message: "Dai un nome al tuo progetto per iniziare",
       hintText: "es. Il mio diagramma di flusso",
-      icon: FontAwesomeIcons.folderPlus,
-      isFontAwesome: true,
       confirmText: "Crea Progetto",
-      onConfirm: (value) {
-        if (value.trim().isNotEmpty) {
-          widget.onCreateProject(value.trim());
-        }
-      },
+      cancelText: "Annulla",
     );
+
+    if (projectName != null && projectName.isNotEmpty) {
+      widget.onCreateProject(projectName);
+    }
   }
 
 

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../config/constants/theme_switch.dart';
-import '../../../config/widgets/show_dialogs.dart';
+import '../../../config/services/dialog_service.dart';
 import '../widgets/SettingsSection.dart';
 import '../widgets/SettingsSwitchTile.dart';
 import '../widgets/SettingsTile.dart';
@@ -179,20 +179,18 @@ class _SettingsPageState extends State<SettingsPage> {
   void _confirmResetSettings() {
     DialogService.showConfirmationDialog(
       context,
-      title: 'Ripristinare le impostazioni?',
-      content: 'Questa operazione ripristinerà tutte le preferenze ai valori predefiniti.',
-      confirmText: 'Conferma',
-      useFilledButton: true,
+      title: 'Ripristina impostazioni',
+      message: 'Sei sicuro di voler ripristinare tutte le impostazioni ai valori predefiniti? Questa azione non può essere annullata.',
+      confirmText: 'Ripristina',
+      cancelText: 'Annulla',
       onConfirm: () {
         setState(() {
           _notificationsEnabled = true;
           _autoSaveEnabled = true;
           _analyticsEnabled = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impostazioni ripristinate')),
-        );
-      },
+        Navigator.of(context).pop();
+      }
     );
   }
 

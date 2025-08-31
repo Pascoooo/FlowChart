@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
 
-import '../widgets/show_dialogs.dart';
+import 'dialog_service.dart';
 
 class ExportService {
   static const String _downloadName = 'unichart_export';
@@ -103,21 +103,6 @@ class ExportService {
             ),
           );
         }
-      }
-    });
-  }
-
-  /// Metodo per mostrare l'overlay di caricamento durante l'esportazione
-  void _exportToJpg(BuildContext context) {
-    DialogService.showLoadingDialog(
-      context,
-      message: 'Preparazione esportazione JPG...',
-    );
-
-    Future.delayed(const Duration(seconds: 1), () async {
-      // Logica di esportazione...
-      if (context.mounted) {
-        Navigator.of(context).pop(); // Chiudi l'overlay
       }
     });
   }

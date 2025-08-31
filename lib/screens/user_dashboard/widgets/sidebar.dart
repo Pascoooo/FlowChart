@@ -3,10 +3,8 @@ import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_thesis/config/widgets/buttons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
-import 'package:universal_html/html.dart';
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/file_bloc/file_system_bloc.dart';
@@ -15,7 +13,7 @@ import '../../../blocs/file_bloc/file_system_state.dart';
 import '../../../blocs/project_bloc/project_bloc.dart';
 import '../../../blocs/project_bloc/project_event.dart';
 import '../../../config/router/app_router.dart';
-import '../../../config/widgets/show_dialogs.dart';
+import '../../../config/services/dialog_service.dart';
 
 class ProjectSidebar extends StatefulWidget {
   final MyProject selectedProject;
@@ -32,7 +30,6 @@ class ProjectSidebar extends StatefulWidget {
 class _ProjectSidebarState extends State<ProjectSidebar>
     with TickerProviderStateMixin {
   late AnimationController _floatingController;
-  late AnimationController _shimmerController;
   late Animation<double> _floatingAnimation;
 
   @override
@@ -46,10 +43,6 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       duration: const Duration(seconds: 3),
       vsync: this,
     );
-    _shimmerController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    );
 
     _floatingAnimation = Tween<double>(
       begin: -2,
@@ -60,13 +53,11 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     ));
 
     _floatingController.repeat(reverse: true);
-    _shimmerController.repeat();
   }
 
   @override
   void dispose() {
     _floatingController.dispose();
-    _shimmerController.dispose();
     super.dispose();
   }
 
@@ -74,11 +65,9 @@ class _ProjectSidebarState extends State<ProjectSidebar>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
+    return Container(
       width: 320,
-      margin: const EdgeInsets.all(16), // Margine esterno per separazione
+      margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -89,7 +78,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
             theme.colorScheme.surfaceVariant.withOpacity(0.1),
           ],
         ),
-        borderRadius: BorderRadius.circular(24), // Bordi arrotondati
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: theme.colorScheme.outline.withOpacity(0.1),
           width: 1,
@@ -106,13 +95,10 @@ class _ProjectSidebarState extends State<ProjectSidebar>
         children: [
           _buildHeader(theme),
           _buildDivider(theme),
-          _buildBackButton(theme), // Nuovo bottone "Torna ai Progetti"
-          _buildDivider(theme),
-          _buildProjectInfo(theme),
-          _buildDivider(theme),
-          _buildCreateFileButton(theme),
-          _buildDivider(theme),
           Expanded(child: _buildFileSystemView(theme)),
+          // Nuovo file button alla fine della lista files
+          _buildCreateFileButton(theme),
+          // Separatore principale prima dei bottoni in basso
           _buildMainDivider(theme),
           _buildBottomActions(theme),
         ],
@@ -185,406 +171,34 @@ class _ProjectSidebarState extends State<ProjectSidebar>
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBackButton(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              theme.colorScheme.secondary.withOpacity(0.1),
-              theme.colorScheme.secondary.withOpacity(0.05),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: theme.colorScheme.secondary.withOpacity(0.2),
-          ),
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              // Fix: Usa l'evento corretto per tornare ai progetti
-              context.read<ProjectBloc>().add(const DeselectProject());
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.secondary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.arrow_back_rounded,
-                      size: 16,
-                      color: theme.colorScheme.secondary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    "Torna ai Progetti",
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.secondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProjectInfo(ThemeData theme) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.primaryContainer.withOpacity(0.3),
-            theme.colorScheme.primaryContainer.withOpacity(0.1),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.primary.withOpacity(0.2),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.2),
+          // Bottone per tornare ai progetti usando il BLoC
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
               borderRadius: BorderRadius.circular(8),
-            ),
-            child: FaIcon(
-              FontAwesomeIcons.folder,
-              size: 16,
-              color: theme.colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Progetto Attivo",
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  widget.selectedProject.name,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.primary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCreateFileButton(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ModernMenuItem(
-        icon: FontAwesomeIcons.plus,
-        title: "Nuovo File",
-        onTap: () => _showCreateFileDialog(context, widget.selectedProject.projectId),
-        isPrimaryAction: true,
-      ),
-    );
-  }
-
-  Widget _buildFileSystemView(ThemeData theme) {
-    return BlocConsumer<FileSystemBloc, FileSystemState>(
-      listener: (context, state) {
-        if (state is FileSystemLoaded) {
-          if (state.successMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.successMessage!),
-                backgroundColor: theme.colorScheme.primary,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
+              onTap: () {
+                // Usa il BLoC per tornare ai progetti - NO animazioni manuali
+                context.read<ProjectBloc>().add(const DeselectProject());
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-              ),
-            );
-          }
-        } else if (state is FileSystemError) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: theme.colorScheme.error,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          );
-        }
-      },
-      builder: (context, fileState) {
-        if (fileState is FileSystemLoading) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(
-                  color: theme.colorScheme.primary,
+                child: Icon(
+                  Icons.arrow_back_rounded,
+                  size: 20,
+                  color: theme.colorScheme.secondary,
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  "Caricamento file...",
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-        if (fileState is FileSystemError) {
-          return _buildErrorView(theme, fileState.message);
-        }
-        if (fileState is FileSystemLoaded) {
-          final files = fileState.files;
-          if (files.isEmpty) {
-            return _buildEmptyFilesView(theme);
-          }
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            child: ListView.builder(
-              padding: EdgeInsets.zero,
-              itemCount: files.length,
-              itemBuilder: (context, index) {
-                final file = files[index];
-                final isSelected = file.fileId == fileState.activeFileId;
-                return _buildFileTile(theme, file, isSelected);
-              },
-            ),
-          );
-        }
-        return const SizedBox.shrink();
-      },
-    );
-  }
-
-  Widget _buildErrorView(ThemeData theme, String message) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.errorContainer,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.error_outline,
-              color: theme.colorScheme.error,
-              size: 32,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Errore',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.colorScheme.error,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onErrorContainer,
+              ),
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildEmptyFilesView(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  theme.colorScheme.primary.withOpacity(0.1),
-                  theme.colorScheme.primary.withOpacity(0.05),
-                ],
-              ),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.folder_open_rounded,
-              size: 40,
-              color: theme.colorScheme.primary.withOpacity(0.7),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Nessun File',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Inizia creando il tuo\nprimo file',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFileTile(ThemeData theme, MyFile file, bool isSelected) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            // Invia l'evento per aprire un file
-            context.read<FileSystemBloc>().add(OpenFile(
-              fileId: file.fileId,
-              projectId: widget.selectedProject.projectId,
-              fileName: file.name,
-            ));
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              gradient: isSelected
-                  ? LinearGradient(
-                colors: [
-                  theme.colorScheme.primary.withOpacity(0.15),
-                  theme.colorScheme.primary.withOpacity(0.08),
-                ],
-              )
-                  : null,
-              border: isSelected
-                  ? Border.all(
-                color: theme.colorScheme.primary.withOpacity(0.3),
-                width: 1,
-              )
-                  : null,
-            ),
-            child: Row(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? theme.colorScheme.primary.withOpacity(0.2)
-                        : theme.colorScheme.surfaceVariant.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.description_rounded,
-                    size: 16,
-                    color: isSelected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    file.name,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (isSelected)
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showCreateFileDialog(BuildContext context, String projectId) async {
-    await DialogService.showStyledInputDialog(
-      context,
-      title: 'Crea Nuovo File',
-      subtitle: 'Inserisci il nome del nuovo file',
-      hintText: 'Nome del File',
-      icon: FontAwesomeIcons.file,
-      isFontAwesome: true,
-      confirmText: 'Crea',
-      cancelText: 'Annulla',
-      onConfirm: (fileName) {
-        if (fileName.isNotEmpty) {
-          context.read<FileSystemBloc>().add(CreateNewFile(
-            projectId: projectId,
-            fileName: fileName,
-          ));
-        }
-      },
-    );
-  }
-
 
   Widget _buildDivider(ThemeData theme) {
     return Container(
@@ -605,6 +219,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
   Widget _buildMainDivider(ThemeData theme) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      height: 32, // Altezza fissa per il separatore
       child: Row(
         children: [
           Expanded(
@@ -614,7 +229,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
                 gradient: LinearGradient(
                   colors: [
                     Colors.transparent,
-                    Colors.white.withOpacity(0.3), // Linea bianca
+                    theme.colorScheme.outline.withOpacity(0.5),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(1),
@@ -626,7 +241,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
             child: Icon(
               Icons.more_horiz,
               size: 16,
-              color: Colors.white.withOpacity(0.4),
+              color: theme.colorScheme.outline.withOpacity(0.4),
             ),
           ),
           Expanded(
@@ -635,7 +250,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.white.withOpacity(0.3), // Linea bianca
+                    theme.colorScheme.outline.withOpacity(0.5),
                     Colors.transparent,
                   ],
                 ),
@@ -659,9 +274,9 @@ class _ProjectSidebarState extends State<ProjectSidebar>
             theme.colorScheme.surfaceVariant.withOpacity(0.1),
           ],
         ),
-        borderRadius: BorderRadius.circular(16), // Contorno tondeggiante
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withOpacity(0.2), // Contorno bianco sottile
+          color: theme.colorScheme.outline.withOpacity(0.2),
           width: 1,
         ),
       ),
@@ -684,5 +299,431 @@ class _ProjectSidebarState extends State<ProjectSidebar>
         ],
       ),
     );
+  }
+
+  Widget _buildFileSystemView(ThemeData theme) {
+    return BlocBuilder<FileSystemBloc, FileSystemState>(
+      builder: (context, fileState) {
+        if (fileState is FileSystemLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (fileState is FileSystemError) {
+          return Center(child: Text(fileState.message));
+        }
+
+        if (fileState is FileSystemLoaded) {
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: fileState.files.length,
+            itemBuilder: (context, index) {
+              final file = fileState.files[index];
+              final isSelected = file.fileId == fileState.activeFileId;
+
+              return _buildFileItem(theme, file, isSelected, context);
+            },
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  Widget _buildFileItem(ThemeData theme, MyFile file, bool isSelected, BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? theme.colorScheme.primary.withOpacity(0.1)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected
+              ? theme.colorScheme.primary.withOpacity(0.3)
+              : theme.colorScheme.outline.withOpacity(0.1),
+        ),
+      ),
+      child: ListTile(
+        leading: Icon(
+          Icons.insert_drive_file,
+          color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.6),
+        ),
+        title: Text(
+          file.name,
+          style: TextStyle(
+            color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        trailing: PopupMenuButton<String>(
+          icon: Icon(
+            Icons.more_vert,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
+          onSelected: (value) {
+            if (value == 'rename') {
+              _showRenameFileDialog(context, file);
+            } else if (value == 'delete') {
+              _showDeleteConfirmationDialog(context, file);
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem<String>(
+              value: 'rename',
+              child: Row(
+                children: [
+                  Icon(Icons.edit),
+                  SizedBox(width: 8),
+                  Text('Rinomina'),
+                ],
+              ),
+            ),
+            const PopupMenuItem<String>(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete),
+                  SizedBox(width: 8),
+                  Text('Elimina'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        onTap: () {
+          if (!isSelected) {
+            context.read<FileSystemBloc>().add(OpenFile(fileId: file.fileId, projectId: widget.selectedProject.projectId, fileName: file.name) );
+          }
+        },
+      ),
+    );
+  }
+
+  void _showRenameFileDialog(BuildContext context, MyFile file) {
+    final nameController = TextEditingController(text: file.name);
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.surface,
+                  theme.colorScheme.surface.withOpacity(0.95),
+                ],
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary.withOpacity(0.2),
+                        theme.colorScheme.primary.withOpacity(0.1),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.edit,
+                    size: 32,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Rinomina File',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Nuovo nome file',
+                    filled: true,
+                    fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                  ),
+                  onSubmitted: (value) {
+                    if (value.trim().isNotEmpty && value.trim() != file.name) {
+                      context.read<FileSystemBloc>().add(
+                        RenameFile(
+                          fileId: file.fileId,
+                          newName: value.trim(), projectId: widget.selectedProject.projectId
+                        ),
+                      );
+                      Navigator.of(dialogContext).pop();
+                    }
+                  },
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Annulla',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              theme.colorScheme.primary,
+                              theme.colorScheme.secondary,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: () {
+                            final newName = nameController.text.trim();
+                            if (newName.isNotEmpty && newName != file.name) {
+                              context.read<FileSystemBloc>().add(
+                                RenameFile(
+                                  fileId: file.fileId,
+                                  newName: newName, projectId: widget.selectedProject.projectId
+                                ),
+                              );
+                              Navigator.of(dialogContext).pop();
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            'Rinomina',
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showDeleteConfirmationDialog(BuildContext context, MyFile file) {
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.surface,
+                  theme.colorScheme.surface.withOpacity(0.95),
+                ],
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.error.withOpacity(0.2),
+                        theme.colorScheme.error.withOpacity(0.1),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.warning_amber_rounded,
+                    size: 32,
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Elimina File',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Sei sicuro di voler eliminare "${file.name}"? Questa azione è irreversibile.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Annulla',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.error,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: () {
+                            context.read<FileSystemBloc>().add(
+                              DeleteFile(
+                                fileId: file.fileId, projectId: widget.selectedProject.projectId
+                              ),
+                            );
+                            Navigator.of(dialogContext).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            'Elimina',
+                            style: TextStyle(
+                              color: theme.colorScheme.onError,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCreateFileButton(ThemeData theme) {
+    final projectId = widget.selectedProject.projectId;
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.primary.withOpacity(0.1),
+            theme.colorScheme.primary.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.primary.withOpacity(0.2),
+        ),
+      ),
+      child: ListTile(
+        onTap: () => _showCreateFileDialog(context, projectId),
+        leading: Icon(
+          Icons.add_circle_outline,
+          color: theme.colorScheme.primary,
+        ),
+        title: Text(
+          "Nuovo File",
+          style: TextStyle(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+  void _showCreateFileDialog(BuildContext context, String projectId) async {
+    final String? fileName = await DialogService.showInputDialog(
+      context,
+      title: "Crea Nuovo File",
+      message: "Dai un nome al tuo nuovo file",
+      hintText: "es. Diagramma Principale",
+      confirmText: "Crea File",
+    );
+
+    if (fileName != null && fileName.isNotEmpty) {
+      context.read<FileSystemBloc>().add(
+        CreateNewFile(
+          projectId: projectId,
+          fileName: fileName,
+        ),
+      );
+    }
   }
 }
