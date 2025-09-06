@@ -398,7 +398,8 @@ class _ProjectSelectorState extends State<ProjectSelector>
       context,
       title: "Nuovo Progetto",
       message: "Dai un nome al tuo progetto per iniziare",
-      hintText: "es. Il mio diagramma di flusso",
+      placeholder: "Nome del Progetto",
+      existingNames: widget.projects.map((p) => p.name).toList(),
       confirmText: "Crea Progetto",
       cancelText: "Annulla",
     );

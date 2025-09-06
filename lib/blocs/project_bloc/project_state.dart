@@ -1,3 +1,4 @@
+// lib/blocs/project_bloc/project_state.dart
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:project_repository/project_repository.dart';
@@ -10,17 +11,32 @@ abstract class ProjectState extends Equatable {
   List<Object?> get props => [];
 }
 
-/// Stato iniziale del progetto
+/// Initial state of the project
 class ProjectInitial extends ProjectState {
   const ProjectInitial();
 }
 
-/// Stato che indica che un'operazione è in corso
+/// Loading state for initial project load
 class ProjectLoading extends ProjectState {
   const ProjectLoading();
 }
 
-/// Stato che rappresenta un errore durante un'operazione
+/// State indicating an operation is in progress (create, rename, delete)
+class ProjectOperationInProgress extends ProjectState {
+  const ProjectOperationInProgress();
+}
+
+/// State indicating an operation completed successfully
+class ProjectOperationSuccess extends ProjectState {
+  final String? message;
+
+  const ProjectOperationSuccess({this.message});
+
+  @override
+  List<Object?> get props => [message];
+}
+
+/// Error state for any project operation
 class ProjectError extends ProjectState {
   final String message;
 
@@ -30,45 +46,27 @@ class ProjectError extends ProjectState {
   List<Object> get props => [message];
 }
 
-/// Stato di successo
-class ProjectSuccess extends ProjectState {
-  final String message;
-
-  const ProjectSuccess({required this.message});
-
-  @override
-  List<Object> get props => [message];
-}
-
+/// Main state containing the list of projects
 class ProjectsLoaded extends ProjectState {
   final List<MyProject> projects;
   final MyProject? selectedProject;
-  final String? error;
 
   const ProjectsLoaded({
     required this.projects,
     this.selectedProject,
-    this.error,
   });
 
   ProjectsLoaded copyWith({
     List<MyProject>? projects,
     MyProject? selectedProject,
-    String? error,
-    String? successMessage,
     bool clearSelectedProject = false,
   }) {
     return ProjectsLoaded(
       projects: projects ?? this.projects,
       selectedProject: clearSelectedProject ? null : (selectedProject ?? this.selectedProject),
-      error: error,
     );
   }
 
   @override
-  List<Object?> get props => [
-    projects,
-    selectedProject,
-    error,
-  ];
+  List<Object?> get props => [projects, selectedProject];
 }
