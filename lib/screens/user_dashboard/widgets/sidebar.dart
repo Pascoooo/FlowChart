@@ -309,6 +309,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
+
         trailing: PopupMenuButton<String>(
           icon: Icon(
             Icons.more_vert,
@@ -354,6 +355,15 @@ class _ProjectSidebarState extends State<ProjectSidebar>
   }
 
   void _showRenameFileDialog(BuildContext context, MyFile file) async {
+    if (file.name == 'main') {
+      await DialogService.showInfoDialog(
+        context,
+        title: "Azione Non Permessa",
+        content: const Text('Il "main" non può essere rinominato.'),
+        icon: Icons.info_outline,
+      );
+      return;
+    }
     final String? newName = await DialogService.showInputDialog(
       context,
       title: "Rinomina File",
@@ -374,6 +384,15 @@ class _ProjectSidebarState extends State<ProjectSidebar>
   }
 
   void _showDeleteConfirmationDialog(BuildContext context, MyFile file) async {
+    if (file.name == 'main') {
+      await DialogService.showInfoDialog(
+        context,
+        title: "Azione Non Permessa",
+        content: const Text('Il file "main" non può essere eliminato.'),
+        icon: Icons.info_outline,
+      );
+      return;
+    }
     final bool? confirmed = await DialogService.showConfirmationDialog(
       context,
       title: "Elimina File",
@@ -453,10 +472,8 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
 
     if (confirmed == true) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
-      });
+      if (!mounted) return;
+      context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
     }
   }
 }

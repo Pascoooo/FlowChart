@@ -128,66 +128,29 @@ class _DashboardPageState extends State<DashboardPage> {
     debugPrint('========================');
 
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 800),
-      reverseDuration: const Duration(milliseconds: 600),
-      switchInCurve: Curves.easeOutExpo,
-      switchOutCurve: Curves.easeInCubic,
+      duration: const Duration(milliseconds: 300),
       transitionBuilder: (Widget child, Animation<double> animation) {
-        final isProjectSelector = child.key == const ValueKey('project-selector');
-
-        if (isProjectSelector) {
-          // Animazione per tornare alla dashboard (ProjectSelector)
+        if (child.key == const ValueKey('project-selector')) {
           return SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(0.0, -0.3), // Entra dall'alto
+              begin: const Offset(-1.0, 0.0),
               end: Offset.zero,
             ).animate(CurvedAnimation(
               parent: animation,
-              curve: const Interval(0.0, 0.8, curve: Curves.easeOutExpo),
+              curve: Curves.easeOutCubic,
             )),
-            child: ScaleTransition(
-              scale: Tween<double>(
-                begin: 0.85,
-                end: 1.0,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: const Interval(0.2, 1.0, curve: Curves.easeOutBack),
-              )),
-              child: FadeTransition(
-                opacity: Tween<double>(
-                  begin: 0.0,
-                  end: 1.0,
-                ).animate(CurvedAnimation(
-                  parent: animation,
-                  curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
-                )),
-                child: child,
-              ),
-            ),
+            child: FadeTransition(opacity: animation, child: child),
           );
         } else {
-          // Animazione per andare al workspace
           return SlideTransition(
             position: Tween<Offset>(
-              begin: const Offset(1.2, 0.0),
+              begin: const Offset(1.0, 0.0),
               end: Offset.zero,
             ).animate(CurvedAnimation(
               parent: animation,
-              curve: const Interval(0.0, 0.9, curve: Curves.easeOutCubic),
+              curve: Curves.easeOutCubic,
             )),
-            child: ScaleTransition(
-              scale: Tween<double>(
-                begin: 0.92,
-                end: 1.0,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: const Interval(0.1, 1.0, curve: Curves.easeOutQuart),
-              )),
-              child: FadeTransition(
-                opacity: animation,
-                child: child,
-              ),
-            ),
+            child: FadeTransition(opacity: animation, child: child),
           );
         }
       },

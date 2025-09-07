@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class DialogService {
-  /// Un metodo helper privato per mostrare tutti i dialoghi.
-  /// Gestisce il posizionamento e le transizioni per garantire che i dialoghi
-  /// siano sempre centrati, anche sul web.
+  /// Mostra un dialogo centrato; il builder riceve il context del dialogo
+  /// così che tutte le chiamate a Navigator.pop usino la rotta del dialogo.
   static Future<T?> _showCenteredDialog<T>({
     required BuildContext context,
-    required Widget child,
+    required Widget Function(BuildContext) builder,
     bool barrierDismissible = true,
   }) {
     return showGeneralDialog<T>(
@@ -16,10 +15,10 @@ class DialogService {
       barrierDismissible: barrierDismissible,
       barrierLabel: '',
       transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (context, anim1, anim2) {
+      pageBuilder: (dialogContext, anim1, anim2) {
         return Align(
           alignment: Alignment.center,
-          child: child,
+          child: Builder(builder: (inner) => builder(inner)),
         );
       },
       transitionBuilder: (context, anim1, anim2, child) {
@@ -43,7 +42,7 @@ class DialogService {
     return _showCenteredDialog<void>(
       context: context,
       barrierDismissible: barrierDismissible,
-      child: CupertinoAlertDialog(
+      builder: (dialogContext) => CupertinoAlertDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -69,23 +68,24 @@ class DialogService {
       }) {
     return _showCenteredDialog<bool?>(
       context: context,
-      child: CupertinoAlertDialog(
+      builder: (dialogContext) => CupertinoAlertDialog(
         title: Text(
           title,
-          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
         ),
         content: Text(message),
         actions: [
           CupertinoDialogAction(
             isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: Text(cancelText),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
             onPressed: () {
-              onConfirm?.call();
-              Navigator.pop(context, true);
+              // Chiudi il dialogo usando il context locale, poi esegui la callback
+              Navigator.pop(dialogContext, true);
+              WidgetsBinding.instance.addPostFrameCallback((_) => onConfirm?.call());
             },
             child: Text(confirmText),
           ),
@@ -105,31 +105,31 @@ class DialogService {
       }) {
     return _showCenteredDialog<void>(
       context: context,
-      child: CupertinoAlertDialog(
+      builder: (dialogContext) => CupertinoAlertDialog(
         title: icon != null
             ? Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             isFontAwesome
-                ? FaIcon(icon, color: Theme.of(context).colorScheme.primary)
-                : Icon(icon, color: Theme.of(context).colorScheme.primary),
+                ? FaIcon(icon, color: Theme.of(dialogContext).colorScheme.primary)
+                : Icon(icon, color: Theme.of(dialogContext).colorScheme.primary),
             const SizedBox(width: 8),
             Text(
               title,
-              style: TextStyle(color: Theme.of(context).colorScheme.primary),
+              style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
             ),
           ],
         )
             : Text(
           title,
-          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
         ),
         content: content,
         actions: [
           CupertinoDialogAction(
             isDefaultAction: true,
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text(okText),
           ),
         ],
@@ -148,14 +148,14 @@ class DialogService {
         String cancelText = 'Annulla',
         String confirmText = 'Conferma',
       }) {
-    final TextEditingController controller = TextEditingController(text: initialValue);
+    final controller = TextEditingController(text: initialValue);
 
     return _showCenteredDialog<String?>(
       context: context,
-      child: CupertinoAlertDialog(
+      builder: (dialogContext) => CupertinoAlertDialog(
         title: Text(
           title,
-          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -169,18 +169,18 @@ class DialogService {
               autofocus: true,
               placeholder: hintText,
               padding: const EdgeInsets.all(12),
-              onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+              onSubmitted: (value) => Navigator.of(dialogContext).pop(value.trim()),
             ),
           ],
         ),
         actions: [
           CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context, null),
+            onPressed: () => Navigator.pop(dialogContext, null),
             child: Text(cancelText),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
             child: Text(confirmText),
           ),
         ],
@@ -199,22 +199,21 @@ class DialogService {
     return _showCenteredDialog<T?>(
       context: context,
       barrierDismissible: barrierDismissible,
-      child: CupertinoAlertDialog(
+      builder: (dialogContext) => CupertinoAlertDialog(
         title: title != null
             ? DefaultTextStyle(
-          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
           child: title,
         )
             : null,
         content: content,
-        actions: actions ??
-            [
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
+        actions: actions ?? [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }

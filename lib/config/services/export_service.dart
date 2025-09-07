@@ -65,7 +65,7 @@ class ExportService {
   }) async {
     final theme = Theme.of(context);
 
-    void _showExportingOverlay(BuildContext context, String message) {
+    void showExportingOverlay(BuildContext context, String message) {
       DialogService.showLoadingDialog(
         context,
         message: message,
@@ -73,7 +73,7 @@ class ExportService {
     }
 
     // Mostra indicatore di caricamento
-    _showExportingOverlay(context, 'Preparazione esportazione JPG...');
+    showExportingOverlay(context, 'Preparazione esportazione JPG...');
 
 
 

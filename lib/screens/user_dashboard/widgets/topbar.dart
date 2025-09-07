@@ -1,12 +1,8 @@
-// lib/screens/user_dashboard/widgets/topbar.dart (Updated)
-import 'package:file_repository/file_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
-import 'topbar_buttons.dart';
 
 class TopBar extends StatefulWidget {
   final MyProject selectedProject;
@@ -114,12 +110,7 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
           Expanded(
             child: _buildBreadcrumb(theme, state),
           ),
-          // Passa le callback ai bottoni
-          TopbarButtons(
-            state: state,
-            onEdit: widget.onEdit,
-            onExport: widget.onExport,
-          ),
+          _buildButtons(state),
         ],
       ),
     );
@@ -265,7 +256,7 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
@@ -275,6 +266,27 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
                 fontSize: 11,
               ),
             ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildButtons(FileSystemLoaded state) {
+    final hasSelectedFile = state.activeFileId != null;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasSelectedFile) ...[
+          IconButton(
+            icon: const Icon(Icons.edit, size: 20),
+            onPressed: widget.onEdit,
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.download, size: 20),
+            onPressed: widget.onExport,
           ),
         ],
       ],

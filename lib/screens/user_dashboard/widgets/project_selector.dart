@@ -1,8 +1,11 @@
 // lib/screens/user_dashboard/widgets/project_selector.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import '../../../blocs/project_bloc/project_bloc.dart';
+import '../../../blocs/project_bloc/project_event.dart';
 import '../../../config/services/dialog_service.dart';
 
 class ProjectSelector extends StatefulWidget {
@@ -204,7 +207,7 @@ class _ProjectSelectorState extends State<ProjectSelector>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
                 theme.colorScheme.surface,
               ],
             ),
@@ -219,64 +222,125 @@ class _ProjectSelectorState extends State<ProjectSelector>
               ),
             ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.primary.withOpacity(0.2),
-                        theme.colorScheme.primary.withOpacity(0.1),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: FaIcon(
-                    FontAwesomeIcons.folder,
-                    size: 24,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  project.name,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.access_time,
-                      size: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            theme.colorScheme.primary.withOpacity(0.2),
+                            theme.colorScheme.primary.withOpacity(0.1),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: FaIcon(
+                        FontAwesomeIcons.folder,
+                        size: 24,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(height: 16),
                     Text(
-                      "Modificato di recente",
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      project.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 12,
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          "Modificato di recente",
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              Positioned(
+                top: 8,
+                right: 8,
+                child: PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    if (value == 'rename') {
+                      final newName = await DialogService.showInputDialog(
+                        context,
+                        title: "Rinomina progetto",
+                        message: "Inserisci un nuovo nome per il progetto",
+                        hintText: project.name,
+                        confirmText: "Rinomina",
+                        cancelText: "Annulla",
+                      );
+                      if (newName != null && newName.isNotEmpty) {
+                        context.read<ProjectBloc>().add(RenameProject(projectId: project.projectId, newName: newName));
+                      }
+                    } else if (value == 'delete') {
+                      final confirm = await DialogService.showConfirmationDialog(
+                        context,
+                        title: "Elimina progetto",
+                        message: "Sei sicuro di voler eliminare '${project.name}'?",
+                        confirmText: "Elimina",
+                        cancelText: "Annulla",
+                      );
+                      // Elimina il progetto se confermato
+                      if (confirm == true) {
+                        context.read<ProjectBloc>().add(DeleteProject(projectId: project.projectId));
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'rename',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 18),
+                          SizedBox(width: 8),
+                          Text("Rinomina"),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, size: 18),
+                          SizedBox(width: 8),
+                          Text("Elimina"),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+
 
   Widget _buildEmptyState(ThemeData theme) {
     return Container(
@@ -294,7 +358,7 @@ class _ProjectSelectorState extends State<ProjectSelector>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
               shape: BoxShape.circle,
             ),
             child: FaIcon(
