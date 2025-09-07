@@ -1,4 +1,3 @@
-// lib/blocs/project_bloc/project_bloc.dart
 import 'package:bloc/bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'project_event.dart';
@@ -9,10 +8,10 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
 
   ProjectBloc({required this.projectRepository})
       : super(const ProjectInitial()) {
-    on<LoadProjects>(_onLoadProjects);
     on<CreateProject>(_onCreateProject);
     on<DeleteProject>(_onDeleteProject);
     on<RenameProject>(_onRenameProject);
+    on<LoadProjects>(_onLoadProjects);
     on<SelectProject>(_onSelectProject);
     on<DeselectProject>(_onDeselectProject);
   }
@@ -26,9 +25,10 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       final projects = await projectRepository.getProjects();
       emit(ProjectsLoaded(projects: projects, selectedProject: null));
     } catch (e) {
-      emit(ProjectError(message: 'Errore nel caricamento dei progetti: ${e.toString()}'));
+      emit(const ProjectError(message: 'Errore nel caricamento del progetto.'));
     }
   }
+
 
   void _onSelectProject(
       SelectProject event,
@@ -50,64 +50,30 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+
   Future<void> _onCreateProject(
       CreateProject event,
       Emitter<ProjectState> emit,
       ) async {
+    // Mantieni lo stato corrente
     final currentState = state;
 
-    // Validate project name
-    final trimmedName = event.projectName.trim();
-    if (trimmedName.isEmpty) {
-      emit(const ProjectError(message: 'Il nome del progetto non può essere vuoto.'));
-      if (currentState is ProjectsLoaded) {
-        emit(currentState);
-      }
-      return;
-    }
-
-    // Check for duplicate names (case-insensitive)
-    if (currentState is ProjectsLoaded) {
-      final isDuplicate = currentState.projects.any(
-            (p) => p.name.toLowerCase() == trimmedName.toLowerCase(),
-      );
-
-      if (isDuplicate) {
-        emit(const ProjectError(message: 'Un progetto con questo nome esiste già.'));
-        emit(currentState);
-        return;
-      }
-    }
-
-    emit(const ProjectOperationInProgress());
-
+    emit(const ProjectLoading());
     try {
-      // Create the project
-      await projectRepository.createProject(name: trimmedName);
-
-      // Get the created project to obtain its ID
+      await projectRepository.createProject(name: event.projectName);
       final projects = await projectRepository.getProjects();
+
       final newProject = projects.firstWhere(
-            (p) => p.name == trimmedName,
+            (p) => p.name == event.projectName,
         orElse: () => projects.last,
       );
 
-      // Create the initial "main" file for the project
-      await projectRepository.addFileToProject(
-        projectId: newProject.projectId,
-        fileName: 'main',
-        content: '{}', // Empty JSON content for flowchart
-      );
-
-      emit(ProjectOperationSuccess(message: 'Progetto creato con successo'));
-
-      // Reload projects and select the new one
       emit(ProjectsLoaded(
         projects: projects,
         selectedProject: newProject,
       ));
     } catch (e) {
-      emit(ProjectError(message: 'Errore nella creazione del progetto: ${e.toString()}'));
+      emit(const ProjectError(message: 'Errore nella creazione del progetto.'));
 
       if (currentState is ProjectsLoaded) {
         emit(currentState);
@@ -123,27 +89,24 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       ) async {
     final currentState = state;
 
-    emit(const ProjectOperationInProgress());
-
+    emit(const ProjectLoading());
     try {
       await projectRepository.deleteProject(projectId: event.projectId);
       final projects = await projectRepository.getProjects();
 
-      // If the deleted project was selected, deselect it
+      // Se il progetto eliminato era selezionato, deselezionalo
       MyProject? selectedProject;
       if (currentState is ProjectsLoaded &&
           currentState.selectedProject?.projectId != event.projectId) {
         selectedProject = currentState.selectedProject;
       }
 
-      emit(const ProjectOperationSuccess(message: 'Progetto eliminato con successo'));
-
       emit(ProjectsLoaded(
         projects: projects,
         selectedProject: selectedProject,
       ));
     } catch (e) {
-      emit(ProjectError(message: 'Errore nell\'eliminazione del progetto: ${e.toString()}'));
+      emit(const ProjectError(message: 'Errore nella cancellazione del progetto.'));
 
       if (currentState is ProjectsLoaded) {
         emit(currentState);
@@ -157,40 +120,17 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       ) async {
     final currentState = state;
 
-    // Validate new name
-    final trimmedName = event.newName.trim();
-    if (trimmedName.isEmpty) {
-      emit(const ProjectError(message: 'Il nuovo nome non può essere vuoto.'));
-      if (currentState is ProjectsLoaded) {
-        emit(currentState);
-      }
-      return;
-    }
-
-    // Check for duplicate names (case-insensitive), excluding current project
-    if (currentState is ProjectsLoaded) {
-      final isDuplicate = currentState.projects.any(
-            (p) => p.projectId != event.projectId &&
-            p.name.toLowerCase() == trimmedName.toLowerCase(),
-      );
-
-      if (isDuplicate) {
-        emit(const ProjectError(message: 'Un progetto con questo nome esiste già.'));
-        emit(currentState);
-        return;
-      }
-    }
-
-    emit(const ProjectOperationInProgress());
-
+    emit(const ProjectLoading());
     try {
+      if (event.newName.trim().isEmpty) {
+        throw Exception('Il nuovo nome non può essere vuoto.');
+      }
+
       await projectRepository.renameProject(
-        projectId: event.projectId,
-        newName: trimmedName,
-      );
+          projectId: event.projectId, newName: event.newName.trim());
       final projects = await projectRepository.getProjects();
 
-      // Maintain selection of the renamed project
+      // Mantieni la selezione del progetto rinominato
       MyProject? selectedProject;
       if (currentState is ProjectsLoaded && currentState.selectedProject != null) {
         if (currentState.selectedProject!.projectId == event.projectId) {
@@ -203,18 +143,17 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         }
       }
 
-      emit(const ProjectOperationSuccess(message: 'Progetto rinominato con successo'));
-
       emit(ProjectsLoaded(
         projects: projects,
         selectedProject: selectedProject,
       ));
     } catch (e) {
-      emit(ProjectError(message: 'Errore nella rinominazione del progetto: ${e.toString()}'));
+      emit(const ProjectError(message: 'Errore nella rinominazione del progetto.'));
 
       if (currentState is ProjectsLoaded) {
         emit(currentState);
       }
     }
   }
+
 }
