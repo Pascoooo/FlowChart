@@ -18,13 +18,4 @@ abstract class UserRepository {
 
   // Sign in with Google
   Future<MyUser> signInWithGoogle();
-
-  // Send email magic link
-  Future<void> sendEmailLink(String email);
-
-  // Sign in with email link
-  Future<MyUser> signInWithEmailLink(String email, String emailLink);
-
-  // Check if string is valid email link
-  bool isEmailLink(String link);
 }

@@ -3,7 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ModernMenuItem extends StatefulWidget {
   final IconData icon;
-  final String? title; // Reso opzionale
+  final String title;
   final VoidCallback onTap;
   final bool isDestructive;
   final bool isPrimaryAction;
@@ -11,7 +11,7 @@ class ModernMenuItem extends StatefulWidget {
   const ModernMenuItem({
     super.key,
     required this.icon,
-    this.title, // Il titolo ora può essere nullo
+    required this.title,
     required this.onTap,
     this.isDestructive = false,
     this.isPrimaryAction = false,
@@ -57,7 +57,6 @@ class _ModernMenuItemState extends State<ModernMenuItem>
     final colorScheme = widget.isDestructive
         ? ColorScheme.fromSeed(seedColor: Colors.red, brightness: theme.brightness)
         : baseColorScheme;
-    final bool hasTitle = widget.title != null && widget.title!.isNotEmpty;
 
     final bool isHighlighted = _isHovered || _isPressed;
 
@@ -109,55 +108,47 @@ class _ModernMenuItemState extends State<ModernMenuItem>
             onEnter: (_) => setState(() => _isHovered = true),
             onExit: (_) => setState(() => _isHovered = false),
             cursor: SystemMouseCursors.click,
-            child: Tooltip(
-              message: widget.title ?? "",
-              child: GestureDetector(
-                onTapDown: (_) {
-                  setState(() => _isPressed = true);
-                  _scaleController.forward();
-                },
-                onTapUp: (_) {
-                  setState(() => _isPressed = false);
-                  _scaleController.reverse();
-                  widget.onTap();
-                },
-                onTapCancel: () {
-                  setState(() => _isPressed = false);
-                  _scaleController.reverse();
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: hasTitle
-                      ? const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  )
-                      : const EdgeInsets.all(10), // Padding compatto per solo icona
-                  decoration: BoxDecoration(
-                    gradient: backgroundGradient,
-                    borderRadius: BorderRadius.circular(hasTitle ? 12 : 8), // Bordi arrotondati diversi
-                    boxShadow: boxShadow,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    mainAxisSize: hasTitle ? MainAxisSize.max : MainAxisSize.min,
-                    children: [
-                      FaIcon(widget.icon, size: 18, color: iconColor),
-                      if (hasTitle) ...[ // Mostra il testo solo se presente
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            widget.title!,
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: textColor,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+            child: GestureDetector(
+              onTapDown: (_) {
+                setState(() => _isPressed = true);
+                _scaleController.forward();
+              },
+              onTapUp: (_) {
+                setState(() => _isPressed = false);
+                _scaleController.reverse();
+                widget.onTap();
+              },
+              onTapCancel: () {
+                setState(() => _isPressed = false);
+                _scaleController.reverse();
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  gradient: backgroundGradient,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: boxShadow,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    FaIcon(widget.icon, size: 18, color: iconColor),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: textColor,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    ],
-                  ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

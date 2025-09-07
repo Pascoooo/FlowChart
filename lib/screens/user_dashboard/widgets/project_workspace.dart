@@ -1,14 +1,13 @@
-// lib/screens/user_dashboard/project_workspace.dart (Updated)
 import 'package:flowchart_thesis/screens/user_dashboard/widgets/topbar.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/widgets/sidebar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
+import 'package:universal_html/html.dart' as html;
 import '../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../blocs/file_bloc/file_system_event.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
 import '../../../blocs/project_bloc/project_bloc.dart';
-import 'dart:js' as js;
 
 import '../../../config/services/export_service.dart';
 import '../views/workarea.dart';
@@ -91,14 +90,14 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     super.dispose();
   }
 
-  // Metodo per gestire l'azione di modifica
-  void _onEdit() {
-    final baseUrl = Uri.base.toString().split('#')[0];
-    js.context.callMethod('open', [
-      '$baseUrl#/drawing-editor',
-      '_blank',
-      'width=1200,height=800,left=100,top=100,resizable=yes,scrollbars=yes,status=yes'
-    ]);
+  void _onEdit() async {
+    final String path = Uri.base.toString().split('#')[0];
+    final Uri url = Uri.parse('$path#/drawing-editor');
+
+    html.WindowBase popup = html.window.open(url.toString(), 'editor', 'width=1200,height=800');
+    if (popup.closed!) {
+      throw("Popups blocked");
+    }
   }
 
   // Metodo per gestire l'azione di esportazione
@@ -234,3 +233,4 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     );
   }
 }
+

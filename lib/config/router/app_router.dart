@@ -1,14 +1,15 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flowchart_thesis/screens/auth/pages/auth_page.dart';
-
 import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_page.dart';
-import 'package:flowchart_thesis/screens/user_dashboard/sketch_edit/drawing_editor_page.dart'; // <-- FIX
+import 'package:flowchart_thesis/screens/user_dashboard/sketch_edit/drawing_editor_page.dart';
+import 'package:project_repository/project_repository.dart';
 import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
+import '../../blocs/project_bloc/project_bloc.dart';
 import '../error/error_page.dart';
 
 class AppRoutes {
@@ -27,72 +28,71 @@ class AppRoutes {
 
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
-
-  static final List<RouteBase> _routes = [
-    GoRoute(
-      path: AppRoutes.homePath,
-      name: AppRoutes.homeName,
-      builder: (context, state) => const DashboardPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.authPath,
-      name: AppRoutes.authName,
-      builder: (context, state) => const AuthPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.settingsPath,
-      name: AppRoutes.settingsName,
-      builder: (context, state) => const SettingsPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.drawingEditorPath,
-      name: AppRoutes.drawingEditorName,
-      builder: (context, state) => const DrawingEditorPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.errorPath,
-      name: AppRoutes.errorName,
-      builder: (context, state) {
-        final error = state.extra as String?;
-        return ErrorPage(
-          error: error ?? 'Errore generico',
-          onRetry: () => context.goNamed(AppRoutes.authName),
-        );
-      },
-    ),
-  ];
+  static final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
   static GoRouter getRouter(AuthenticationBloc authBloc) {
     return GoRouter(
       navigatorKey: _rootNavigatorKey,
-      routes: _routes,
       initialLocation: AppRoutes.authPath,
       errorBuilder: (context, state) => ErrorPage(
         error: state.error?.toString() ?? 'Errore di navigazione',
-        onRetry: () => context.goNamed(AppRoutes.homeName),
+        onRetry: () => context.goNamed(AppRoutes.authName),
       ),
       redirect: (context, state) => _handleRedirect(authBloc.state, state),
       refreshListenable: GoRouterRefreshStream(authBloc.stream),
+      routes: [
+        ShellRoute(
+          navigatorKey: _shellNavigatorKey,
+          builder: (context, state, child) {
+            final authState = context.read<AuthenticationBloc>().state;
+            if (authState.status == AuthenticationStatus.authenticated) {
+              return BlocProvider<ProjectBloc>(
+                key: ValueKey('project-bloc-${authState.user.userId}'),
+                create: (_) => ProjectBloc(
+                  projectRepository: FirebaseProjectRepo(uid: authState.user.userId),
+                ),
+                child: child,
+              );
+            }
+            return child;
+          },
+          routes: [
+            GoRoute(
+              path: AppRoutes.homePath,
+              name: AppRoutes.homeName,
+              builder: (context, state) => const DashboardPage(),
+            ),
+            GoRoute(
+              path: AppRoutes.settingsPath,
+              name: AppRoutes.settingsName,
+              builder: (context, state) => const SettingsPage(),
+            ),
+            GoRoute(
+              path: AppRoutes.drawingEditorPath,
+              name: AppRoutes.drawingEditorName,
+              builder: (context, state) => const DrawingEditorPage(),
+            ),
+          ],
+        ),
+        // Rotte non autenticate
+        GoRoute(
+          path: AppRoutes.authPath,
+          name: AppRoutes.authName,
+          builder: (context, state) => const AuthPage(),
+        ),
+        GoRoute(
+          path: AppRoutes.errorPath,
+          name: AppRoutes.errorName,
+          builder: (context, state) {
+            final error = state.extra as String?;
+            return ErrorPage(
+              error: error ?? 'Errore generico',
+              onRetry: () => context.goNamed(AppRoutes.authName),
+            );
+          },
+        ),
+      ],
     );
-  }
-
-  static String? _handleRedirect(
-      AuthenticationState authState, GoRouterState routerState) {
-    final currentPath = routerState.uri.path;
-    final isAuthPath = currentPath == AppRoutes.authPath;
-
-
-    if (authState.status == AuthenticationStatus.unauthenticated &&
-        !isAuthPath) {
-      return AppRoutes.authPath;
-    }
-
-    if (authState.status == AuthenticationStatus.authenticated &&
-        isAuthPath) {
-      return AppRoutes.homePath;
-    }
-
-    return null;
   }
 
   static void goToHome(BuildContext context) =>
@@ -103,8 +103,21 @@ class AppRouter {
       context.pushNamed(AppRoutes.settingsName);
   static void goToError(BuildContext context, {String? error}) =>
       context.goNamed(AppRoutes.errorName, extra: error);
-}
 
+  static String? _handleRedirect(
+      AuthenticationState authState, GoRouterState routerState) {
+    final currentPath = routerState.uri.path;
+    final isAuthPath = currentPath == AppRoutes.authPath;
+
+    if (authState.status == AuthenticationStatus.unauthenticated && !isAuthPath) {
+      return AppRoutes.authPath;
+    }
+    if (authState.status == AuthenticationStatus.authenticated && isAuthPath) {
+      return AppRoutes.homePath;
+    }
+    return null;
+  }
+}
 
 class GoRouterRefreshStream extends ChangeNotifier {
   late final StreamSubscription<dynamic> _subscription;

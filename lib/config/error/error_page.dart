@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ErrorPage extends StatelessWidget {
   final String? error;

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
-import 'package:flutter/foundation.dart';
 import 'package:user_repository/user_repository.dart';
 import 'authentication_event.dart';
 import 'authentication_state.dart';
@@ -41,12 +40,7 @@ class AuthenticationBloc
     emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
       await _userRepository.signInWithGoogle();
-      // Non è necessario emettere uno stato qui, lo stream dell'utente attiverà _onUserChanged
     } catch (e) {
-      if (kDebugMode) {
-        print('Errore di autenticazione Google: $e');
-      }
-      // Emetti stato con messaggio di errore invece di mostrare un dialogo
       emit(const AuthenticationState.unauthenticated(
           errorMessage: 'Errore di autenticazione Google.'
       ));
@@ -60,10 +54,6 @@ class AuthenticationBloc
     try {
       await _userRepository.signOut();
     } catch (e) {
-      if (kDebugMode) {
-        print('Errore durante il logout: $e');
-      }
-      // Emetti stato con messaggio di errore invece di mostrare un dialogo
       emit(state.copyWith(
           isLoading: false,
           errorMessage: 'Errore durante il logout.'

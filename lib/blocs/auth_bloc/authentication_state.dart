@@ -32,7 +32,6 @@ class AuthenticationState extends Equatable {
     errorMessage: errorMessage,
   );
 
-  // 'copyWith' è essenziale per la manutenibilità
   AuthenticationState copyWith({
     AuthenticationStatus? status,
     MyUser? user,

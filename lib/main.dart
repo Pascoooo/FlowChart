@@ -16,7 +16,7 @@ void main() async {
 
   FirebaseUIAuth.configureProviders([
     GoogleProvider(
-      clientId: '641983601905-5m4om4subv34s6irtpejhjpd9u3d41e1.apps.googleusercontent.com',
+      clientId: '641983601905-i7cuvuaau6pod7btq5k3jo63t6hpnu90.apps.googleusercontent.com',
     ),
   ]);
 

@@ -1,14 +1,14 @@
-// dart
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../user_repository.dart';
+import 'package:rxdart/rxdart.dart';
 
 class FirebaseUserRepo implements UserRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
-  late final CollectionReference _usersCollection;
+  late final CollectionReference<Map<String, dynamic>> _usersCollection;
 
   FirebaseUserRepo({
     FirebaseAuth? firebaseAuth,
@@ -18,58 +18,56 @@ class FirebaseUserRepo implements UserRepository {
     _usersCollection = _firestore.collection('users');
   }
 
+  /// Stream che emette l'utente corrente da Firestore in tempo reale.
+  /// Si aggiorna sia al cambio di stato di autenticazione sia alle modifiche del profilo su Firestore.
   @override
   Stream<MyUser?> get user {
-    return _firebaseAuth
-        .authStateChanges()
-        .distinct()
-        .asyncMap(_mapFirebaseUserToMyUser)
-        .handleError(_handleStreamError);
+    return _firebaseAuth.authStateChanges().switchMap((firebaseUser) {
+      if (firebaseUser == null) {
+        // Se l'utente è sloggato, emetti null.
+        return Stream.value(null);
+      } else {
+        // Altrimenti, ascolta le modifiche sul documento Firestore corrispondente.
+        return _usersCollection
+            .doc(firebaseUser.uid)
+            .snapshots()
+            .asyncMap((snapshot) { // <-- CORREZIONE APPLICATA
+          return _updateAndMapUser(firebaseUser, snapshot);
+        });
+      }
+    }).distinct();
   }
 
-  Future<MyUser?> _mapFirebaseUserToMyUser(User? firebaseUser) async {
-    if (firebaseUser == null) {
-      return null;
-    }
-
-    try {
-      final myUser = MyUser(
+  /// Funzione helper che controlla se il documento utente esiste in Firestore.
+  /// Se non esiste, lo crea. Altrimenti, restituisce i dati da Firestore.
+  Future<MyUser> _updateAndMapUser(User firebaseUser, DocumentSnapshot<Map<String, dynamic>> snapshot) async {
+    if (!snapshot.exists || snapshot.data() == null) {
+      // Il documento non esiste: è il primo login. Creiamolo.
+      final newUser = MyUser(
         userId: firebaseUser.uid,
         email: firebaseUser.email ?? '',
         name: firebaseUser.displayName ?? '',
         photoURL: firebaseUser.photoURL ?? '',
       );
-
-      if (myUser.isEmpty) {
-        if (kDebugMode) debugPrint('Invalid user data: $myUser');
-        return null;
+      // Non salvare dati vuoti
+      if (!newUser.isEmpty) {
+        await setUserData(newUser);
       }
-
-      await _saveUserToFirestore(myUser);
-      return myUser;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Error mapping Firebase user: $e');
-      }
-      rethrow;
+      return newUser;
+    } else {
+      // Il documento esiste: Firestore è la nostra fonte della verità.
+      return MyUser.fromEntity(MyUserEntity.fromDocument(snapshot.data()!));
     }
   }
 
-  void _handleStreamError(Object error, StackTrace stackTrace) {
-    if (kDebugMode) {
-      debugPrint('User stream error: $error');
-      debugPrintStack(stackTrace: stackTrace);
-    }
-  }
-
-  Future<void> _saveUserToFirestore(MyUser user) async {
+  @override
+  Future<void> setUserData(MyUser user) async {
     try {
       await _usersCollection
           .doc(user.userId)
           .set(user.toEntity().toDocument(), SetOptions(merge: true))
           .timeout(const Duration(seconds: 10));
     } catch (e) {
-      if (kDebugMode) debugPrint('Failed to save user: $e');
       rethrow;
     }
   }
@@ -82,26 +80,20 @@ class FirebaseUserRepo implements UserRepository {
         ..addScope('profile');
 
       final credential = await _firebaseAuth.signInWithPopup(provider);
+      final firebaseUser = credential.user;
 
-      if (credential.user == null) {
-        throw const AuthenticationException('Google sign in fallito');
+      if (firebaseUser == null) {
+        throw const AuthenticationException('Google sign in fallito.');
       }
 
-      final firebaseUser = credential.user!;
-      final myUser = MyUser(
+      // Lo stream `user` si occuperà automaticamente di creare/aggiornare il documento.
+      // Restituiamo un oggetto MyUser temporaneo per la logica immediata post-login.
+      return MyUser(
         userId: firebaseUser.uid,
         email: firebaseUser.email ?? '',
         name: firebaseUser.displayName ?? '',
         photoURL: firebaseUser.photoURL ?? '',
       );
-
-      // Salva l'utente solo se i dati sono validi
-      if (myUser.isEmpty) {
-        throw const AuthenticationException('Dati utente Google non validi.');
-      }
-
-      await _saveUserToFirestore(myUser);
-      return myUser;
     } on FirebaseAuthException catch (e) {
       throw _mapFirebaseAuthException(e);
     } catch (e) {
@@ -110,6 +102,29 @@ class FirebaseUserRepo implements UserRepository {
       }
       throw const AuthenticationException('Errore di autenticazione Google.');
     }
+  }
+
+  @override
+  Future<MyUser?> getCurrentUser() async {
+    final firebaseUser = _firebaseAuth.currentUser;
+    if (firebaseUser == null) {
+      return null;
+    }
+    final snapshot = await _usersCollection.doc(firebaseUser.uid).get();
+    if (snapshot.exists && snapshot.data() != null) {
+      return MyUser.fromEntity(MyUserEntity.fromDocument(snapshot.data()!));
+    }
+
+    final newUser = MyUser(
+      userId: firebaseUser.uid,
+      email: firebaseUser.email ?? '',
+      name: firebaseUser.displayName ?? '',
+      photoURL: firebaseUser.photoURL ?? '',
+    );
+    if(!newUser.isEmpty) {
+      await setUserData(newUser);
+    }
+    return newUser.isEmpty ? null : newUser;
   }
 
   @override
@@ -124,31 +139,6 @@ class FirebaseUserRepo implements UserRepository {
     }
   }
 
-  Exception _mapFirebaseAuthException(FirebaseAuthException e) {
-    return switch (e.code) {
-      'popup-closed-by-user' => const AuthenticationException('Login annullato dall\'utente.'),
-      'cancelled-popup-request' => const AuthenticationException('Login annullato.'),
-      'network-request-failed' => const AuthenticationException('Errore di connessione. Controlla la tua connessione e riprova.'),
-      _ => AuthenticationException('Errore di autenticazione: ${e.message}'),
-    };
-  }
-
-  // Metodi non più necessari per il flusso di autenticazione solo con Google
-  @override
-  Future<MyUser?> getCurrentUser() async => _mapFirebaseUserToMyUser(_firebaseAuth.currentUser);
-
-  @override
-  Future<void> setUserData(MyUser user) async => _saveUserToFirestore(user);
-
-  @override
-  Future<void> sendEmailLink(String email) async => throw UnimplementedError();
-
-  @override
-  Future<MyUser> signInWithEmailLink(String email, String emailLink) async => throw UnimplementedError();
-
-  @override
-  bool isEmailLink(String link) => throw UnimplementedError();
-
   @override
   Future<String> getUid() async {
     final user = _firebaseAuth.currentUser;
@@ -157,8 +147,18 @@ class FirebaseUserRepo implements UserRepository {
     }
     return user.uid;
   }
+
+  Exception _mapFirebaseAuthException(FirebaseAuthException e) {
+    return switch (e.code) {
+      'popup-closed-by-user' => const AuthenticationException('Login annullato dall\'utente.'),
+      'cancelled-popup-request' => const AuthenticationException('Login annullato.'),
+      'network-request-failed' => const AuthenticationException('Errore di connessione. Controlla la tua connessione e riprova.'),
+      _ => AuthenticationException('Errore di autenticazione: ${e.message}'),
+    };
+  }
 }
 
+// Le classi Exception rimangono invariate
 class AuthenticationException implements Exception {
   final String message;
   const AuthenticationException(this.message);

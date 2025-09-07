@@ -1,5 +1,4 @@
 import 'package:flowchart_thesis/config/services/dialog_service.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 class DrawingEditorPage extends StatefulWidget {
@@ -11,7 +10,7 @@ class DrawingEditorPage extends StatefulWidget {
 
 class _DrawingEditorPageState extends State<DrawingEditorPage> {
   bool _drawingMode = true;
-  List<Stroke> _strokes = [];
+  final List<Stroke> _strokes = [];
   Stroke? _currentStroke;
 
   double _strokeWidth = 2.0;
@@ -313,7 +312,7 @@ class _ColorPicker extends StatelessWidget {
                   border: selectedColor == color
                       ? Border.all(color: Colors.white, width: 3.0)
                       : null,
-                  boxShadow: [
+                  boxShadow: const [
                     BoxShadow(
                       color: Colors.black26,
                       blurRadius: 2,
@@ -321,7 +320,7 @@ class _ColorPicker extends StatelessWidget {
                   ],
                 ),
                 child: selectedColor == color
-                    ? Icon(Icons.check, color: Colors.white, size: 16)
+                    ? const Icon(Icons.check, color: Colors.white, size: 16)
                     : null,
               ),
             ),

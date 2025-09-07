@@ -149,7 +149,7 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
                   color: widget.isPrimary
                       ? null
                       : (isDark
-                      ? theme.colorScheme.surfaceVariant.withOpacity(0.5)
+                      ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.5)
                       : theme.colorScheme.surface),
                   borderRadius: BorderRadius.circular(18),
                   border: widget.isPrimary

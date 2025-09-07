@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../../../config/constants/theme_switch.dart';
 import '../../../config/services/dialog_service.dart';
 import '../widgets/SettingsSection.dart';
@@ -18,7 +17,6 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _notificationsEnabled = true;
   bool _autoSaveEnabled = true;
-  bool _analyticsEnabled = false;
 
   @override
   Widget build(BuildContext context) {
@@ -187,9 +185,7 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() {
           _notificationsEnabled = true;
           _autoSaveEnabled = true;
-          _analyticsEnabled = false;
         });
-        Navigator.of(context).pop();
       }
     );
   }
@@ -215,4 +211,16 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
   }
+
+
+
 }
+
+
+
+
+
+
+
+
+

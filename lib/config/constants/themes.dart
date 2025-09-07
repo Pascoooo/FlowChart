@@ -24,13 +24,11 @@ ThemeData lightmode = ThemeData(
     secondary: AppColors.secondaryBlue,
     tertiary: AppColors.accent,
     surface: AppColors.lightSurface,
-    surfaceVariant: AppColors.lightSurfaceVariant,
-    background: AppColors.lightBackground,
+    surfaceContainerHighest: AppColors.lightSurfaceVariant,
     onPrimary: Colors.white,
     onSecondary: Colors.white,
     onTertiary: Colors.white,
     onSurface: AppColors.primaryBlue,
-    onBackground: AppColors.primaryBlue,
     outline: AppColors.lightBorder,
     shadow: Colors.black12,
   ),
@@ -135,11 +133,9 @@ ThemeData darkmode = ThemeData(
   useMaterial3: true,
   brightness: Brightness.dark,
   colorScheme: const ColorScheme.dark(
-    background: Color(0xFF181818),      // Grigio scuro
     primary: Color(0xFF06BEE1),         // Testo principale
     secondary: Color(0xFF1768AC),       // Link, accent secondario
-    surface: Color(0xFF222222),         // Card / fondo più chiaro
-    onBackground: Color(0xFF06BEE1),    // Testo su sfondo
+    surface: Color(0xFF222222),    // Testo su sfondo
     onPrimary: Color(0xFF181818),       // Testo su button primary
     onSecondary: Color(0xFF181818),     // Testo su secondary
     onSurface: Color(0xFF06BEE1),       // Testo su card
