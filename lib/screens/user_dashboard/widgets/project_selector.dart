@@ -1,11 +1,16 @@
-// lib/screens/user_dashboard/widgets/project_selector.dart
+import 'package:flowchart_thesis/blocs/auth_bloc/authentication_bloc.dart';
+import 'package:flowchart_thesis/blocs/auth_bloc/authentication_event.dart';
+import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 
+import '../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../blocs/project_bloc/project_bloc.dart';
 import '../../../blocs/project_bloc/project_event.dart';
+import '../../../config/constants/theme_switch.dart';
 import '../../../config/services/dialog_service.dart';
 
 class ProjectSelector extends StatefulWidget {
@@ -27,13 +32,16 @@ class ProjectSelector extends StatefulWidget {
 class _ProjectSelectorState extends State<ProjectSelector>
     with TickerProviderStateMixin {
   late AnimationController _staggerController;
-  late AnimationController _pulseController;
   late List<Animation<double>> _itemAnimations;
-  late Animation<double> _pulseAnimation;
+
+  late PageController _pageController;
+  int _currentPage = 0;
+  static const int _projectsPerPage = 3;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _initAnimations();
   }
 
@@ -43,345 +51,150 @@ class _ProjectSelectorState extends State<ProjectSelector>
       vsync: this,
     );
 
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    );
-
-    _pulseAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.05,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeInOut,
-    ));
-
-    // Crea animazioni staggered per ogni progetto
     _itemAnimations = List.generate(
-      widget.projects.length + 1, // +1 per il bottone "crea nuovo"
-          (index) => Tween<double>(
-        begin: 0.0,
-        end: 1.0,
-      ).animate(CurvedAnimation(
-        parent: _staggerController,
-        curve: Interval(
-          index * 0.1,
-          (index * 0.1) + 0.6,
-          curve: Curves.easeOutCubic,
+      _projectsPerPage,
+          (index) => Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _staggerController,
+          curve: Interval(
+            index * 0.1,
+            (index * 0.1) + 0.6,
+            curve: Curves.easeOutCubic,
+          ),
         ),
-      )),
+      ),
     );
 
     _staggerController.forward();
-    _pulseController.repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _staggerController.dispose();
-    _pulseController.dispose();
+    _pageController.dispose();
     super.dispose();
+  }
+
+  int get _totalPages => (widget.projects.length / _projectsPerPage).ceil();
+  bool get _canNavigateLeft => _currentPage > 0;
+  bool get _canNavigateRight => _currentPage < _totalPages - 1;
+
+  void _navigateToPage(int page) {
+    if (page >= 0 && page < _totalPages) {
+      _pageController.animateToPage(
+        page,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      setState(() {
+        _currentPage = page;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasProjects = widget.projects.isNotEmpty;
 
-    return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 800),
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildHeader(theme),
-            const SizedBox(height: 48),
-            if (hasProjects) _buildProjectGrid(theme) else _buildEmptyState(theme),
-            const SizedBox(height: 32),
-            _buildCreateButton(theme),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(ThemeData theme) {
-    return Column(
+    return Stack(
       children: [
-        AnimatedBuilder(
-          animation: _pulseAnimation,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: _pulseAnimation.value,
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      theme.colorScheme.primary.withOpacity(0.15),
-                      theme.colorScheme.secondary.withOpacity(0.1),
+        Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Contenitore per allineare l'avatar a destra del riquadro
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 1000),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: _buildProfileMenu(theme),
+                      ),
                     ],
                   ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withOpacity(0.2),
-                      blurRadius: 20,
-                      spreadRadius: 5,
-                    ),
-                  ],
                 ),
-                child: Icon(
-                  Icons.auto_awesome,
-                  size: 48,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 24),
-        Text(
-          "Benvenuto in Unichart",
-          style: theme.textTheme.headlineLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: theme.colorScheme.onSurface,
-            letterSpacing: -0.5,
+                const SizedBox(height: 12),
+                _buildProjectContainer(theme),
+                const SizedBox(height: 32),
+                _buildCreateButton(theme),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          widget.projects.isNotEmpty
-              ? "Seleziona un progetto per continuare"
-              : "Inizia creando il tuo primo progetto",
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-            height: 1.5,
-          ),
+        // Pulsante per il toggle del tema
+        Positioned(
+          bottom: 24,
+          right: 24,
+          child: _buildThemeToggleButton(theme),
         ),
       ],
     );
   }
 
-  Widget _buildProjectGrid(ThemeData theme) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: MediaQuery.of(context).size.width > 800 ? 3 : 2,
-        childAspectRatio: 1.2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: widget.projects.length,
-      itemBuilder: (context, index) {
-        final project = widget.projects[index];
-        return AnimatedBuilder(
-          animation: _itemAnimations[index],
-          builder: (context, child) {
-            return Transform.translate(
-              offset: Offset(0, 30 * (1 - _itemAnimations[index].value)),
-              child: Opacity(
-                opacity: _itemAnimations[index].value,
-                child: _buildProjectCard(theme, project),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildProjectCard(ThemeData theme, MyProject project) {
-    return Material(
-      elevation: 0,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => widget.onProjectSelected(project),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                theme.colorScheme.surface,
-              ],
-            ),
-            border: Border.all(
-              color: theme.colorScheme.outline.withOpacity(0.1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.shadow.withOpacity(0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            theme.colorScheme.primary.withOpacity(0.2),
-                            theme.colorScheme.primary.withOpacity(0.1),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: FaIcon(
-                        FontAwesomeIcons.folder,
-                        size: 24,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      project.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 12,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          "Modificato di recente",
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              Positioned(
-                top: 8,
-                right: 8,
-                child: PopupMenuButton<String>(
-                  onSelected: (value) async {
-                    if (value == 'rename') {
-                      final newName = await DialogService.showInputDialog(
-                        context,
-                        title: "Rinomina progetto",
-                        message: "Inserisci un nuovo nome per il progetto",
-                        hintText: project.name,
-                        confirmText: "Rinomina",
-                        cancelText: "Annulla",
-                      );
-                      if (newName != null && newName.isNotEmpty) {
-                        context.read<ProjectBloc>().add(RenameProject(projectId: project.projectId, newName: newName));
-                      }
-                    } else if (value == 'delete') {
-                      final confirm = await DialogService.showConfirmationDialog(
-                        context,
-                        title: "Elimina progetto",
-                        message: "Sei sicuro di voler eliminare '${project.name}'?",
-                        confirmText: "Elimina",
-                        cancelText: "Annulla",
-                      );
-                      // Elimina il progetto se confermato
-                      if (confirm == true) {
-                        context.read<ProjectBloc>().add(DeleteProject(projectId: project.projectId));
-                      }
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'rename',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit, size: 18),
-                          SizedBox(width: 8),
-                          Text("Rinomina"),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete, size: 18),
-                          SizedBox(width: 8),
-                          Text("Elimina"),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  Widget _buildEmptyState(ThemeData theme) {
+  Widget _buildProjectContainer(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.all(48),
+      constraints: const BoxConstraints(maxWidth: 1000, minHeight: 450),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: theme.colorScheme.outline.withOpacity(0.2),
-          style: BorderStyle.solid,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+            theme.colorScheme.surface.withOpacity(0.8),
+          ],
         ),
-        color: theme.colorScheme.surface.withOpacity(0.5),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withOpacity(0.1),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-              shape: BoxShape.circle,
-            ),
-            child: FaIcon(
-              FontAwesomeIcons.folderOpen,
-              size: 32,
-              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            "Nessun progetto trovato",
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withOpacity(0.8),
-            ),
+          _buildContainerHeader(theme),
+          const SizedBox(height: 24),
+          widget.projects.isNotEmpty
+              ? _buildProjectCarousel(theme)
+              : _buildEmptyState(theme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContainerHeader(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      child: Column(
+        children: [
+          BlocBuilder<AuthenticationBloc, AuthenticationState>(
+            builder: (context, state) {
+              String username = "Utente";
+              if (state.status == AuthenticationStatus.authenticated) {
+                username = state.user.name;
+              }
+              return Text(
+                "Ciao $username, bentornato!",
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              );
+            },
           ),
           const SizedBox(height: 8),
           Text(
-            "I tuoi progetti appariranno qui.\nInizia creando il tuo primo diagramma!",
-            textAlign: TextAlign.center,
+            "Seleziona un progetto recente o creane uno nuovo per iniziare.",
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
-              height: 1.5,
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
             ),
           ),
         ],
@@ -389,67 +202,346 @@ class _ProjectSelectorState extends State<ProjectSelector>
     );
   }
 
-  Widget _buildCreateButton(ThemeData theme) {
-    final animationIndex = widget.projects.length;
+  Widget _buildProfileMenu(ThemeData theme) {
+    final user = context.watch<AuthenticationBloc>().state.user;
 
-    return AnimatedBuilder(
-      animation: _itemAnimations.isNotEmpty ? _itemAnimations[animationIndex] : _staggerController,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, 30 * (1 - (_itemAnimations.isNotEmpty ? _itemAnimations[animationIndex].value : 1.0))),
-          child: Opacity(
-            opacity: _itemAnimations.isNotEmpty ? _itemAnimations[animationIndex].value : 1.0,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.secondary,
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
+    return PopupMenuButton<String>(
+      tooltip: "Opzioni profilo",
+      offset: const Offset(0, 50),
+      color: theme.colorScheme.surfaceContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (value) async {
+        if (value == 'logout') {
+          final confirm = await DialogService.showConfirmationDialog(context,
+              title: "Logout",
+              message: "Sei sicuro di voler uscire?",
+              confirmText: "Esci",
+              cancelText: "Annulla");
+          if (confirm == true) {
+            context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
+          }
+        } else if (value == 'settings') {
+          AppRouter.goToSettings(context);
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'settings',
+          child: Row(
+            children: [
+              Icon(Icons.settings_outlined, size: 18, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 12),
+              const Text("Impostazioni"),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(Icons.logout, size: 18, color: theme.colorScheme.error),
+              const SizedBox(width: 12),
+              Text("Logout", style: TextStyle(color: theme.colorScheme.error)),
+            ],
+          ),
+        ),
+      ],
+      child: CircleAvatar(
+        radius: 22,
+        backgroundColor: theme.colorScheme.surfaceContainerHighest,
+        backgroundImage: (user.photoURL.isNotEmpty)
+            ? NetworkImage(user.photoURL)
+            : null,
+        child: (user.photoURL.isEmpty)
+            ? const Icon(Icons.person_outline, size: 24)
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildProjectCarousel(ThemeData theme) {
+    return SizedBox(
+      height: 220,
+      child: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            onPageChanged: (page) => setState(() => _currentPage = page),
+            itemCount: _totalPages,
+            itemBuilder: (context, pageIndex) {
+              return _buildProjectPage(theme, pageIndex);
+            },
+          ),
+          if (_canNavigateLeft)
+            Positioned(
+              left: 16, top: 0, bottom: 0,
+              child: Center(child: _buildNavigationButton(theme, Icons.arrow_back_ios, () => _navigateToPage(_currentPage - 1))),
+            ),
+          if (_canNavigateRight)
+            Positioned(
+              right: 16, top: 0, bottom: 0,
+              child: Center(child: _buildNavigationButton(theme, Icons.arrow_forward_ios, () => _navigateToPage(_currentPage + 1))),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavigationButton(ThemeData theme, IconData icon, VoidCallback onTap) {
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      elevation: 2,
+      shadowColor: theme.colorScheme.shadow.withOpacity(0.2),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 16, color: theme.colorScheme.primary),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProjectPage(ThemeData theme, int pageIndex) {
+    final startIndex = pageIndex * _projectsPerPage;
+    final endIndex = (startIndex + _projectsPerPage).clamp(0, widget.projects.length);
+    final pageProjects = widget.projects.sublist(startIndex, endIndex);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 60),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: pageProjects.asMap().entries.map((entry) {
+          final index = entry.key;
+          final project = entry.value;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: AnimatedBuilder(
+              animation: _itemAnimations[index],
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, 20 * (1 - _itemAnimations[index].value)),
+                  child: Opacity(
+                    opacity: _itemAnimations[index].value,
+                    child: _buildProjectCard(theme, project),
                   ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () => _showCreateProjectDialog(context),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FaIcon(
-                          FontAwesomeIcons.plus,
-                          size: 18,
-                          color: theme.colorScheme.onPrimary,
+                );
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildProjectCard(ThemeData theme, MyProject project) {
+    return SizedBox(
+      width: 200,
+      height: 180, // Dimensione fissa
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
+              theme.colorScheme.surface.withOpacity(0.9),
+            ],
+          ),
+          border: Border.all(color: theme.colorScheme.outline.withOpacity(0.15)),
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.shadow.withOpacity(0.05),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => widget.onProjectSelected(project),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [
+                            theme.colorScheme.primary.withOpacity(0.2),
+                            theme.colorScheme.primary.withOpacity(0.1),
+                          ]),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        const SizedBox(width: 12),
-                        Text(
-                          widget.projects.isEmpty
-                              ? "Crea il tuo primo progetto"
-                              : "Nuovo Progetto",
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
+                        child: FaIcon(FontAwesomeIcons.folder, size: 20, color: theme.colorScheme.primary),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        project.name,
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
+                Positioned(
+                  top: 4, right: 4,
+                  child: _buildCardPopupMenu(theme, project),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardPopupMenu(ThemeData theme, MyProject project) {
+    return PopupMenuButton<String>(
+      tooltip: "Opzioni",
+      color: theme.colorScheme.surfaceContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (value) async {
+        if (value == 'rename') {
+          final newName = await DialogService.showInputDialog(context,
+              title: "Rinomina progetto", message: "Inserisci un nuovo nome per il progetto",
+              hintText: project.name, confirmText: "Rinomina", cancelText: "Annulla");
+          if (newName != null && newName.isNotEmpty) {
+            context.read<ProjectBloc>().add(RenameProject(projectId: project.projectId, newName: newName));
+          }
+        } else if (value == 'delete') {
+          final confirm = await DialogService.showConfirmationDialog(context,
+              title: "Elimina progetto", message: "Sei sicuro di voler eliminare '${project.name}'?",
+              confirmText: "Elimina", cancelText: "Annulla");
+          if (confirm == true) {
+            context.read<ProjectBloc>().add(DeleteProject(projectId: project.projectId));
+          }
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'rename',
+          child: Row(
+            children: [const Icon(Icons.edit, size: 16), const SizedBox(width: 8), const Text("Rinomina")],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete, size: 16, color: theme.colorScheme.error),
+              const SizedBox(width: 8),
+              Text("Elimina", style: TextStyle(color: theme.colorScheme.error))
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(Icons.more_vert, size: 16, color: theme.colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(ThemeData theme) {
+    return Container(
+      height: 220,
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.3)),
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FaIcon(FontAwesomeIcons.folderOpen, size: 24, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7)),
+          const SizedBox(height: 12),
+          Text("Nessun progetto trovato", style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text("Inizia creando il tuo primo progetto", textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreateButton(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(colors: [theme.colorScheme.primary, theme.colorScheme.secondary]),
+        boxShadow: [
+          BoxShadow(
+              color: theme.colorScheme.primary.withOpacity(0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6))
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _showCreateProjectDialog(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FaIcon(FontAwesomeIcons.plus, size: 16, color: theme.colorScheme.onPrimary),
+                const SizedBox(width: 10),
+                Text(
+                  widget.projects.isEmpty ? "Crea il tuo primo progetto" : "Nuovo Progetto",
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggleButton(ThemeData theme) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 1000),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+            ),
+            child: IconButton(
+              icon: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, animation) => RotationTransition(turns: animation, child: child),
+                child: Icon(
+                  Theme.of(context).brightness == Brightness.dark
+                      ? Icons.wb_sunny_rounded
+                      : Icons.nights_stay_rounded,
+                  key: ValueKey(Theme.of(context).brightness),
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
+              onPressed: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
             ),
           ),
         );

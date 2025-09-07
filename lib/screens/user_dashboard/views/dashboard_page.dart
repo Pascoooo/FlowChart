@@ -121,12 +121,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildProjectsLoadedView(ProjectsLoaded state, ThemeData theme) {
-    debugPrint('=== DashboardPage DEBUG ===');
-    debugPrint('selectedProject = ${state.selectedProject?.name ?? 'NULL'}');
-    debugPrint('selectedProject ID = ${state.selectedProject?.projectId ?? 'NULL'}');
-    debugPrint('projects count = ${state.projects.length}');
-    debugPrint('========================');
-
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
       transitionBuilder: (Widget child, Animation<double> animation) {
