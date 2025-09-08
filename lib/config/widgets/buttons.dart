@@ -1,8 +1,11 @@
+// lib/config/widgets/buttons.dart (CORRETTO)
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ModernMenuItem extends StatefulWidget {
-  final IconData icon;
+  // MODIFICA: Aggiunto iconWidget e reso icon opzionale
+  final IconData? icon;
+  final Widget? iconWidget;
   final String title;
   final VoidCallback onTap;
   final bool isDestructive;
@@ -10,12 +13,16 @@ class ModernMenuItem extends StatefulWidget {
 
   const ModernMenuItem({
     super.key,
-    required this.icon,
+    this.icon,
+    this.iconWidget,
     required this.title,
     required this.onTap,
     this.isDestructive = false,
     this.isPrimaryAction = false,
-  });
+  }) : assert(
+  (icon != null) ^ (iconWidget != null),
+  'Deve essere fornito esattamente uno tra icon e iconWidget.',
+  );
 
   @override
   State<ModernMenuItem> createState() => _ModernMenuItemState();
@@ -52,6 +59,7 @@ class _ModernMenuItemState extends State<ModernMenuItem>
 
   @override
   Widget build(BuildContext context) {
+    // ... (il resto della logica build rimane invariato)
     final theme = Theme.of(context);
     final baseColorScheme = theme.colorScheme;
     final colorScheme = widget.isDestructive
@@ -136,7 +144,11 @@ class _ModernMenuItemState extends State<ModernMenuItem>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
-                    FaIcon(widget.icon, size: 18, color: iconColor),
+                    // MODIFICA: Logica per scegliere tra icona e widget
+                    if (widget.iconWidget != null)
+                      widget.iconWidget!
+                    else
+                      FaIcon(widget.icon!, size: 18, color: iconColor),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
