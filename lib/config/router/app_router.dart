@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flowchart_thesis/screens/auth/pages/auth_page.dart';
-import 'package:flowchart_thesis/screens/settings/views/SettingsPage.dart';
+import 'package:flowchart_thesis/screens/settings/views/settings_page.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_page.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/sketch_edit/drawing_editor_page.dart';
 import 'package:project_repository/project_repository.dart';
