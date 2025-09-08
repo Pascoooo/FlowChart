@@ -25,6 +25,7 @@ class ProjectWorkspace extends StatefulWidget {
 
 class _ProjectWorkspaceState extends State<ProjectWorkspace>
     with TickerProviderStateMixin {
+  final GlobalKey _workareaKey = GlobalKey();
   late AnimationController _slideInController;
   late Animation<Offset> _sidebarSlideAnimation;
   late Animation<Offset> _topbarSlideAnimation;
@@ -145,13 +146,11 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
             // Nuovo metodo per l'export che ha accesso al context corretto
             void handleExport() async {
-              print("Export iniziato");
-              print("Stato FileSystem: $state");
-              if (state is FileSystemLoaded) {
+              if (state is FileSystemLoaded && state.activeFileId != null) {
                 try {
                   await ExportService.exportDirectlyToJpg(
                     context: context,
-                    workareaKey: WorkArea.workareaKey,
+                    workareaKey: _workareaKey,
                     defaultFileName: _getCurrentFileName(state),
                   );
                 } catch (e) {
@@ -163,6 +162,16 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                       ),
                     );
                   }
+                }
+              } else {
+                // Optionally, show a message to the user that no file is selected.
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Seleziona un file prima di esportare.'),
+                      backgroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  );
                 }
               }
             }
@@ -240,7 +249,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
           visible: hasActiveFile,
           maintainState: true,
           maintainAnimation: true,
-          child: WorkArea(key: WorkArea.workareaKey),
+          child: WorkArea(key: _workareaKey),
         ),
       ],
     );
