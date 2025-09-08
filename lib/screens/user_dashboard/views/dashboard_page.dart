@@ -1,5 +1,3 @@
-// ... (omitted imports)
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../blocs/project_bloc/project_bloc.dart';
@@ -7,8 +5,13 @@ import '../../../blocs/project_bloc/project_event.dart';
 import '../../../blocs/project_bloc/project_state.dart';
 import '../../../config/error/error_page.dart';
 import '../animations/background_animation.dart';
-import '../widgets/project_selector.dart';
+import '../animations/project_loading_indicator.dart';
+import '../../project_selection/views/project_selector.dart';
 import '../widgets/project_workspace.dart';
+
+const Duration _kTransitionDuration = Duration(milliseconds: 300);
+const EdgeInsets _kSnackbarMargin = EdgeInsets.all(16.0);
+const double _kSnackbarBorderRadius = 12.0;
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -27,92 +30,53 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.surface,
-              theme.colorScheme.surface.withOpacity(0.98),
-              theme.colorScheme.surfaceContainerHighest.withOpacity(0.05),
-            ],
-          ),
-        ),
-        child: Stack(
-          children: [
-            const AnimatedBackground(),
-            BlocListener<ProjectBloc, ProjectState>(
-              listener: (context, state) {
-                if (state is ProjectsLoaded && state.error != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(state.error!),
-                      backgroundColor: theme.colorScheme.error,
-                      behavior: SnackBarBehavior.floating,
-                      margin: const EdgeInsets.all(16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+      body: Stack(
+        children: [
+          const AnimatedBackground(),
+          BlocListener<ProjectBloc, ProjectState>(
+            listener: (context, state) {
+              if (state is ProjectsLoaded && state.error != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.error!),
+                    backgroundColor: theme.colorScheme.error,
+                    behavior: SnackBarBehavior.floating,
+                    margin: _kSnackbarMargin,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(_kSnackbarBorderRadius),
                     ),
-                  );
+                  ),
+                );
+              }
+            },
+            child: BlocBuilder<ProjectBloc, ProjectState>(
+              buildWhen: (previous, current) {
+                if (previous.runtimeType != current.runtimeType) return true;
+                if (previous is ProjectsLoaded && current is ProjectsLoaded) {
+                  return previous.selectedProject != current.selectedProject ||
+                      previous.projects.length != current.projects.length;
+                }
+                return true;
+              },
+              builder: (context, state) {
+                switch (state.runtimeType) {
+                  case ProjectLoading:
+                    return _buildLoadingView(theme);
+                  case ProjectError:
+                    final errorState = state as ProjectError;
+                    return ErrorPage(
+                      error: errorState.message,
+                      onRetry: () {
+                        context.read<ProjectBloc>().add(const LoadProjects());
+                      },
+                    );
+                  case ProjectsLoaded:
+                    return _buildProjectsLoadedView(state as ProjectsLoaded, theme);
+                  default:
+                    return _buildLoadingView(theme);
                 }
               },
-              child: BlocBuilder<ProjectBloc, ProjectState>(
-                buildWhen: (previous, current) {
-                  if (previous.runtimeType != current.runtimeType) return true;
-                  if (previous is ProjectsLoaded && current is ProjectsLoaded) {
-                    return previous.selectedProject != current.selectedProject ||
-                        previous.projects.length != current.projects.length;
-                  }
-                  return true;
-                },
-                builder: (context, state) {
-                  switch (state.runtimeType) {
-                    case ProjectLoading:
-                      return _buildLoadingView(theme);
-                    case ProjectError:
-                      return ErrorPage(
-                        error: (state as ProjectError).message,
-                        onRetry: () {
-                          context.read<ProjectBloc>().add(const LoadProjects());
-                        },
-                      );
-                    case ProjectsLoaded:
-                      return _buildProjectsLoadedView(state as ProjectsLoaded, theme);
-                    default:
-                      return Center(
-                        child: CupertinoActivityIndicator(
-                          radius: 16,
-                          color: theme.colorScheme.primary,
-                        ),
-                      );
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLoadingView(ThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CupertinoActivityIndicator(
-            color: theme.colorScheme.primary,
-            radius: 16,
-          ),
-          const SizedBox(height: 24),
-          Text(
-            "Caricamento progetti...",
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
             ),
           ),
         ],
@@ -120,33 +84,27 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildLoadingView(ThemeData theme) {
+    return const ModernLoadingIndicator();
+  }
+
   Widget _buildProjectsLoadedView(ProjectsLoaded state, ThemeData theme) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
+      duration: _kTransitionDuration,
       transitionBuilder: (Widget child, Animation<double> animation) {
-        if (child.key == const ValueKey('project-selector')) {
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(-1.0, 0.0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            )),
-            child: FadeTransition(opacity: animation, child: child),
-          );
-        } else {
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1.0, 0.0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            )),
-            child: FadeTransition(opacity: animation, child: child),
-          );
-        }
+        final isSelector = child.key == const ValueKey('project-selector');
+        final offset = isSelector ? const Offset(-1.0, 0.0) : const Offset(1.0, 0.0);
+
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: offset,
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          )),
+          child: FadeTransition(opacity: animation, child: child),
+        );
       },
       child: state.selectedProject != null
           ? ProjectWorkspace(
@@ -157,14 +115,13 @@ class _DashboardPageState extends State<DashboardPage> {
         key: const ValueKey('project-selector'),
         projects: state.projects,
         onProjectSelected: (project) {
-          debugPrint('DashboardPage: Selecting project ${project.name}');
           context.read<ProjectBloc>().add(SelectProject(project: project));
         },
         onCreateProject: (name) {
-          debugPrint('DashboardPage: Creating project $name');
           context.read<ProjectBloc>().add(CreateProject(projectName: name));
         },
       ),
     );
   }
 }
+

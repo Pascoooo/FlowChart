@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../config/services/dialog_service.dart';
+import '../../user_dashboard/animations/background_animation.dart';
 import '../widgets/settings_provider.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/settings_switch_tile.dart';
@@ -50,12 +51,13 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      // Il backgroundColor qui serve per le transizioni di pagina o se l'animazione non copre tutto
       backgroundColor: cs.surface,
       appBar: AppBar(
         title: const Text('Impostazioni'),
         centerTitle: false,
         titleTextStyle: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-        backgroundColor: cs.surface.withAlpha(240), // Semi-transparent for a modern feel
+        backgroundColor: cs.surface.withAlpha(240),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
@@ -63,73 +65,63 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           tooltip: 'Torna alla schermata precedente',
         ),
       ),
-      body: Container(
-        // Subtle gradient background inspired by BrandPanel
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              cs.primary.withOpacity(isDark ? 0.03 : 0.01),
-              cs.surface,
-            ],
-            stops: const [0.0, 0.4],
-          ),
-        ),
-        child: Center(
-          child: Scrollbar(
-            thumbVisibility: true,
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  // The main card now resembles the auth card
-                  child: Container(
-                    padding: const EdgeInsets.all(32.0),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerLowest,
-                      borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: cs.outline.withOpacity(0.1)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: cs.shadow.withOpacity(isDark ? 0.15 : 0.08),
-                          blurRadius: 30,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _Header(),
-                        SizedBox(height: 40),
-                        _GeneralSettings(),
-                        SizedBox(height: 24),
-                        _SystemSettings(),
-                      ],
+      // Usiamo uno Stack per sovrapporre l'animazione e il contenuto
+      body: Stack(
+        children: [
+          const AnimatedBackground(),
+
+          // Livello 2: Il contenuto della pagina (la card con le impostazioni)
+          Center(
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                child: FadeTransition(
+                  opacity: _fadeAnimation, // Assumendo che _fadeAnimation sia ancora definita nel tuo State
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: Container(
+                      padding: const EdgeInsets.all(32.0),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerLowest,
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(color: cs.outline.withOpacity(0.1)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: cs.shadow.withOpacity(isDark ? 0.15 : 0.08),
+                            blurRadius: 30,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _Header(),
+                          SizedBox(height: 40),
+                          _GeneralSettings(),
+                          SizedBox(height: 24),
+                          _SystemSettings(),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
-
-
 class _Header extends StatelessWidget {
   const _Header();
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    // Header inspired by AuthHeader for consistency
     return Row(
       children: [
         Container(
