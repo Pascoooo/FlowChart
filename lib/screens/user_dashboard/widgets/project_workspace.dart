@@ -1,3 +1,5 @@
+// lib/screens/user_dashboard/views/project_workspace.dart
+
 import 'package:flowchart_thesis/screens/user_dashboard/widgets/topbar.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/widgets/sidebar.dart';
 import 'package:flutter/material.dart';
@@ -100,29 +102,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     }
   }
 
-  // Metodo per gestire l'azione di esportazione
-  void _handleExport() async {
-    final state = BlocProvider.of<FileSystemBloc>(context).state;
-    if (state is FileSystemLoaded) {
-      try {
-        await ExportService.exportDirectlyToJpg(
-          context: context,
-          workareaKey: WorkArea.workareaKey,
-          defaultFileName: _getCurrentFileName(state),
-        );
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Errore nell\'esportazione: $e'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-        }
-      }
-    }
-  }
-
   String _getCurrentFileName(FileSystemLoaded state) {
     if (state.activeFileId != null && state.files.isNotEmpty) {
       final matchingFiles = state.files.where(
@@ -160,6 +139,34 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
         child: AnimatedBuilder(
           animation: _slideInController,
           builder: (context, child) {
+            // Usa il context del builder che si trova all'interno del BlocProvider.
+            final fileSystemBloc = context.watch<FileSystemBloc>();
+            final state = fileSystemBloc.state;
+
+            // Nuovo metodo per l'export che ha accesso al context corretto
+            void handleExport() async {
+              print("Export iniziato");
+              print("Stato FileSystem: $state");
+              if (state is FileSystemLoaded) {
+                try {
+                  await ExportService.exportDirectlyToJpg(
+                    context: context,
+                    workareaKey: WorkArea.workareaKey,
+                    defaultFileName: _getCurrentFileName(state),
+                  );
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Errore nell\'esportazione: $e'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  }
+                }
+              }
+            }
+
             return Row(
               children: [
                 SlideTransition(
@@ -184,11 +191,11 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                           position: _topbarSlideAnimation,
                           child: FadeTransition(
                             opacity: _fadeAnimation,
-                            // Passa le funzioni di callback alla TopBar
+                            // Passa la funzione di callback corretta
                             child: TopBar(
                               selectedProject: widget.selectedProject,
                               onEdit: _onEdit,
-                              onExport: _handleExport,
+                              onExport: handleExport,
                             ),
                           ),
                         ),
@@ -200,7 +207,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                               scale: _workareaScaleAnimation,
                               child: FadeTransition(
                                 opacity: _fadeAnimation,
-                                child: _buildWorkarea(),
+                                child: _buildWorkarea(state),
                               ),
                             ),
                           ),
@@ -217,20 +224,25 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     );
   }
 
-  Widget _buildWorkarea() {
-    return BlocBuilder<FileSystemBloc, FileSystemState>(
-      builder: (context, state) {
-        if (state is FileSystemLoaded && state.activeFileId != null) {
-          return const WorkArea();
-        }
-        return const Center(
-          child: Text(
-            'Seleziona o crea un file per iniziare a lavorare.',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
+  Widget _buildWorkarea(FileSystemState state) {
+    final hasActiveFile = state is FileSystemLoaded && state.activeFileId != null;
+
+    return Stack(
+      children: [
+        if (!hasActiveFile)
+          const Center(
+            child: Text(
+              'Seleziona o crea un file per iniziare a lavorare.',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
           ),
-        );
-      },
+        Visibility(
+          visible: hasActiveFile,
+          maintainState: true,
+          maintainAnimation: true,
+          child: WorkArea(key: WorkArea.workareaKey),
+        ),
+      ],
     );
   }
 }
-
