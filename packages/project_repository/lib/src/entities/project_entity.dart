@@ -1,10 +1,14 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class MyProjectEntity {
   String projectId;
   String name;
+  DateTime updatedAt;
 
-  MyProjectEntity({
+   MyProjectEntity({
     required this.projectId,
     required this.name,
+    required this.updatedAt,
   });
 
   // Crea un'entità da un documento Firestore (Map).
@@ -12,6 +16,7 @@ class MyProjectEntity {
     return MyProjectEntity(
       projectId: json['projectId'] as String,
       name: json['name'] as String,
+      updatedAt: (json['updatedAt'] as Timestamp).toDate(),
     );
   }
 
@@ -20,6 +25,7 @@ class MyProjectEntity {
     return {
       'projectId': projectId,
       'name': name,
+      'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 }

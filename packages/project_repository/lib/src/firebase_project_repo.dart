@@ -36,6 +36,7 @@ class FirebaseProjectRepo implements ProjectRepo {
       final newProject = MyProjectEntity(
         projectId: projectId,
         name: name,
+        updatedAt: DateTime.now(),
       );
       await projectCollection.doc(projectId).set(newProject.toDocument());
     } catch (e) {

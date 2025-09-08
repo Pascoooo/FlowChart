@@ -31,7 +31,7 @@ class FirebaseUserRepo implements UserRepository {
         return _usersCollection
             .doc(firebaseUser.uid)
             .snapshots()
-            .asyncMap((snapshot) { // <-- CORREZIONE APPLICATA
+            .asyncMap((snapshot) {
           return _updateAndMapUser(firebaseUser, snapshot);
         });
       }
@@ -55,7 +55,6 @@ class FirebaseUserRepo implements UserRepository {
       }
       return newUser;
     } else {
-      // Il documento esiste: Firestore è la nostra fonte della verità.
       return MyUser.fromEntity(MyUserEntity.fromDocument(snapshot.data()!));
     }
   }
@@ -97,9 +96,6 @@ class FirebaseUserRepo implements UserRepository {
     } on FirebaseAuthException catch (e) {
       throw _mapFirebaseAuthException(e);
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Google Sign In Error: $e');
-      }
       throw const AuthenticationException('Errore di autenticazione Google.');
     }
   }
@@ -158,7 +154,6 @@ class FirebaseUserRepo implements UserRepository {
   }
 }
 
-// Le classi Exception rimangono invariate
 class AuthenticationException implements Exception {
   final String message;
   const AuthenticationException(this.message);

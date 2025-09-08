@@ -3,10 +3,12 @@ import '../entities/project_entity.dart';
 class MyProject {
   final String projectId;
   final String name;
+  final DateTime updatedAt;
 
-  const MyProject({
+   const MyProject({
     required this.projectId,
     required this.name,
+    required this.updatedAt,
   });
 
   // Converte un oggetto MyProject in un'entità.
@@ -14,6 +16,7 @@ class MyProject {
     return MyProjectEntity(
       projectId: projectId,
       name: name,
+      updatedAt: updatedAt,
     );
   }
 
@@ -22,6 +25,7 @@ class MyProject {
     return MyProject(
       projectId: entity.projectId,
       name: entity.name,
+      updatedAt: entity.updatedAt,
     );
   }
 }
