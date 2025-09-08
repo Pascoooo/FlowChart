@@ -92,6 +92,7 @@ class _ProjectSelectorState extends State<ProjectSelector>
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -104,20 +105,41 @@ class _ProjectSelectorState extends State<ProjectSelector>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Contenitore per allineare l'avatar a destra del riquadro
-                Container(
-                  constraints: const BoxConstraints(maxWidth: 1000),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: _buildProfileMenu(theme),
-                      ),
-                    ],
+                // Logo e messaggio di benvenuto fuori dal riquadro
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Logo app
+                    Padding(
+                      padding: const EdgeInsets.only(right: 16.0),
+                      child: FaIcon(FontAwesomeIcons.diagramProject, size: 32, color: theme.colorScheme.primary),
+                    ),
+                    BlocBuilder<AuthenticationBloc, AuthenticationState>(
+                      builder: (context, state) {
+                        String username = "Utente";
+                        if (state.status == AuthenticationStatus.authenticated) {
+                          username = state.user.name;
+                        }
+                        return Text(
+                          "Ciao $username, bentornato!",
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Benvenuto su Flowchart Thesis!",
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
+                // Riquadro progetti
                 _buildProjectContainer(theme),
                 const SizedBox(height: 32),
                 _buildCreateButton(theme),
@@ -125,7 +147,11 @@ class _ProjectSelectorState extends State<ProjectSelector>
             ),
           ),
         ),
-        // Pulsante per il toggle del tema
+        Positioned(
+          top: 24,
+          right: 24,
+          child: _buildProfileMenu(theme),
+        ),
         Positioned(
           bottom: 24,
           right: 24,
@@ -173,35 +199,16 @@ class _ProjectSelectorState extends State<ProjectSelector>
   Widget _buildContainerHeader(ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-      child: Column(
-        children: [
-          BlocBuilder<AuthenticationBloc, AuthenticationState>(
-            builder: (context, state) {
-              String username = "Utente";
-              if (state.status == AuthenticationStatus.authenticated) {
-                username = state.user.name;
-              }
-              return Text(
-                "Ciao $username, bentornato!",
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurface,
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Seleziona un progetto recente o creane uno nuovo per iniziare.",
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
-            ),
-          ),
-        ],
+      child: Text(
+        "I tuoi progetti",
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: theme.colorScheme.onSurface,
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }
-
   Widget _buildProfileMenu(ThemeData theme) {
     final user = context.watch<AuthenticationBloc>().state.user;
 
@@ -414,9 +421,21 @@ class _ProjectSelectorState extends State<ProjectSelector>
       onSelected: (value) async {
         if (value == 'rename') {
           final newName = await DialogService.showInputDialog(context,
-              title: "Rinomina progetto", message: "Inserisci un nuovo nome per il progetto",
-              hintText: project.name, confirmText: "Rinomina", cancelText: "Annulla");
-          if (newName != null && newName.isNotEmpty) {
+              title: "Rinomina progetto",
+              message: "Inserisci un nuovo nome per il progetto",
+              hintText: project.name,
+              confirmText: "Rinomina",
+              cancelText: "Annulla",
+              validator: (v) {
+                if (v.isEmpty) return 'Il nome non può essere vuoto';
+                // controlla che non esista un altro progetto con lo stesso nome (case-insensitive)
+                final exists = widget.projects.any((p) => p.projectId != project.projectId && p.name.toLowerCase() == v.toLowerCase());
+                if (exists) return 'Esiste già un progetto con questo nome';
+                if(v.length > 20) return 'Nome troppo lungo! (max 20 caratteri)';
+                return null;
+              }
+          );
+          if (newName != null) {
             context.read<ProjectBloc>().add(RenameProject(projectId: project.projectId, newName: newName));
           }
         } else if (value == 'delete') {
@@ -557,9 +576,16 @@ class _ProjectSelectorState extends State<ProjectSelector>
       hintText: "es. Il mio diagramma di flusso",
       confirmText: "Crea Progetto",
       cancelText: "Annulla",
+      validator: (v) {
+        if (v.isEmpty) return 'Il nome non può essere vuoto';
+        final exists = widget.projects.any((p) => p.name.toLowerCase() == v.toLowerCase());
+        if (exists) return 'Esiste già un progetto con questo nome';
+        if(v.length > 20) return 'Nome troppo lungo (max 20 caratteri)';
+        return null;
+      },
     );
 
-    if (projectName != null && projectName.isNotEmpty) {
+    if (projectName != null) {
       widget.onCreateProject(projectName);
     }
   }

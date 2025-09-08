@@ -147,44 +147,88 @@ class DialogService {
         String? initialValue,
         String cancelText = 'Annulla',
         String confirmText = 'Conferma',
+        String? Function(String)? validator, // added validator
       }) {
     final controller = TextEditingController(text: initialValue);
 
     return _showCenteredDialog<String?>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(
-          title,
-          style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (message != null) ...[
-              Text(message),
-              const SizedBox(height: 16),
-            ],
-            CupertinoTextField(
-              controller: controller,
-              autofocus: true,
-              placeholder: hintText,
-              padding: const EdgeInsets.all(12),
-              onSubmitted: (value) => Navigator.of(dialogContext).pop(value.trim()),
-            ),
-          ],
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogContext, null),
-            child: Text(cancelText),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
-            child: Text(confirmText),
-          ),
-        ],
-      ),
+      builder: (dialogContext) {
+        // Use a StatefulBuilder to manage local dialog state (error message / validation)
+        return StatefulBuilder(
+          builder: (context, setState) {
+            String? errorText;
+            // compute current validity based on controller text
+            String current = controller.text.trim();
+            if (validator != null) {
+              errorText = validator(current);
+            } else if (current.isEmpty) {
+              // default validation: non empty
+              errorText = 'Il campo non può essere vuoto';
+            }
+            final bool isValid = errorText == null;
+
+            return CupertinoAlertDialog(
+              title: Text(
+                title,
+                style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (message != null) ...[
+                    Text(message),
+                    const SizedBox(height: 16),
+                  ],
+                  CupertinoTextField(
+                    controller: controller,
+                    autofocus: true,
+                    placeholder: hintText,
+                    padding: const EdgeInsets.all(12),
+                    onChanged: (value) {
+                      setState(() {
+                        final v = value.trim();
+                        if (validator != null) {
+                          errorText = validator(v);
+                        } else {
+                          errorText = v.isEmpty ? 'Il campo non può essere vuoto' : null;
+                        }
+                      });
+                    },
+                    onSubmitted: (value) {
+                      final v = value.trim();
+                      if ((validator != null && validator(v) == null) || (validator == null && v.isNotEmpty)) {
+                        Navigator.of(dialogContext).pop(v);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  if (errorText != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6.0),
+                      // use non-null assertion because we only reach here when errorText != null
+                      child: Text(errorText!, style: TextStyle(color: Colors.red, fontSize: 12)),
+                    ),
+                ],
+              ),
+              actions: [
+                CupertinoDialogAction(
+                  onPressed: () => Navigator.pop(dialogContext, null),
+                  child: Text(cancelText),
+                ),
+                CupertinoDialogAction(
+                  isDefaultAction: true,
+                  // Disable the confirm action by providing null when invalid
+                  onPressed: isValid
+                      ? () => Navigator.of(dialogContext).pop(controller.text.trim())
+                      : null,
+                  child: Text(confirmText),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

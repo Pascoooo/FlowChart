@@ -283,7 +283,12 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
   }
 
-  Widget _buildFileItem(ThemeData theme, MyFile file, bool isSelected, BuildContext context) {
+  Widget _buildFileItem(ThemeData theme,
+      MyFile file,
+      bool isSelected,
+      BuildContext context,) {
+    final isMain = file.name == 'main';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -300,17 +305,37 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       child: ListTile(
         leading: Icon(
           Icons.insert_drive_file,
-          color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withOpacity(0.6),
+          color: isSelected
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface.withOpacity(0.6),
         ),
-        title: Text(
-          file.name,
-          style: TextStyle(
-            color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                file.name,
+                style: TextStyle(
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+            if (isMain)
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Icon(
+                  Icons.star,
+                  size: 16,
+                  color: theme.colorScheme.primary.withOpacity(0.8),
+                ),
+              ),
+          ],
         ),
-
-        trailing: PopupMenuButton<String>(
+        trailing: isMain
+            ? null
+            : PopupMenuButton<String>(
           icon: Icon(
             Icons.more_vert,
             color: theme.colorScheme.onSurface.withOpacity(0.6),
@@ -322,21 +347,22 @@ class _ProjectSidebarState extends State<ProjectSidebar>
               _showDeleteConfirmationDialog(context, file);
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem<String>(
+          itemBuilder: (context) =>
+          [
+            PopupMenuItem<String>(
               value: 'rename',
               child: Row(
-                children: [
+                children: const [
                   Icon(Icons.edit),
                   SizedBox(width: 8),
                   Text('Rinomina'),
                 ],
               ),
             ),
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               value: 'delete',
               child: Row(
-                children: [
+                children: const [
                   Icon(Icons.delete),
                   SizedBox(width: 8),
                   Text('Elimina'),
@@ -347,7 +373,13 @@ class _ProjectSidebarState extends State<ProjectSidebar>
         ),
         onTap: () {
           if (!isSelected) {
-            context.read<FileSystemBloc>().add(OpenFile(fileId: file.fileId, projectId: widget.selectedProject.projectId, fileName: file.name) );
+            context.read<FileSystemBloc>().add(
+              OpenFile(
+                fileId: file.fileId,
+                projectId: widget.selectedProject.projectId,
+                fileName: file.name,
+              ),
+            );
           }
         },
       ),
@@ -355,58 +387,57 @@ class _ProjectSidebarState extends State<ProjectSidebar>
   }
 
   void _showRenameFileDialog(BuildContext context, MyFile file) async {
-    if (file.name == 'main') {
-      await DialogService.showInfoDialog(
-        context,
-        title: "Azione Non Permessa",
-        content: const Text('Il "main" non può essere rinominato.'),
-        icon: Icons.info_outline,
-      );
-      return;
-    }
-    final String? newName = await DialogService.showInputDialog(
-      context,
-      title: "Rinomina File",
-      initialValue: file.name,
-      hintText: "es. Diagramma Riveduto",
-      confirmText: "Rinomina",
+    final newName = await DialogService.showInputDialog(context,
+        title: "Rinomina file",
+        message: "Inserisci un nuovo nome per il file",
+        hintText: "es. File",
+        confirmText: "Rinomina",
+        cancelText: "Annulla",
+        validator: (v) {
+          final value = (v ?? '').trim();
+          if (value.isEmpty) return 'Il nome non può essere vuoto';
+          final state = context.read<FileSystemBloc>().state;
+          if (state is FileSystemLoaded) {
+            final exists = state.files.any(
+                  (f) => f.name.toLowerCase() == value.toLowerCase(),
+            );
+            if (exists) return 'Esiste già un file con questo nome';
+          }
+          if(v.length > 20) return 'Nome troppo lungo! (max 20 caratteri)';
+          return null;
+        });
+
+    if (newName == null) return; // utente ha annullato
+
+    final value = newName.trim();
+    if (value.isEmpty) return; // difesa extra
+
+    context.read<FileSystemBloc>().add(
+          RenameFile(
+            fileId: file.fileId,
+            projectId: widget.selectedProject.projectId,
+            newName: newName.toLowerCase(),
+          ),
     );
 
-    if (newName != null && newName.trim().isNotEmpty && newName.trim() != file.name) {
-      context.read<FileSystemBloc>().add(
-        RenameFile(
-          fileId: file.fileId,
-          newName: newName.trim(),
-          projectId: widget.selectedProject.projectId,
-        ),
-      );
-    }
   }
 
   void _showDeleteConfirmationDialog(BuildContext context, MyFile file) async {
-    if (file.name == 'main') {
-      await DialogService.showInfoDialog(
-        context,
-        title: "Azione Non Permessa",
-        content: const Text('Il file "main" non può essere eliminato.'),
-        icon: Icons.info_outline,
-      );
-      return;
-    }
     final bool? confirmed = await DialogService.showConfirmationDialog(
       context,
       title: "Elimina File",
-      message: 'Sei sicuro di voler eliminare "${file.name}"? Questa azione è irreversibile.',
+      message:
+          'Sei sicuro di voler eliminare "${file.name}"? Questa azione è irreversibile.',
       confirmText: "Elimina",
     );
 
     if (confirmed == true) {
       context.read<FileSystemBloc>().add(
-        DeleteFile(
-          fileId: file.fileId,
-          projectId: widget.selectedProject.projectId,
-        ),
-      );
+            DeleteFile(
+              fileId: file.fileId,
+              projectId: widget.selectedProject.projectId,
+            ),
+          );
     }
   }
 
@@ -443,23 +474,36 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       ),
     );
   }
-  void _showCreateFileDialog(BuildContext context, String projectId) async {
-    final String? fileName = await DialogService.showInputDialog(
-      context,
-      title: "Crea Nuovo File",
-      message: "Dai un nome al tuo nuovo file",
-      hintText: "es. Diagramma Principale",
-      confirmText: "Crea File",
-    );
 
-    if (fileName != null && fileName.isNotEmpty) {
-      context.read<FileSystemBloc>().add(
-        CreateNewFile(
-          projectId: projectId,
-          fileName: fileName,
-        ),
-      );
-    }
+  void _showCreateFileDialog(BuildContext context, String projectId) async {
+    final newName = await DialogService.showInputDialog(context,
+        title: "Crea file",
+        message: "Inserisci un nuovo nome per il file",
+        hintText: "es. File",
+        confirmText: "Crea",
+        cancelText: "Annulla",
+        validator: (v) {
+      final value = (v ?? '').trim();
+      if (value.isEmpty) return 'Il nome non può essere vuoto';
+      final state = context.read<FileSystemBloc>().state;
+      if (state is FileSystemLoaded) {
+        final exists = state.files.any(
+          (f) => f.name.toLowerCase() == value.toLowerCase(),
+        );
+        if (exists) return 'Esiste già un file con questo nome';
+      }
+      if(v.length > 20) return 'Nome troppo lungo! (max 20 caratteri)';
+      return null;
+    });
+
+    if (newName == null) return; // utente ha annullato
+
+    final value = newName.trim();
+    if (value.isEmpty) return; // difesa extra
+
+    context.read<FileSystemBloc>().add(
+          CreateNewFile(projectId: projectId, fileName: newName.toLowerCase())
+        );
   }
 
   void _confirmLogout() async {
@@ -473,7 +517,9 @@ class _ProjectSidebarState extends State<ProjectSidebar>
 
     if (confirmed == true) {
       if (!mounted) return;
-      context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
+      context
+          .read<AuthenticationBloc>()
+          .add(const AuthenticationLogoutRequested());
     }
   }
 }
