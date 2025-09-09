@@ -45,6 +45,19 @@ class FirebaseProjectRepo implements ProjectRepo {
     }
   }
 
+  // AGGIUNTO: Implementazione del metodo per aggiornare il timestamp.
+  @override
+  Future<void> updateProjectTimestamp({required String projectId}) async {
+    try {
+      await projectCollection.doc(projectId).update({
+        'updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      log('Errore nell\'aggiornamento del timestamp del progetto: $e');
+      rethrow;
+    }
+  }
+
   @override
   Future<void> deleteProject({required String projectId}) async {
     try {

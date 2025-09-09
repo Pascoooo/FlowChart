@@ -7,6 +7,8 @@ abstract class ProjectRepo {
   Future<void> createProject({required String name});
   Future<void> deleteProject({required String projectId});
   Future<void> renameProject({required String projectId, required String newName});
+  // AGGIUNTO: Metodo per aggiornare il timestamp di un progetto.
+  Future<void> updateProjectTimestamp({required String projectId});
 
 
   /// File-level methods, scoped to a project

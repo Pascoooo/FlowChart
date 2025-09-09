@@ -16,6 +16,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     on<DeselectProject>(_onDeselectProject);
   }
 
+  // MODIFICA: La funzione di caricamento ora ordina i progetti.
   Future<void> _onLoadProjects(
       LoadProjects event,
       Emitter<ProjectState> emit,
@@ -23,6 +24,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     emit(const ProjectLoading());
     try {
       final projects = await projectRepository.getProjects();
+      // Ordina i progetti per data di aggiornamento (dal più recente al meno recente).
+      projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       emit(ProjectsLoaded(projects: projects, selectedProject: null));
     } catch (e) {
       emit(const ProjectError(message: 'Errore nel caricamento del progetto.'));
@@ -30,15 +33,35 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   }
 
 
-  void _onSelectProject(
+  // MODIFICA: La selezione di un progetto ora è asincrona per aggiornare il timestamp.
+  Future<void> _onSelectProject(
       SelectProject event,
       Emitter<ProjectState> emit,
-      ) {
+      ) async {
     if (state is ProjectsLoaded) {
-      final currentState = state as ProjectsLoaded;
-      emit(currentState.copyWith(selectedProject: event.project));
+      emit(const ProjectLoading());
+      try {
+        // 1. Aggiorna il timestamp del progetto selezionato.
+        await projectRepository.updateProjectTimestamp(projectId: event.project.projectId);
+
+        // 2. Ricarica e ordina la lista dei progetti.
+        final projects = await projectRepository.getProjects();
+        projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+        // 3. Emetti il nuovo stato con la lista ordinata e il progetto selezionato.
+        emit(ProjectsLoaded(
+            projects: projects,
+            selectedProject: event.project
+        ));
+
+      } catch (e) {
+        emit(const ProjectError(message: 'Errore durante la selezione del progetto.'));
+        final currentState = state as ProjectsLoaded;
+        emit(currentState); // Ritorna allo stato precedente in caso di errore
+      }
     }
   }
+
 
   void _onDeselectProject(
       DeselectProject event,
@@ -79,6 +102,9 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         content: '',
       );
 
+      // MODIFICA: Ordina la lista dopo la creazione.
+      projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
       emit(ProjectsLoaded(
         projects: projects,
         selectedProject: newProject,
@@ -110,6 +136,9 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
           currentState.selectedProject?.projectId != event.projectId) {
         selectedProject = currentState.selectedProject;
       }
+
+      // MODIFICA: Ordina la lista dopo l'eliminazione.
+      projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
       emit(ProjectsLoaded(
         projects: projects,
@@ -150,6 +179,10 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       );
 
       final projects = await projectRepository.getProjects();
+
+      // MODIFICA: Non è necessario aggiornare il timestamp qui, ma ordiniamo la lista
+      // per coerenza, anche se l'ordine non dovrebbe cambiare.
+      projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
       // Mantieni la selezione
       MyProject? selectedProject;
