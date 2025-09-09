@@ -32,13 +32,7 @@ class ProjectSelector extends StatelessWidget {
         hintText: "es. Il mio diagramma di flusso",
         confirmText: "Crea Progetto",
         cancelText: "Annulla",
-        validator: (v) {
-          if (v.isEmpty) return 'Il nome non può essere vuoto';
-          final exists = projects.any((p) => p.name.toLowerCase() == v.toLowerCase());
-          if (exists) return 'Esiste già un progetto con questo nome';
-          if (v.length > 20) return 'Nome troppo lungo (max 20 caratteri)';
-          return null;
-        },
+        validator: (v) => ValidationUtils.validateProjectName(v, projects),
       );
 
       if (projectName != null) {
@@ -57,7 +51,7 @@ class ProjectSelector extends StatelessWidget {
               children: [
                 const WelcomeHeader(),
                 const SizedBox(height: 48),
-                ProjectContainer(
+                EnhancedProjectContainer(
                   projects: projects,
                   onProjectSelected: onProjectSelected,
                   onProjectDeleted: (projectId) {
@@ -90,6 +84,7 @@ class ProjectSelector extends StatelessWidget {
     );
   }
 }
+
 
 class CreateProjectButton extends StatelessWidget {
   final int projectCount;

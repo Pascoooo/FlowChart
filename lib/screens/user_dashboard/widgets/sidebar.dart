@@ -1,12 +1,12 @@
 // lib/screens/user_dashboard/widgets/sidebar.dart (Updated)
 import 'package:file_repository/file_repository.dart';
+import 'package:flowchart_thesis/config/constants/theme_switch.dart'; // Import per il ThemeProvider
 import 'package:flowchart_thesis/config/widgets/buttons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
-import '../../../blocs/auth_bloc/authentication_bloc.dart';
-import '../../../blocs/auth_bloc/authentication_event.dart';
+import 'package:provider/provider.dart'; // Import per Provider
 import '../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../blocs/file_bloc/file_system_event.dart';
 import '../../../blocs/file_bloc/file_system_state.dart';
@@ -16,6 +16,7 @@ import '../../../config/router/app_router.dart';
 import '../../../config/services/dialog_service.dart';
 
 class ProjectSidebar extends StatefulWidget {
+  // ... (il resto del widget rimane invariato)
   final MyProject selectedProject;
 
   const ProjectSidebar({
@@ -70,7 +71,6 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       margin: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Primo Container: Contiene la lista dei file ed è espanso per occupare lo spazio rimanente.
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -98,9 +98,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
               ),
             ),
           ),
-          // Spazio tra i due riquadri
           const SizedBox(height: 16),
-          // Secondo Container: Contiene solo i bottoni e ha altezza fissa.
           _buildBottomActions(theme),
         ],
       ),
@@ -216,9 +214,12 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     );
   }
 
+  // --- MODIFICA QUI ---
   Widget _buildBottomActions(ThemeData theme) {
+    // Ottieni il provider per il tema
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
@@ -244,16 +245,16 @@ class _ProjectSidebarState extends State<ProjectSidebar>
           ),
           const SizedBox(height: 8),
           ModernMenuItem(
-            icon: FontAwesomeIcons.rightFromBracket,
-            title: "Logout",
-            onTap: _confirmLogout,
-            isDestructive: true,
+            iconWidget: _AnimatedThemeIcon(isDark: isDark),
+            title: "Cambia Tema",
+            onTap: () => context.read<ThemeProvider>().toggleTheme(),
           ),
+          // RIMOSSO: Pulsante di Logout
         ],
       ),
     );
   }
-
+  // (il resto dei metodi per la gestione dei file rimane invariato)
   Widget _buildFileSystemView(ThemeData theme) {
     return BlocBuilder<FileSystemBloc, FileSystemState>(
       builder: (context, fileState) {
@@ -394,7 +395,7 @@ class _ProjectSidebarState extends State<ProjectSidebar>
         confirmText: "Rinomina",
         cancelText: "Annulla",
         validator: (v) {
-          final value = (v ?? '').trim();
+          final value = (v).trim();
           if (value.isEmpty) return 'Il nome non può essere vuoto';
           final state = context.read<FileSystemBloc>().state;
           if (state is FileSystemLoaded) {
@@ -413,11 +414,11 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     if (value.isEmpty) return; // difesa extra
 
     context.read<FileSystemBloc>().add(
-          RenameFile(
-            fileId: file.fileId,
-            projectId: widget.selectedProject.projectId,
-            newName: newName.toLowerCase(),
-          ),
+      RenameFile(
+        fileId: file.fileId,
+        projectId: widget.selectedProject.projectId,
+        newName: newName.toLowerCase(),
+      ),
     );
 
   }
@@ -427,17 +428,17 @@ class _ProjectSidebarState extends State<ProjectSidebar>
       context,
       title: "Elimina File",
       message:
-          'Sei sicuro di voler eliminare "${file.name}"? Questa azione è irreversibile.',
+      'Sei sicuro di voler eliminare "${file.name}"? Questa azione è irreversibile.',
       confirmText: "Elimina",
     );
 
     if (confirmed == true) {
       context.read<FileSystemBloc>().add(
-            DeleteFile(
-              fileId: file.fileId,
-              projectId: widget.selectedProject.projectId,
-            ),
-          );
+        DeleteFile(
+          fileId: file.fileId,
+          projectId: widget.selectedProject.projectId,
+        ),
+      );
     }
   }
 
@@ -483,18 +484,18 @@ class _ProjectSidebarState extends State<ProjectSidebar>
         confirmText: "Crea",
         cancelText: "Annulla",
         validator: (v) {
-      final value = (v ?? '').trim();
-      if (value.isEmpty) return 'Il nome non può essere vuoto';
-      final state = context.read<FileSystemBloc>().state;
-      if (state is FileSystemLoaded) {
-        final exists = state.files.any(
-          (f) => f.name.toLowerCase() == value.toLowerCase(),
-        );
-        if (exists) return 'Esiste già un file con questo nome';
-      }
-      if(v.length > 20) return 'Nome troppo lungo! (max 20 caratteri)';
-      return null;
-    });
+          final value = (v).trim();
+          if (value.isEmpty) return 'Il nome non può essere vuoto';
+          final state = context.read<FileSystemBloc>().state;
+          if (state is FileSystemLoaded) {
+            final exists = state.files.any(
+                  (f) => f.name.toLowerCase() == value.toLowerCase(),
+            );
+            if (exists) return 'Esiste già un file con questo nome';
+          }
+          if(v.length > 20) return 'Nome troppo lungo! (max 20 caratteri)';
+          return null;
+        });
 
     if (newName == null) return; // utente ha annullato
 
@@ -502,24 +503,32 @@ class _ProjectSidebarState extends State<ProjectSidebar>
     if (value.isEmpty) return; // difesa extra
 
     context.read<FileSystemBloc>().add(
-          CreateNewFile(projectId: projectId, fileName: newName.toLowerCase())
-        );
+        CreateNewFile(projectId: projectId, fileName: newName.toLowerCase())
+    );
   }
 
-  void _confirmLogout() async {
-    final bool? confirmed = await DialogService.showConfirmationDialog(
-      context,
-      title: 'Logout',
-      message: 'Sei sicuro di voler effettuare il logout?',
-      confirmText: 'Logout',
-      cancelText: 'Annulla',
-    );
+}
 
-    if (confirmed == true) {
-      if (!mounted) return;
-      context
-          .read<AuthenticationBloc>()
-          .add(const AuthenticationLogoutRequested());
-    }
+class _AnimatedThemeIcon extends StatelessWidget {
+  final bool isDark;
+  const _AnimatedThemeIcon({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      transitionBuilder: (child, animation) {
+        return RotationTransition(
+          turns: Tween<double>(begin: 0.75, end: 1.0).animate(animation),
+          child: ScaleTransition(scale: animation, child: child),
+        );
+      },
+      child: Icon(
+        isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+        key: ValueKey(isDark), // Importante per l'animazione
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
   }
 }

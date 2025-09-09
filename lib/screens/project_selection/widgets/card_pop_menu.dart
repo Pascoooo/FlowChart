@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:project_repository/project_repository.dart';
-
 import '../../../config/services/dialog_service.dart';
+import '../widgets/project_container.dart';
 
 class CardPopupMenu extends StatelessWidget {
   final MyProject project;
@@ -31,13 +31,8 @@ class CardPopupMenu extends StatelessWidget {
               message: "Inserisci un nuovo nome per il progetto",
               hintText: project.name,
               confirmText: "Rinomina",
-              cancelText: "Annulla", validator: (v) {
-                if (v.isEmpty) return 'Il nome non può essere vuoto';
-                final exists = projects.any((p) => p.projectId != project.projectId && p.name.toLowerCase() == v.toLowerCase());
-                if (exists) return 'Esiste già un progetto con questo nome';
-                if (v.length > 20) return 'Nome troppo lungo! (max 20 caratteri)';
-                return null;
-              });
+              cancelText: "Annulla",
+              validator: (v) => ValidationUtils.validateProjectName(v, projects, project.projectId));
           if (newName != null) {
             onRenamed(newName);
           }

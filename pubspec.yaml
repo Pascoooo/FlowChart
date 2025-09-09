@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
   provider: ^6.1.1
   shared_preferences:
+  popover:
   go_router: ^16.1.0
   firebase_core: ^4.0.0
   firebase_auth: ^6.0.1

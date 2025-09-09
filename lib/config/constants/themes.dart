@@ -241,3 +241,21 @@ ThemeData darkmode = ThemeData(
 
   scaffoldBackgroundColor: const Color(0xFF181818),
 );
+
+class AppConstants {
+  static const double projectContainerWidth = 900;
+  static const double projectContainerHeight = 500;
+  static const int maxProjectNameLength = 30;
+  static const int projectsPerPage = 3;
+  static const Duration animationDuration = Duration(milliseconds: 800);
+  static const Duration staggerDelay = Duration(milliseconds: 100);
+}
+
+class AppStyles {
+  static const double borderRadiusLarge = 24;
+  static const double borderRadiusMedium = 16;
+  static const double borderRadiusSmall = 12;
+  static const double elevationLow = 4;
+  static const double elevationMedium = 8;
+  static const double elevationHigh = 16;
+}
