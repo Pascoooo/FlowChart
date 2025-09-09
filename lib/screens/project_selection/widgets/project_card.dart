@@ -24,8 +24,9 @@ class ProjectCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SizedBox(
-      width: 200,
-      height: 180,
+      // MODIFICA: Dimensioni intermedie
+      width: 220, // Era 240
+      height: 200, // Era 220
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -68,12 +69,20 @@ class ProjectCard extends StatelessWidget {
                           ]),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: FaIcon(FontAwesomeIcons.folder, size: 20, color: theme.colorScheme.primary),
+                        child: FaIcon(
+                          FontAwesomeIcons.folder,
+                          // MODIFICA: Dimensione icona ridotta
+                          size: 24, // Era 28
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         project.name,
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
                         textAlign: TextAlign.center,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

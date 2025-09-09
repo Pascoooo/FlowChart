@@ -74,10 +74,18 @@ class _EnhancedProjectContainerState extends State<EnhancedProjectContainer>
             height: AppConstants.projectContainerHeight,
             decoration: _buildContainerDecoration(theme),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.start, // Assicura che inizi dall'alto
+              crossAxisAlignment: CrossAxisAlignment.center, // Per centrare orizzontalmente il titolo
               children: [
+                const SizedBox(height: 30), // Spazio fisso dall'alto del container
                 _buildEnhancedHeader(theme),
-                const SizedBox(height: 32),
-                Expanded(child: _buildContent()),
+                const SizedBox(height: 20), // Spazio ridotto tra titolo e carosello
+                // MODIFICA: Abbiamo ancora bisogno di un'altezza definita per il carosello se non Expanded
+                SizedBox(
+                  height: 250, // Mantieniamo un'altezza fissa per il carosello
+                  child: _buildContent(),
+                ),
+                const Spacer(flex: 2), // MODIFICA: Spacer con flex per spingere il contenuto in alto
               ],
             ),
           ),
@@ -143,21 +151,22 @@ class _EnhancedProjectContainerState extends State<EnhancedProjectContainer>
                   ),
                   child: FaIcon(
                     FontAwesomeIcons.folderOpen,
-                    size: 20,
+                    // MODIFICA: Aumentata la dimensione dell'icona da 20 a 26
+                    size: 26,
                     color: theme.colorScheme.primary,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Text(
                   "I tuoi progetti",
-                  style: theme.textTheme.headlineMedium?.copyWith(
+                  // MODIFICA: Cambiato lo stile del testo a headlineLarge per un font più grande
+                  style: theme.textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: theme.colorScheme.onSurface,
                   ),
                 ),
               ],
             ),
-
           ],
         ),
       ),
