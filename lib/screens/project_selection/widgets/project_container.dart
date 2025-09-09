@@ -157,21 +157,7 @@ class _EnhancedProjectContainerState extends State<EnhancedProjectContainer>
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: theme.colorScheme.primaryContainer.withOpacity(0.3),
-              ),
-              child: Text(
-                "${widget.projects.length} ${widget.projects.length == 1 ? 'progetto' : 'progetti'} disponibili",
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+
           ],
         ),
       ),

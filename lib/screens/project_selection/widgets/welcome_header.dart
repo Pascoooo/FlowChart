@@ -9,7 +9,6 @@ import '../../../config/constants/themes.dart';
 import '../../../config/router/app_router.dart';
 import '../../../config/services/dialog_service.dart';
 
-
 class WelcomeHeader extends StatefulWidget {
   const WelcomeHeader({super.key});
 
@@ -34,6 +33,8 @@ class WelcomeHeaderState extends State<WelcomeHeader>
 
   void _initializeAnimations() {
     _heroController = AnimationController(
+      // Se non hai AppConstants.animationDuration, puoi usare una durata fissa
+      // es: duration: const Duration(milliseconds: 600),
       duration: AppConstants.animationDuration,
       vsync: this,
     );
@@ -77,45 +78,29 @@ class WelcomeHeaderState extends State<WelcomeHeader>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppStyles.borderRadiusLarge),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            theme.colorScheme.primaryContainer.withOpacity(0.2),
-            theme.colorScheme.secondaryContainer.withOpacity(0.1),
-            theme.colorScheme.tertiaryContainer.withOpacity(0.05),
-          ],
-        ),
-        border: Border.all(
-          color: theme.colorScheme.outline.withOpacity(0.1),
-        ),
-      ),
-      child: AnimatedBuilder(
-        animation: _heroAnimation,
-        builder: (context, child) {
-          return SlideTransition(
-            position: _slideAnimation,
-            child: FadeTransition(
-              opacity: _heroAnimation,
-              child: Column(
-                children: [
-                  _buildHeroIcon(theme),
-                  const SizedBox(height: 24),
-                  _buildWelcomeText(theme),
-                  const SizedBox(height: 12),
-                  _buildSubtitle(theme),
-                  const SizedBox(height: 32),
-                  _buildDecorativeElements(theme),
-                ],
-              ),
+    // Il Container di sfondo è stato rimosso. Il widget radice è ora l'AnimatedBuilder.
+    return AnimatedBuilder(
+      animation: _heroAnimation,
+      builder: (context, child) {
+        return SlideTransition(
+          position: _slideAnimation,
+          child: FadeTransition(
+            opacity: _heroAnimation,
+            child: Column(
+              // Potresti voler aggiungere crossAxisAlignment per centrare orizzontalmente
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildHeroIcon(theme),
+                const SizedBox(height: 24),
+                _buildWelcomeText(theme),
+                const SizedBox(height: 12),
+                _buildSubtitle(theme),
+                // L'SizedBox e _buildDecorativeElements sono stati rimossi.
+              ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -167,6 +152,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
             style: theme.textTheme.headlineLarge?.copyWith(
               fontWeight: FontWeight.bold,
               color: theme.colorScheme.onSurface,
+              fontSize: (theme.textTheme.headlineLarge?.fontSize ?? 32) + 4,
             ),
             children: [
               const TextSpan(text: "Bentornato, "),
@@ -203,35 +189,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     );
   }
 
-  Widget _buildDecorativeElements(ThemeData theme) {
-    return AnimatedBuilder(
-      animation: _decorationAnimation,
-      builder: (context, child) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(5, (index) {
-            return AnimatedContainer(
-              duration: Duration(milliseconds: 300 + (index * 100)),
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              height: 6,
-              width: index == 2 ? 24 : 12,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(3),
-                gradient: LinearGradient(
-                  colors: index == 2
-                      ? [theme.colorScheme.primary, theme.colorScheme.secondary]
-                      : [
-                          theme.colorScheme.primary.withOpacity(0.3),
-                          theme.colorScheme.secondary.withOpacity(0.3),
-                        ],
-                ),
-              ),
-            );
-          }),
-        );
-      },
-    );
-  }
+// La funzione _buildDecorativeElements() è stata rimossa completamente.
 }
 
 // ... il resto del file (ProfileMenu) rimane invariato
