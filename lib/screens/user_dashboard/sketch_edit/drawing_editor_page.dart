@@ -190,29 +190,23 @@ class DrawingToolbar extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.circle,
-                  size: drawingMode ? strokeWidth + 8 : eraserWidth / 2 + 8,
-                  color: drawingMode ? strokeColor : Colors.grey[400],
-                ),
-                const SizedBox(width: 8),
                 Expanded(
                   child: drawingMode
                       ? Slider(
-                    value: strokeWidth,
-                    min: 1.0,
-                    max: 10.0,
-                    divisions: 9,
-                    activeColor: strokeColor,
-                    onChanged: onStrokeWidthChanged,
-                  )
+                          value: strokeWidth,
+                          min: 1.0,
+                          max: 10.0,
+                          divisions: 9,
+                          activeColor: Colors.black, // Colore fisso nero
+                          onChanged: onStrokeWidthChanged,
+                        )
                       : Slider(
-                    value: eraserWidth,
-                    min: 5.0,
-                    max: 50.0,
-                    divisions: 9,
-                    onChanged: onEraserWidthChanged,
-                  ),
+                          value: eraserWidth,
+                          min: 5.0,
+                          max: 50.0,
+                          divisions: 9,
+                          onChanged: onEraserWidthChanged,
+                        ),
                 ),
               ],
             ),
