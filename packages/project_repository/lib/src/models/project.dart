@@ -28,4 +28,12 @@ class MyProject {
       updatedAt: entity.updatedAt,
     );
   }
+
+  MyProject copyWith({required DateTime updatedAt}) {
+    return MyProject(
+      projectId: projectId,
+      name: name,
+      updatedAt: updatedAt,
+    );
+  }
 }

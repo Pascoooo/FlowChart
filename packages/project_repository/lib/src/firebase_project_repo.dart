@@ -45,7 +45,7 @@ class FirebaseProjectRepo implements ProjectRepo {
     }
   }
 
-  // AGGIUNTO: Implementazione del metodo per aggiornare il timestamp.
+  // METODO ESISTENTE - non più utilizzato dal BLoC direttamente ma lasciato per possibili usi futuri
   @override
   Future<void> updateProjectTimestamp({required String projectId}) async {
     try {
@@ -57,6 +57,30 @@ class FirebaseProjectRepo implements ProjectRepo {
       rethrow;
     }
   }
+
+  /// AGGIUNTO: Esegue l'aggiornamento di più timestamp in un'unica batch.
+  ///
+  /// [updates] Una lista di mappe, ognuna contenente 'projectId' e 'openedAt'.
+  Future<void> updateProjectTimestamps(List<Map<String, dynamic>> updates) async {
+    if (updates.isEmpty) return;
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final update in updates) {
+        final projectId = update['projectId'] as String;
+        final openedAt = DateTime.parse(update['openedAt'] as String);
+
+        final docRef = projectCollection.doc(projectId);
+        batch.update(docRef, {'updatedAt': Timestamp.fromDate(openedAt)});
+      }
+      await batch.commit();
+      log('${updates.length} progetti aggiornati con successo in batch.');
+    } catch (e) {
+      log('Errore durante l\'aggiornamento in batch dei timestamp: $e');
+      rethrow; // Rilancia l'eccezione per farla gestire al BLoC
+    }
+  }
+
 
   @override
   Future<void> deleteProject({required String projectId}) async {
@@ -103,7 +127,6 @@ class FirebaseProjectRepo implements ProjectRepo {
     }
   }
 
-  // Metodo per creare un file, ora con projectId
   @override
   Future<void> addFileToProject({
     required String projectId,
@@ -124,7 +147,6 @@ class FirebaseProjectRepo implements ProjectRepo {
     }
   }
 
-  // Metodo per eliminare un file, ora con projectId
   @override
   Future<void> deleteFile({required String projectId, required String fileId}) async {
     try {
@@ -135,7 +157,6 @@ class FirebaseProjectRepo implements ProjectRepo {
     }
   }
 
-  // Metodo per rinominare un file, ora con projectId
   @override
   Future<void> renameFile({
     required String projectId,
@@ -150,7 +171,6 @@ class FirebaseProjectRepo implements ProjectRepo {
     }
   }
 
-  // Metodo per aggiornare il contenuto del file, ora con projectId
   @override
   Future<void> updateFileContent({
     required String projectId,

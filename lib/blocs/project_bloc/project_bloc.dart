@@ -1,13 +1,22 @@
 import 'package:bloc/bloc.dart';
 import 'package:project_repository/project_repository.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Per WriteBatch
+import 'dart:developer' as developer;
+import 'logger_service.dart';
 import 'project_event.dart';
 import 'project_state.dart';
 
+
 class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   final FirebaseProjectRepo projectRepository;
+  // AGGIUNTO: Inietta il servizio di logging
+  final UpdateLoggerService updateLoggerService;
 
-  ProjectBloc({required this.projectRepository})
-      : super(const ProjectInitial()) {
+  ProjectBloc({
+    required this.projectRepository,
+    // AGGIUNTO: Richiedi il servizio nel costruttore
+    required this.updateLoggerService,
+  }) : super(const ProjectInitial()) {
     on<CreateProject>(_onCreateProject);
     on<DeleteProject>(_onDeleteProject);
     on<RenameProject>(_onRenameProject);
@@ -16,49 +25,71 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     on<DeselectProject>(_onDeselectProject);
   }
 
-  // MODIFICA: La funzione di caricamento ora ordina i progetti.
+  // MODIFICATO: La funzione di caricamento ora sincronizza prima gli aggiornamenti pendenti
   Future<void> _onLoadProjects(
       LoadProjects event,
       Emitter<ProjectState> emit,
       ) async {
     emit(const ProjectLoading());
     try {
+      // 1. Controlla e sincronizza gli aggiornamenti pendenti
+      await _syncPendingUpdates();
+
+      // 2. Procedi con il caricamento normale
       final projects = await projectRepository.getProjects();
-      // Ordina i progetti per data di aggiornamento (dal più recente al meno recente).
       projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       emit(ProjectsLoaded(projects: projects, selectedProject: null));
     } catch (e) {
-      emit(const ProjectError(message: 'Errore nel caricamento del progetto.'));
+      developer.log('Errore durante il caricamento dei progetti: $e', error: e);
+      emit(const ProjectError(message: 'Errore nel caricamento dei progetti. Riprova più tardi.'));
+    }
+  }
+
+  /// Funzione helper per sincronizzare gli aggiornamenti
+  Future<void> _syncPendingUpdates() async {
+    final pendingUpdates = await updateLoggerService.getPendingUpdates();
+    if (pendingUpdates.isNotEmpty) {
+      developer.log('Trovati ${pendingUpdates.length} aggiornamenti pendenti. Sincronizzazione in corso...');
+      try {
+        await projectRepository.updateProjectTimestamps(pendingUpdates);
+        // La sincronizzazione è andata a buon fine, cancella il file locale
+        await updateLoggerService.deletePendingUpdatesFile();
+        developer.log('Sincronizzazione completata con successo.');
+      } catch (e) {
+        // Se la sincronizzazione fallisce, non cancelliamo il file
+        // e lasciamo un log dell'errore. L'app continuerà a funzionare
+        // con i dati vecchi e riproverà al prossimo avvio.
+        developer.log('Sincronizzazione fallita! Gli aggiornamenti verranno ritentati al prossimo avvio.', error: e);
+      }
+    } else {
+      developer.log('Nessun aggiornamento pendente da sincronizzare.');
     }
   }
 
 
-  // MODIFICA: La selezione di un progetto ora è asincrona per aggiornare il timestamp.
+  // MODIFICATO: La selezione ora aggiorna lo stato localmente e registra l'update.
   Future<void> _onSelectProject(
       SelectProject event,
       Emitter<ProjectState> emit,
       ) async {
     if (state is ProjectsLoaded) {
-      emit(const ProjectLoading());
-      try {
-        // 1. Aggiorna il timestamp del progetto selezionato.
-        await projectRepository.updateProjectTimestamp(projectId: event.project.projectId);
+      final currentState = state as ProjectsLoaded;
 
-        // 2. Ricarica e ordina la lista dei progetti.
-        final projects = await projectRepository.getProjects();
-        projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      // 1. Registra l'apertura del progetto nel file locale
+      await updateLoggerService.logProjectUpdate(event.project.projectId);
 
-        // 3. Emetti il nuovo stato con la lista ordinata e il progetto selezionato.
-        emit(ProjectsLoaded(
-            projects: projects,
-            selectedProject: event.project
-        ));
+      // 2. Aggiorna l'ordine nell'UI immediatamente (aggiornamento ottimistico)
+      final List<MyProject> updatedList = List.from(currentState.projects);
 
-      } catch (e) {
-        emit(const ProjectError(message: 'Errore durante la selezione del progetto.'));
-        final currentState = state as ProjectsLoaded;
-        emit(currentState); // Ritorna allo stato precedente in caso di errore
-      }
+      // Rimuovi il progetto selezionato e reinseriscilo in cima
+      updatedList.removeWhere((p) => p.projectId == event.project.projectId);
+      updatedList.insert(0, event.project.copyWith(updatedAt: DateTime.now())); // Aggiorna il timestamp localmente
+
+      // 3. Emetti il nuovo stato senza attendere operazioni di rete
+      emit(ProjectsLoaded(
+        projects: updatedList,
+        selectedProject: event.project,
+      ));
     }
   }
 
@@ -85,7 +116,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         throw Exception('Il nome del progetto non può essere vuoto.');
       }
 
-      // Controllo unicità nome
       final existingProjects = await projectRepository.getProjects();
       if (existingProjects.any((p) => p.name == event.projectName.trim())) {
         throw Exception('Esiste già un progetto con questo nome.');
@@ -94,7 +124,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       await projectRepository.createProject(name: event.projectName.trim());
       final projects = await projectRepository.getProjects();
 
-      // Crea il file di default "main"
       final newProject = projects.firstWhere((p) => p.name == event.projectName.trim());
       await projectRepository.addFileToProject(
         projectId: newProject.projectId,
@@ -102,7 +131,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         content: '',
       );
 
-      // MODIFICA: Ordina la lista dopo la creazione.
       projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
       emit(ProjectsLoaded(
@@ -130,14 +158,12 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       await projectRepository.deleteProject(projectId: event.projectId);
       final projects = await projectRepository.getProjects();
 
-      // Se il progetto eliminato era selezionato, deselezionalo
       MyProject? selectedProject;
       if (currentState is ProjectsLoaded &&
           currentState.selectedProject?.projectId != event.projectId) {
         selectedProject = currentState.selectedProject;
       }
 
-      // MODIFICA: Ordina la lista dopo l'eliminazione.
       projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
       emit(ProjectsLoaded(
@@ -165,7 +191,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         throw Exception('Il nuovo nome non può essere vuoto.');
       }
 
-      // Controllo unicità nome
       final existingProjects = await projectRepository.getProjects();
       if (existingProjects.any(
             (p) => p.name == event.newName.trim() && p.projectId != event.projectId,
@@ -180,11 +205,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
 
       final projects = await projectRepository.getProjects();
 
-      // MODIFICA: Non è necessario aggiornare il timestamp qui, ma ordiniamo la lista
-      // per coerenza, anche se l'ordine non dovrebbe cambiare.
       projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
-      // Mantieni la selezione
       MyProject? selectedProject;
       if (currentState is ProjectsLoaded && currentState.selectedProject != null) {
         if (currentState.selectedProject!.projectId == event.projectId) {
@@ -208,6 +230,4 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       }
     }
   }
-
-
 }

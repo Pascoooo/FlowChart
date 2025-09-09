@@ -8,6 +8,7 @@ import 'package:flowchart_thesis/screens/user_dashboard/sketch_edit/drawing_edit
 import 'package:project_repository/project_repository.dart';
 import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
+import '../../blocs/project_bloc/logger_service.dart';
 import '../../blocs/project_bloc/project_bloc.dart';
 import '../../screens/auth/views/auth_page.dart';
 import '../error/error_page.dart';
@@ -49,7 +50,7 @@ class AppRouter {
               return BlocProvider<ProjectBloc>(
                 key: ValueKey('project-bloc-${authState.user.userId}'),
                 create: (_) => ProjectBloc(
-                  projectRepository: FirebaseProjectRepo(uid: authState.user.userId),
+                  projectRepository: FirebaseProjectRepo(uid: authState.user.userId), updateLoggerService: UpdateLoggerService(),
                 ),
                 child: child,
               );
