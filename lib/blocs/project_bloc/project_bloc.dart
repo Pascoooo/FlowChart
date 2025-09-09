@@ -78,11 +78,10 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         fileName: 'main',
         content: '',
       );
+
       emit(ProjectsLoaded(
         projects: projects,
-        selectedProject: currentState is ProjectsLoaded
-            ? currentState.selectedProject
-            : null,
+        selectedProject: newProject,
       ));
     } catch (e) {
       emit(ProjectError(message: e.toString()));
