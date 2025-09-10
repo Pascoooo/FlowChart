@@ -71,6 +71,7 @@ class FirebaseUserRepo implements UserRepository {
     }
   }
 
+
   @override
   Future<MyUser> signInWithGoogle() async {
     try {
@@ -151,6 +152,34 @@ class FirebaseUserRepo implements UserRepository {
       'network-request-failed' => const AuthenticationException('Errore di connessione. Controlla la tua connessione e riprova.'),
       _ => AuthenticationException('Errore di autenticazione: ${e.message}'),
     };
+  }
+
+  /// Elimina l'account dell'utente attualmente autenticato.
+  /// L'utente deve essere autenticato.
+  /// L'eliminazione dell'account rimuove l'utente da Firebase Auth e il suo documento da Firestore con i relativi documenti.
+  @override
+  Future<void> deleteAccount() {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw const AuthenticationException('Nessun utente autenticato');
+    }
+
+    return _firestore.runTransaction((transaction) async {
+      // Elimina il documento utente
+      final userDocRef = _usersCollection.doc(user.uid);
+      transaction.delete(userDocRef);
+
+      // Aggiungi qui altre eliminazioni di documenti correlati se necessario
+
+      // Elimina l'utente da Firebase Auth
+      await user.delete();
+    }).timeout(const Duration(seconds: 20)).catchError((e) {
+      if (e is FirebaseAuthException) {
+        throw _mapFirebaseAuthException(e);
+      } else {
+        throw Exception('Errore durante l\'eliminazione dell\'account: $e');
+      }
+    });
   }
 }
 

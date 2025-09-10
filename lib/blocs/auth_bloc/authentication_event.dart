@@ -22,3 +22,7 @@
   class AuthenticationGoogleSignInRequested extends AuthenticationEvent {
     const AuthenticationGoogleSignInRequested();
   }
+
+  class AuthenticationDeleteAccountRequested extends AuthenticationEvent {
+    const AuthenticationDeleteAccountRequested();
+  }

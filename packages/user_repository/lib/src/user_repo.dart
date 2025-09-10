@@ -18,4 +18,7 @@ abstract class UserRepository {
 
   // Sign in with Google
   Future<MyUser> signInWithGoogle();
+
+  // Account Deletetion
+  Future<void> deleteAccount();
 }

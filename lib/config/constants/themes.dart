@@ -245,7 +245,7 @@ ThemeData darkmode = ThemeData(
 class AppConstants {
   static const double projectContainerWidth = 900;
   static const double projectContainerHeight = 500;
-  static const int maxProjectNameLength = 30;
+  static const int maxProjectNameLength = 20;
   static const int projectsPerPage = 3;
   static const Duration animationDuration = Duration(milliseconds: 800);
   static const Duration staggerDelay = Duration(milliseconds: 100);

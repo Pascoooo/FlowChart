@@ -25,7 +25,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider(prefs)),
         Provider<UserRepository>(create: (_) => FirebaseUserRepo()),
         ChangeNotifierProvider(create: (_) => SettingsProvider(prefs)),
       ],
