@@ -26,3 +26,7 @@
   class AuthenticationDeleteAccountRequested extends AuthenticationEvent {
     const AuthenticationDeleteAccountRequested();
   }
+
+  class AuthenticationErrorCleared extends AuthenticationEvent {
+    const AuthenticationErrorCleared();
+  }

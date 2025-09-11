@@ -13,6 +13,7 @@ dependencies:
   # firebase
   firebase_auth:
   cloud_firestore:
+  firebase_database:
   google_sign_in:
   file_repository:
     path: ../file_repository

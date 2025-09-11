@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:uuid/uuid.dart';
 import '../project_repository.dart';
@@ -7,18 +8,14 @@ import '../project_repository.dart';
 class FirebaseProjectRepo implements ProjectRepo {
   final String uid;
   final CollectionReference<Map<String, dynamic>> projectCollection;
-  final DocumentReference<Map<String, dynamic>>  projectsLogDoc;
+  final DatabaseReference rtdbLogRef;
 
   FirebaseProjectRepo({required this.uid})
       : projectCollection = FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('projects'),
-        projectsLogDoc = FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('projectslog')
-            .doc('logs');
+      .collection('users')
+      .doc(uid)
+      .collection('projects'),
+      rtdbLogRef = FirebaseDatabase.instance.ref('users/$uid/projectslog');
 
 
   @override
@@ -30,23 +27,31 @@ class FirebaseProjectRepo implements ProjectRepo {
     });
   }
 
+
   @override
   Future<Map<String, DateTime>> getUserTimestamps() async {
     try {
-      final doc = await projectsLogDoc.get();
-      if (!doc.exists) return {};
-      final data = doc.data()?['lastOpened'] as Map<String, dynamic>? ?? {};
-      return data.map((key, value) => MapEntry(key, DateTime.parse(value as String)));
+      final snapshot = await rtdbLogRef.get();
+      if (!snapshot.exists || snapshot.value == null) return {};
+
+      final data = snapshot.value as Map<dynamic, dynamic>;
+      return data.map((key, value) => MapEntry(key.toString(), DateTime.parse(value as String)));
     } catch (e) {
+      log('Errore nel caricamento dei timestamp da RTDB: $e');
       return {};
     }
   }
 
-  // MODIFICATO: Ora salva nel nuovo percorso
+
   @override
   Future<void> saveUserTimestamps(Map<String, DateTime> timestamps) {
-    final serializableData = timestamps.map((key, value) => MapEntry(key, value.toIso8601String()));
-    return projectsLogDoc.set({'lastOpened': serializableData});
+    try {
+      final serializableData = timestamps.map((key, value) => MapEntry(key, value.toIso8601String()));
+      return rtdbLogRef.set(serializableData);
+    } catch (e) {
+      log('Errore nel salvataggio dei timestamp su RTDB: $e');
+      rethrow;
+    }
   }
 
   @override
@@ -71,13 +76,16 @@ class FirebaseProjectRepo implements ProjectRepo {
     try {
       final batch = FirebaseFirestore.instance.batch();
       final filesCollection =
-          projectCollection.doc(projectId).collection('files');
+      projectCollection.doc(projectId).collection('files');
       final filesSnapshot = await filesCollection.get();
       for (final doc in filesSnapshot.docs) {
         batch.delete(doc.reference);
       }
       batch.delete(projectCollection.doc(projectId));
       await batch.commit();
+
+      await rtdbLogRef.child(projectId).remove();
+
     } catch (e) {
       rethrow;
     }
@@ -98,7 +106,7 @@ class FirebaseProjectRepo implements ProjectRepo {
   Future<List<MyFile>> getProjectFiles({required String projectId}) async {
     try {
       final filesCollection =
-          projectCollection.doc(projectId).collection('files');
+      projectCollection.doc(projectId).collection('files');
       final snapshot = await filesCollection.get();
       return snapshot.docs.map((doc) {
         final data = doc.data();
@@ -180,6 +188,4 @@ class FirebaseProjectRepo implements ProjectRepo {
       rethrow;
     }
   }
-
-
 }

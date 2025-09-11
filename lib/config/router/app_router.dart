@@ -11,7 +11,6 @@ import '../../blocs/project_bloc/project_bloc.dart';
 import '../../screens/auth/views/auth_page.dart';
 import '../../screens/user_dashboard/project_workspace/drawing_page/drawing_editor_page.dart';
 import '../error/error_page.dart';
-import '../services/visibility_service.dart';
 
 class AppRoutes {
   static const String homeName = 'home';
@@ -50,7 +49,6 @@ class AppRouter {
                 key: ValueKey('project-bloc-${authState.user.userId}'),
                 create: (_) => ProjectBloc(
                   projectRepository: FirebaseProjectRepo(uid: authState.user.userId),
-                  visibilityService: VisibilityService(),
                 ),
                 child: child,
               );

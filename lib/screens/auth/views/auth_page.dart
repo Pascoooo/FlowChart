@@ -8,7 +8,7 @@ import '../../../config/constants/theme_switch.dart';
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/auth_bloc/authentication_state.dart';
-import '../../../config/error/error_banner.dart';
+import '../../../config/error/error_banner.dart'; // Assicurati che il percorso sia corretto per il tuo ErrorBanner animato
 import '../widgets/auth_header.dart';
 import '../widgets/brand_panel.dart';
 import '../widgets/social_buttons.dart';
@@ -77,6 +77,14 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
         if (state.status == AuthenticationStatus.authenticated) {
           AppRouter.goToHome(context);
         }
+
+        if (state.errorMessage != null) {
+          Future.delayed(const Duration(seconds: 5), () {
+            if (mounted) {
+              context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
+            }
+          });
+        }
       },
       builder: (context, state) {
         if (state.status == AuthenticationStatus.unknown) {
@@ -107,12 +115,15 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
         Expanded(
           flex: 4,
           child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (bannerMessage != null) _buildErrorBanner(bannerMessage),
-                _buildAuthCard(isGoogleLoading),
-              ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (bannerMessage != null) _buildErrorBanner(bannerMessage),
+                  _buildAuthCard(isGoogleLoading),
+                ],
+              ),
             ),
           ),
         ),
@@ -124,12 +135,15 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     return Center(
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (bannerMessage != null) _buildErrorBanner(bannerMessage),
-            _buildAuthCard(isGoogleLoading),
-          ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (bannerMessage != null) _buildErrorBanner(bannerMessage),
+              _buildAuthCard(isGoogleLoading),
+            ],
+          ),
         ),
       ),
     );
@@ -137,11 +151,11 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
 
   Widget _buildErrorBanner(String message) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
       child: ErrorBanner(
         message: message,
         onClose: () {
-          context.read<AuthenticationBloc>().add(const AuthenticationUserChanged(MyUser.empty));
+          context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
         },
       ),
     );
@@ -155,83 +169,82 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
       opacity: _fadeAnimation,
       child: SlideTransition(
         position: _slideAnimation,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Container(
-            margin: const EdgeInsets.all(24),
-            child: Material(
-              elevation: 0,
-              borderRadius: BorderRadius.circular(28),
-              child: Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark
-                          ? Colors.black.withOpacity(0.3)
-                          : theme.colorScheme.shadow.withOpacity(0.1),
-                      blurRadius: 30,
-                      offset: const Offset(0, 15),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: theme.colorScheme.outline.withOpacity(0.1),
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          child: Material(
+            elevation: 0,
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(28),
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withOpacity(0.3)
+                        : theme.colorScheme.shadow.withOpacity(0.1),
+                    blurRadius: 30,
+                    offset: const Offset(0, 15),
                   ),
+                ],
+                border: Border.all(
+                  color: theme.colorScheme.outline.withOpacity(0.1),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AuthHeader(
-                      title: 'Benvenuto',
-                      subtitle: 'Accedi a Flowchart Thesis',
-                      isDark: isDark,
-                      onThemeToggle: () =>
-                          Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
-                    ),
-                    const SizedBox(height: 32),
-                    SocialAuthButton(
-                      text: 'Continua con Google',
-                      icon: FontAwesomeIcons.google,
-                      onPressed: _handleGoogleSignIn,
-                      isLoading: isGoogleLoading,
-                      iconColor: const Color(0xFF4285F4),
-                      isPrimary: true,
-                      isEnabled: !isGoogleLoading,
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Divider(color: theme.colorScheme.outline.withOpacity(0.3)),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            'Sicuro e veloce',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface.withOpacity(0.6),
-                              fontWeight: FontWeight.w500,
-                            ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AuthHeader(
+                    title: 'Benvenuto',
+                    subtitle: 'Accedi a Flowchart Thesis',
+                    isDark: isDark,
+                    onThemeToggle: () =>
+                        Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
+                  ),
+                  const SizedBox(height: 32),
+                  SocialAuthButton(
+                    text: 'Continua con Google',
+                    icon: FontAwesomeIcons.google,
+                    onPressed: _handleGoogleSignIn,
+                    isLoading: isGoogleLoading,
+                    iconColor: const Color(0xFF4285F4),
+                    isPrimary: true,
+                    isEnabled: !isGoogleLoading,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Divider(color: theme.colorScheme.outline.withOpacity(0.3)),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Sicuro e veloce',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        Expanded(
-                          child: Divider(color: theme.colorScheme.outline.withOpacity(0.3)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Accedendo, accetti i nostri Termini di Servizio e la Privacy Policy.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        height: 1.4,
                       ),
+                      Expanded(
+                        child: Divider(color: theme.colorScheme.outline.withOpacity(0.3)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Accedendo, accetti i nostri Termini di Servizio e la Privacy Policy.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      height: 1.4,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -240,4 +253,3 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     );
   }
 }
-

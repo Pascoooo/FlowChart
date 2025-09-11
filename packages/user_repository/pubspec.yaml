@@ -14,6 +14,7 @@ dependencies:
   firebase_auth:
   cloud_firestore:
   google_sign_in:
+  firebase_database:
 
   # utils
   rxdart: ^0.27.7

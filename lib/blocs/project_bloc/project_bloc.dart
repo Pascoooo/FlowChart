@@ -1,20 +1,19 @@
+// pascoooo/flowchart/FlowChart-rework/lib/blocs/project_bloc/project_bloc.dart
+
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:project_repository/project_repository.dart';
-import '../../config/services/visibility_service.dart';
 import 'project_event.dart';
 import 'project_state.dart';
 
 class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   final ProjectRepo projectRepository;
-  final VisibilityService visibilityService;
 
   StreamSubscription? _projectsSubscription;
   Map<String, DateTime> _timestamps = {};
 
   ProjectBloc({
     required this.projectRepository,
-    required this.visibilityService,
   }) : super(const ProjectInitial()) {
     on<LoadProjects>(_onLoadProjects);
     on<ProjectsUpdated>(_onProjectsUpdated);
@@ -23,9 +22,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     on<DeleteProject>(_onDeleteProject);
     on<RenameProject>(_onRenameProject);
     on<DeselectProject>(_onDeselectProject);
-
-    visibilityService.init();
-    visibilityService.onAppHidden;
+    on<ProjectsStreamFailed>(_onProjectsStreamFailed);
   }
 
   Future<void> _onLoadProjects(LoadProjects event, Emitter<ProjectState> emit) async {
@@ -36,14 +33,13 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       _projectsSubscription = projectRepository.projects().listen((projects) {
         add(ProjectsUpdated(projects));
       }, onError: (error) {
-        emit(const ProjectError(message: 'Errore di connessione.'));
+        add(ProjectsStreamFailed(error));
       });
     } catch (e) {
       emit(const ProjectError(message: 'Impossibile caricare i dati iniziali.'));
     }
   }
 
-  /// CORREZIONE: Aggiorna lo stato preservando e rinfrescando i dati del progetto selezionato.
   void _onProjectsUpdated(ProjectsUpdated event, Emitter<ProjectState> emit) {
     MyProject? currentSelectedProject;
     if (state is ProjectsLoaded) {
@@ -59,10 +55,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
 
     if (currentSelectedProject != null) {
       try {
-        // Rinfresca l'oggetto selectedProject con i dati più recenti dalla lista
         currentSelectedProject = projects.firstWhere((p) => p.projectId == currentSelectedProject!.projectId);
       } catch (e) {
-        // Se non lo trova (è stato cancellato), lo imposta a null
         currentSelectedProject = null;
       }
     }
@@ -70,10 +64,16 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     emit(ProjectsLoaded(projects: projects, selectedProject: currentSelectedProject));
   }
 
-  void _onSelectProject(SelectProject event, Emitter<ProjectState> emit) {
+  Future<void> _onSelectProject(SelectProject event, Emitter<ProjectState> emit) async {
     if (state is ProjectsLoaded) {
       final currentState = state as ProjectsLoaded;
       _timestamps[event.project.projectId] = DateTime.now();
+
+      try {
+        await projectRepository.saveUserTimestamps(_timestamps);
+      } catch (e) {
+        emit(currentState.copyWith(error: "Errore durante la sincronizzazione."));
+      }
 
       final updatedList = List<MyProject>.from(currentState.projects);
       updatedList.sort((a, b) {
@@ -97,6 +97,9 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       );
       _timestamps[newProject.projectId] = newProject.updatedAt;
 
+      // Salva immediatamente anche alla creazione
+      await projectRepository.saveUserTimestamps(_timestamps);
+
       List<MyProject> updatedList;
       if (currentState is ProjectsLoaded) {
         updatedList = List<MyProject>.from(currentState.projects)..add(newProject);
@@ -119,13 +122,11 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
-  /// CORREZIONE: Implementato aggiornamento ottimistico anche per la cancellazione.
   Future<void> _onDeleteProject(DeleteProject event, Emitter<ProjectState> emit) async {
     if (state is! ProjectsLoaded) return;
 
     final currentState = state as ProjectsLoaded;
     final originalProjects = List<MyProject>.from(currentState.projects);
-
     final updatedProjects = originalProjects.where((p) => p.projectId != event.projectId).toList();
 
     emit(currentState.copyWith(
@@ -148,7 +149,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
 
     final currentState = state as ProjectsLoaded;
     final originalProjects = List<MyProject>.from(currentState.projects);
-
     final updatedProjects = currentState.projects.map((project) {
       if (project.projectId == event.projectId) {
         return project.copyWith(name: event.newName.trim());
@@ -173,6 +173,11 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     if (state is ProjectsLoaded) {
       emit((state as ProjectsLoaded).copyWith(clearSelectedProject: true));
     }
+  }
+
+  void _onProjectsStreamFailed(ProjectsStreamFailed event, Emitter<ProjectState> emit) {
+    if (state is ProjectError) return;
+    emit(const ProjectError(message: 'Errore di connessione.'));
   }
 
   @override

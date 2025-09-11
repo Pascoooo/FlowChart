@@ -20,6 +20,7 @@ class AuthenticationBloc
     on<AuthenticationGoogleSignInRequested>(_onGoogleSignInRequested);
     on<AuthenticationLogoutRequested>(_onLogoutRequested);
     on<AuthenticationDeleteAccountRequested>(_onDeleteAccountRequested);
+    on<AuthenticationErrorCleared>(_onAuthenticationErrorCleared);
   }
 
   /// Aggiorna lo stato del BLoC quando lo stato dell'utente cambia.
@@ -77,6 +78,13 @@ class AuthenticationBloc
           errorMessage: 'Errore durante l\'eliminazione dell\'account.'
       ));
     }
+  }
+
+  void _onAuthenticationErrorCleared(
+      AuthenticationErrorCleared event,
+      Emitter<AuthenticationState> emit,
+      ) {
+    emit(state.copyWith(errorMessage: null));
   }
 
   @override

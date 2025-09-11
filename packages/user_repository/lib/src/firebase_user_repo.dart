@@ -1,25 +1,27 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:firebase_database/firebase_database.dart';
 import '../user_repository.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:flutter/foundation.dart';
 
 class FirebaseUserRepo implements UserRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
+  final FirebaseDatabase _rtdb;
   late final CollectionReference<Map<String, dynamic>> _usersCollection;
 
   FirebaseUserRepo({
     FirebaseAuth? firebaseAuth,
     FirebaseFirestore? firestore,
+    FirebaseDatabase? rtdb,
   })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance {
+        _firestore = firestore ?? FirebaseFirestore.instance,
+        _rtdb = rtdb ?? FirebaseDatabase.instance {
     _usersCollection = _firestore.collection('users');
   }
 
-  /// Stream che emette l'utente corrente da Firestore in tempo reale.
-  /// Si aggiorna sia al cambio di stato di autenticazione sia alle modifiche del profilo su Firestore.
   @override
   Stream<MyUser?> get user {
     return _firebaseAuth.authStateChanges().switchMap((firebaseUser) {
@@ -29,30 +31,22 @@ class FirebaseUserRepo implements UserRepository {
         return _usersCollection
             .doc(firebaseUser.uid)
             .snapshots()
-            .asyncMap((snapshot) {
-          return _updateAndMapUser(firebaseUser, snapshot);
-        });
+            .map((snapshot) => snapshot.exists
+            ? MyUser.fromEntity(MyUserEntity.fromDocument(snapshot.data()!))
+            : null);
       }
     }).distinct();
   }
 
-  /// Funzione helper che controlla se il documento utente esiste in Firestore.
-  /// Se non esiste, lo crea. Altrimenti, restituisce i dati da Firestore.
-  Future<MyUser> _updateAndMapUser(User firebaseUser, DocumentSnapshot<Map<String, dynamic>> snapshot) async {
-    if (!snapshot.exists || snapshot.data() == null) {
-      final newUser = MyUser(
-        userId: firebaseUser.uid,
-        email: firebaseUser.email ?? '',
-        name: firebaseUser.displayName ?? '',
-        photoURL: firebaseUser.photoURL ?? '',
-      );
-      if (!newUser.isEmpty) {
-        await setUserData(newUser);
-      }
-      return newUser;
-    } else {
-      return MyUser.fromEntity(MyUserEntity.fromDocument(snapshot.data()!));
-    }
+  Future<MyUser> _createUserFromFirebase(User firebaseUser) async {
+    final newUser = MyUser(
+      userId: firebaseUser.uid,
+      email: firebaseUser.email ?? '',
+      name: firebaseUser.displayName ?? '',
+      photoURL: firebaseUser.photoURL ?? '',
+    );
+    await setUserData(newUser);
+    return newUser;
   }
 
   @override
@@ -60,33 +54,29 @@ class FirebaseUserRepo implements UserRepository {
     try {
       await _usersCollection
           .doc(user.userId)
-          .set(user.toEntity().toDocument(), SetOptions(merge: true))
-          .timeout(const Duration(seconds: 10));
+          .set(user.toEntity().toDocument(), SetOptions(merge: true));
     } catch (e) {
       rethrow;
     }
   }
 
-
   @override
   Future<MyUser> signInWithGoogle() async {
     try {
-      final provider = GoogleAuthProvider()
-        ..addScope('email')
-        ..addScope('profile');
-
+      final provider = GoogleAuthProvider()..addScope('email')..addScope('profile');
       final credential = await _firebaseAuth.signInWithPopup(provider);
       final firebaseUser = credential.user;
 
       if (firebaseUser == null) {
         throw const AuthenticationException('Google sign in fallito.');
       }
-      return MyUser(
-        userId: firebaseUser.uid,
-        email: firebaseUser.email ?? '',
-        name: firebaseUser.displayName ?? '',
-        photoURL: firebaseUser.photoURL ?? '',
-      );
+
+      final userDoc = await _usersCollection.doc(firebaseUser.uid).get();
+      if (userDoc.exists) {
+        return MyUser.fromEntity(MyUserEntity.fromDocument(userDoc.data()!));
+      } else {
+        return await _createUserFromFirebase(firebaseUser);
+      }
     } on FirebaseAuthException catch (e) {
       throw _mapFirebaseAuthException(e);
     } catch (e) {
@@ -97,7 +87,7 @@ class FirebaseUserRepo implements UserRepository {
   @override
   Future<void> signOut() async {
     try {
-      await _firebaseAuth.signOut().timeout(const Duration(seconds: 10));
+      await _firebaseAuth.signOut();
     } on FirebaseAuthException catch (e) {
       throw _mapFirebaseAuthException(e);
     } catch (e) {
@@ -109,31 +99,52 @@ class FirebaseUserRepo implements UserRepository {
     return switch (e.code) {
       'popup-closed-by-user' => const AuthenticationException('Login annullato dall\'utente.'),
       'cancelled-popup-request' => const AuthenticationException('Login annullato.'),
-      'network-request-failed' => const AuthenticationException('Errore di connessione. Controlla la tua connessione e riprova.'),
+      'network-request-failed' => const AuthenticationException('Errore di connessione.'),
       _ => AuthenticationException('Errore di autenticazione: ${e.message}'),
     };
   }
 
-  /// Elimina l'account dell'utente attualmente autenticato.
-  /// L'utente deve essere autenticato.
-  /// L'eliminazione dell'account rimuove l'utente da Firebase Auth e il suo documento da Firestore con i relativi documenti.
+  /// Funzione helper per cancellare ricorsivamente tutte le sottocollezioni di un documento
+  Future<void> _deleteSubcollections(DocumentReference docRef) async {
+    final projectsCollection = docRef.collection('projects');
+    final projectsSnapshot = await projectsCollection.get();
+    for (final projectDoc in projectsSnapshot.docs) {
+      // Per ogni progetto, cancella la sua sottocollezione 'files'
+      final filesCollection = projectDoc.reference.collection('files');
+      final filesSnapshot = await filesCollection.get();
+      for (final fileDoc in filesSnapshot.docs) {
+        await fileDoc.reference.delete();
+      }
+      await projectDoc.reference.delete();
+    }
+  }
+
   @override
-  Future<void> deleteAccount() {
+  Future<void> deleteAccount() async {
     final user = _firebaseAuth.currentUser;
     if (user == null) {
-      throw const AuthenticationException('Nessun utente autenticato');
+      throw const AuthenticationException('Nessun utente autenticato.');
     }
-    return _firestore.runTransaction((transaction) async {
-      final userDocRef = _usersCollection.doc(user.uid);
-      transaction.delete(userDocRef);
+    try {
+      final String uid = user.uid;
+      final firestoreUserDoc = _usersCollection.doc(uid);
+      final rtdbUserLogsRef = _rtdb.ref('users/$uid');
+
+      await _deleteSubcollections(firestoreUserDoc);
+      await firestoreUserDoc.delete();
+      await rtdbUserLogsRef.remove();
       await user.delete();
-    }).timeout(const Duration(seconds: 20)).catchError((e) {
-      if (e is FirebaseAuthException) {
-        throw _mapFirebaseAuthException(e);
-      } else {
-        throw Exception('Errore durante l\'eliminazione dell\'account: $e');
+
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        throw const AuthenticationException(
+            'Questa operazione richiede un login recente. Per favore, esegui nuovamente il logout e il login.');
       }
-    });
+      throw _mapFirebaseAuthException(e);
+    } catch (e) {
+      debugPrint('[deleteAccount] errore: $e');
+      throw const AuthenticationException('Errore durante l\'eliminazione dell\'account.');
+    }
   }
 }
 
@@ -144,4 +155,3 @@ class AuthenticationException implements Exception {
   @override
   String toString() => 'AuthenticationException: $message';
 }
-

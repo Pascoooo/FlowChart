@@ -51,3 +51,10 @@ class ProjectsUpdated extends ProjectEvent {
   @override
   List<Object> get props => [projects];
 }
+
+class ProjectsStreamFailed extends ProjectEvent {
+  final Object error;
+  const ProjectsStreamFailed(this.error);
+  @override
+  List<Object?> get props => [error];
+}
