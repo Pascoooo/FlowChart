@@ -24,9 +24,8 @@ class ProjectCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SizedBox(
-      // MODIFICA: Dimensioni intermedie
-      width: 220, // Era 240
-      height: 200, // Era 220
+      width: 220,
+      height: 200,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),

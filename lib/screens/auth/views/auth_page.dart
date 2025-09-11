@@ -1,4 +1,3 @@
-// dart
 import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,6 +8,7 @@ import '../../../config/constants/theme_switch.dart';
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/auth_bloc/authentication_state.dart';
+import '../../../config/error/error_banner.dart';
 import '../widgets/auth_header.dart';
 import '../widgets/brand_panel.dart';
 import '../widgets/social_buttons.dart';
@@ -86,10 +86,8 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
             ),
           );
         }
-
         final bannerMessage = state.errorMessage;
         final isGoogleLoading = state.isLoading;
-
         return Scaffold(
           backgroundColor: theme.colorScheme.surface,
           body: SafeArea(
@@ -140,7 +138,7 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
   Widget _buildErrorBanner(String message) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
-      child: _ErrorBanner(
+      child: ErrorBanner(
         message: message,
         onClose: () {
           context.read<AuthenticationBloc>().add(const AuthenticationUserChanged(MyUser.empty));
@@ -243,57 +241,3 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
   }
 }
 
-class _ErrorBanner extends StatelessWidget {
-  final String message;
-  final VoidCallback onClose;
-
-  const _ErrorBanner({
-    required this.message,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.error.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.error_outline,
-            color: theme.colorScheme.error,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onErrorContainer,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: onClose,
-            icon: Icon(
-              Icons.close,
-              color: theme.colorScheme.error,
-              size: 20,
-            ),
-            constraints: const BoxConstraints(),
-            padding: EdgeInsets.zero,
-          ),
-        ],
-      ),
-    );
-  }
-}

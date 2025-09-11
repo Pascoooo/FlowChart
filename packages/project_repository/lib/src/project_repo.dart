@@ -2,16 +2,15 @@ import 'package:file_repository/file_repository.dart';
 import '../project_repository.dart';
 
 abstract class ProjectRepo {
-  /// Project-level methods
-  Future<List<MyProject>> getProjects();
-  Future<void> createProject({required String name});
+  Stream<List<MyProject>> projects();
+
+  Future<MyProject> createProject({required String name});
   Future<void> deleteProject({required String projectId});
   Future<void> renameProject({required String projectId, required String newName});
-  // AGGIUNTO: Metodo per aggiornare il timestamp di un progetto.
-  Future<void> updateProjectTimestamp({required String projectId});
 
+  Future<Map<String, DateTime>> getUserTimestamps();
+  Future<void> saveUserTimestamps(Map<String, DateTime> timestamps);
 
-  /// File-level methods, scoped to a project
   Future<List<MyFile>> getProjectFiles({required String projectId});
   Future<void> addFileToProject({required String projectId, required String fileName, required String content});
   Future<void> deleteFile({required String projectId, required String fileId});

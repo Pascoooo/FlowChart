@@ -7,102 +7,85 @@ import '../project_repository.dart';
 class FirebaseProjectRepo implements ProjectRepo {
   final String uid;
   final CollectionReference<Map<String, dynamic>> projectCollection;
+  final DocumentReference<Map<String, dynamic>>  projectsLogDoc;
 
   FirebaseProjectRepo({required this.uid})
       : projectCollection = FirebaseFirestore.instance
-      .collection('users')
-      .doc(uid)
-      .collection('projects');
+            .collection('users')
+            .doc(uid)
+            .collection('projects'),
+        projectsLogDoc = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('projectslog')
+            .doc('logs');
+
 
   @override
-  Future<List<MyProject>> getProjects() async {
-    try {
-      final snapshot = await projectCollection.get();
+  Stream<List<MyProject>> projects() {
+    return projectCollection.snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
-        final data = doc.data();
-        final entity = MyProjectEntity.fromDocument(data);
-        return MyProject.fromEntity(entity);
+        return MyProject.fromEntity(MyProjectEntity.fromDocument(doc.data()));
       }).toList();
-    } catch (e) {
-      log('Errore nel recupero dei progetti: $e');
-      rethrow;
-    }
+    });
   }
 
   @override
-  Future<void> createProject({required String name}) async {
+  Future<Map<String, DateTime>> getUserTimestamps() async {
+    try {
+      final doc = await projectsLogDoc.get();
+      if (!doc.exists) return {};
+      final data = doc.data()?['lastOpened'] as Map<String, dynamic>? ?? {};
+      return data.map((key, value) => MapEntry(key, DateTime.parse(value as String)));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // MODIFICATO: Ora salva nel nuovo percorso
+  @override
+  Future<void> saveUserTimestamps(Map<String, DateTime> timestamps) {
+    final serializableData = timestamps.map((key, value) => MapEntry(key, value.toIso8601String()));
+    return projectsLogDoc.set({'lastOpened': serializableData});
+  }
+
+  @override
+  Future<MyProject> createProject({required String name}) async {
     try {
       final projectId = const Uuid().v4();
-      final newProject = MyProjectEntity(
+      final newProjectEntity = MyProjectEntity(
         projectId: projectId,
         name: name,
         updatedAt: DateTime.now(),
       );
-      await projectCollection.doc(projectId).set(newProject.toDocument());
+      await projectCollection.doc(projectId).set(newProjectEntity.toDocument());
+      return MyProject.fromEntity(newProjectEntity);
     } catch (e) {
       log('Errore nella creazione del progetto: $e');
       rethrow;
     }
   }
 
-  // METODO ESISTENTE - non più utilizzato dal BLoC direttamente ma lasciato per possibili usi futuri
-  @override
-  Future<void> updateProjectTimestamp({required String projectId}) async {
-    try {
-      await projectCollection.doc(projectId).update({
-        'updatedAt': Timestamp.now(),
-      });
-    } catch (e) {
-      log('Errore nell\'aggiornamento del timestamp del progetto: $e');
-      rethrow;
-    }
-  }
-
-  /// AGGIUNTO: Esegue l'aggiornamento di più timestamp in un'unica batch.
-  ///
-  /// [updates] Una lista di mappe, ognuna contenente 'projectId' e 'openedAt'.
-  Future<void> updateProjectTimestamps(List<Map<String, dynamic>> updates) async {
-    if (updates.isEmpty) return;
-
-    try {
-      final batch = FirebaseFirestore.instance.batch();
-      for (final update in updates) {
-        final projectId = update['projectId'] as String;
-        final openedAt = DateTime.parse(update['openedAt'] as String);
-
-        final docRef = projectCollection.doc(projectId);
-        batch.update(docRef, {'updatedAt': Timestamp.fromDate(openedAt)});
-      }
-      await batch.commit();
-      log('${updates.length} progetti aggiornati con successo in batch.');
-    } catch (e) {
-      log('Errore durante l\'aggiornamento in batch dei timestamp: $e');
-      rethrow; // Rilancia l'eccezione per farla gestire al BLoC
-    }
-  }
-
-
   @override
   Future<void> deleteProject({required String projectId}) async {
     try {
       final batch = FirebaseFirestore.instance.batch();
-      final filesCollection = projectCollection.doc(projectId).collection('files');
+      final filesCollection =
+          projectCollection.doc(projectId).collection('files');
       final filesSnapshot = await filesCollection.get();
-
       for (final doc in filesSnapshot.docs) {
         batch.delete(doc.reference);
       }
-
       batch.delete(projectCollection.doc(projectId));
       await batch.commit();
     } catch (e) {
-      log('Errore nell\'eliminazione del progetto e dei suoi file: $e');
       rethrow;
     }
   }
 
   @override
-  Future<void> renameProject({required String projectId, required String newName}) async {
+  Future<void> renameProject(
+      {required String projectId, required String newName}) async {
     try {
       await projectCollection.doc(projectId).update({'name': newName});
     } catch (e) {
@@ -114,7 +97,8 @@ class FirebaseProjectRepo implements ProjectRepo {
   @override
   Future<List<MyFile>> getProjectFiles({required String projectId}) async {
     try {
-      final filesCollection = projectCollection.doc(projectId).collection('files');
+      final filesCollection =
+          projectCollection.doc(projectId).collection('files');
       final snapshot = await filesCollection.get();
       return snapshot.docs.map((doc) {
         final data = doc.data();
@@ -122,7 +106,6 @@ class FirebaseProjectRepo implements ProjectRepo {
         return MyFile.fromEntity(entity);
       }).toList();
     } catch (e) {
-      log('Errore nel recupero dei file del progetto: $e');
       rethrow;
     }
   }
@@ -140,19 +123,26 @@ class FirebaseProjectRepo implements ProjectRepo {
         name: fileName,
         content: content,
       );
-      await projectCollection.doc(projectId).collection('files').doc(fileId).set(newFile.toDocument());
+      await projectCollection
+          .doc(projectId)
+          .collection('files')
+          .doc(fileId)
+          .set(newFile.toDocument());
     } catch (e) {
-      log('Errore nell\'aggiunta del file al progetto: $e');
       rethrow;
     }
   }
 
   @override
-  Future<void> deleteFile({required String projectId, required String fileId}) async {
+  Future<void> deleteFile(
+      {required String projectId, required String fileId}) async {
     try {
-      await projectCollection.doc(projectId).collection('files').doc(fileId).delete();
+      await projectCollection
+          .doc(projectId)
+          .collection('files')
+          .doc(fileId)
+          .delete();
     } catch (e) {
-      log('Errore nell\'eliminazione del file: $e');
       rethrow;
     }
   }
@@ -164,9 +154,12 @@ class FirebaseProjectRepo implements ProjectRepo {
     required String newName,
   }) async {
     try {
-      await projectCollection.doc(projectId).collection('files').doc(fileId).update({'name': newName});
+      await projectCollection
+          .doc(projectId)
+          .collection('files')
+          .doc(fileId)
+          .update({'name': newName});
     } catch (e) {
-      log('Errore nella ridenominazione del file: $e');
       rethrow;
     }
   }
@@ -178,10 +171,15 @@ class FirebaseProjectRepo implements ProjectRepo {
     required String newContent,
   }) async {
     try {
-      await projectCollection.doc(projectId).collection('files').doc(fileId).update({'content': newContent});
+      await projectCollection
+          .doc(projectId)
+          .collection('files')
+          .doc(fileId)
+          .update({'content': newContent});
     } catch (e) {
-      log('Errore nell\'aggiornamento del contenuto del file: $e');
       rethrow;
     }
   }
+
+
 }

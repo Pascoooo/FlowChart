@@ -3,7 +3,6 @@ import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 import 'package:flowchart_thesis/config/widgets/buttons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_event.dart';
@@ -61,14 +60,14 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
                       projectId: widget.selectedProject.projectId,
                     ),
                   ),
-                  _CreateFileButton(
+                  CreateFileButton(
                       projectId: widget.selectedProject.projectId),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          const _BottomActions(),
+          const BottomActions(),
         ],
       ),
     );
@@ -240,7 +239,7 @@ class _FileSystemView extends StatelessWidget {
             itemCount: state.files.length,
             itemBuilder: (context, index) {
               final file = state.files[index];
-              return _FileListItem(
+              return FileListItem(
                 file: file,
                 isSelected: file.fileId == state.activeFileId,
                 // MODIFICA: Passa il projectId al widget figlio.
@@ -256,13 +255,12 @@ class _FileSystemView extends StatelessWidget {
 }
 
 /// Elemento della lista che rappresenta un singolo file.
-class _FileListItem extends StatelessWidget {
+class FileListItem extends StatelessWidget {
   final MyFile file;
   final bool isSelected;
-  // MODIFICA: Riceve il projectId
   final String projectId;
 
-  const _FileListItem({
+  const FileListItem({super.key,
     required this.file,
     required this.isSelected,
     required this.projectId,
@@ -319,7 +317,6 @@ class _FileListItem extends StatelessWidget {
     );
 
     if (confirmed == true) {
-      // MODIFICA: Usa il projectId ricevuto in modo sicuro.
       context.read<FileSystemBloc>().add(
         DeleteFile(
           fileId: file.fileId,
@@ -431,10 +428,10 @@ class _FileListItem extends StatelessWidget {
 }
 
 /// Pulsante per creare un nuovo file.
-class _CreateFileButton extends StatelessWidget {
+class CreateFileButton extends StatelessWidget {
   final String projectId;
 
-  const _CreateFileButton({required this.projectId});
+  const CreateFileButton({super.key, required this.projectId});
 
   void _showCreateFileDialog(BuildContext context, String projectId) async {
     final newName = await DialogService.showInputDialog(context,
@@ -503,8 +500,8 @@ class _CreateFileButton extends StatelessWidget {
 }
 
 /// Azioni in fondo alla sidebar.
-class _BottomActions extends StatelessWidget {
-  const _BottomActions();
+class BottomActions extends StatelessWidget {
+  const BottomActions({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -528,13 +525,12 @@ class _BottomActions extends StatelessWidget {
       child: Column(
         children: [
           ModernMenuItem(
-            icon: FontAwesomeIcons.gear,
-            title: "Impostazioni",
+            iconWidget:  Icon(Icons.settings_rounded, color: theme.colorScheme.onSurfaceVariant),
             onTap: () => AppRouter.goToSettings(context),
+            title: "Impostazioni",
           ),
-          const SizedBox(height: 8),
           ModernMenuItem(
-            iconWidget: _AnimatedThemeIcon(isDark: isDark),
+            iconWidget: AnimatedThemeIcon(isDark: isDark),
             title: "Cambia Tema",
             onTap: () => context.read<ThemeProvider>().toggleTheme(),
           ),
@@ -545,9 +541,9 @@ class _BottomActions extends StatelessWidget {
 }
 
 /// Icona animata per il cambio tema.
-class _AnimatedThemeIcon extends StatelessWidget {
+class AnimatedThemeIcon extends StatelessWidget {
   final bool isDark;
-  const _AnimatedThemeIcon({required this.isDark});
+  const AnimatedThemeIcon({super.key, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -562,7 +558,7 @@ class _AnimatedThemeIcon extends StatelessWidget {
       },
       child: Icon(
         isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-        key: ValueKey(isDark), // Importante per l'animazione
+        key: ValueKey(isDark),
         color: theme.colorScheme.onSurfaceVariant,
       ),
     );

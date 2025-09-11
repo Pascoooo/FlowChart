@@ -24,10 +24,8 @@ class FirebaseUserRepo implements UserRepository {
   Stream<MyUser?> get user {
     return _firebaseAuth.authStateChanges().switchMap((firebaseUser) {
       if (firebaseUser == null) {
-        // Se l'utente è sloggato, emetti null.
         return Stream.value(null);
       } else {
-        // Altrimenti, ascolta le modifiche sul documento Firestore corrispondente.
         return _usersCollection
             .doc(firebaseUser.uid)
             .snapshots()
@@ -42,14 +40,12 @@ class FirebaseUserRepo implements UserRepository {
   /// Se non esiste, lo crea. Altrimenti, restituisce i dati da Firestore.
   Future<MyUser> _updateAndMapUser(User firebaseUser, DocumentSnapshot<Map<String, dynamic>> snapshot) async {
     if (!snapshot.exists || snapshot.data() == null) {
-      // Il documento non esiste: è il primo login. Creiamolo.
       final newUser = MyUser(
         userId: firebaseUser.uid,
         email: firebaseUser.email ?? '',
         name: firebaseUser.displayName ?? '',
         photoURL: firebaseUser.photoURL ?? '',
       );
-      // Non salvare dati vuoti
       if (!newUser.isEmpty) {
         await setUserData(newUser);
       }
@@ -85,9 +81,6 @@ class FirebaseUserRepo implements UserRepository {
       if (firebaseUser == null) {
         throw const AuthenticationException('Google sign in fallito.');
       }
-
-      // Lo stream `user` si occuperà automaticamente di creare/aggiornare il documento.
-      // Restituiamo un oggetto MyUser temporaneo per la logica immediata post-login.
       return MyUser(
         userId: firebaseUser.uid,
         email: firebaseUser.email ?? '',
@@ -102,47 +95,14 @@ class FirebaseUserRepo implements UserRepository {
   }
 
   @override
-  Future<MyUser?> getCurrentUser() async {
-    final firebaseUser = _firebaseAuth.currentUser;
-    if (firebaseUser == null) {
-      return null;
-    }
-    final snapshot = await _usersCollection.doc(firebaseUser.uid).get();
-    if (snapshot.exists && snapshot.data() != null) {
-      return MyUser.fromEntity(MyUserEntity.fromDocument(snapshot.data()!));
-    }
-
-    final newUser = MyUser(
-      userId: firebaseUser.uid,
-      email: firebaseUser.email ?? '',
-      name: firebaseUser.displayName ?? '',
-      photoURL: firebaseUser.photoURL ?? '',
-    );
-    if(!newUser.isEmpty) {
-      await setUserData(newUser);
-    }
-    return newUser.isEmpty ? null : newUser;
-  }
-
-  @override
   Future<void> signOut() async {
     try {
       await _firebaseAuth.signOut().timeout(const Duration(seconds: 10));
     } on FirebaseAuthException catch (e) {
       throw _mapFirebaseAuthException(e);
     } catch (e) {
-      if (kDebugMode) debugPrint('Sign out error: $e');
       throw const AuthenticationException('Errore durante il logout.');
     }
-  }
-
-  @override
-  Future<String> getUid() async {
-    final user = _firebaseAuth.currentUser;
-    if (user == null) {
-      throw const AuthenticationException('Nessun utente autenticato');
-    }
-    return user.uid;
   }
 
   Exception _mapFirebaseAuthException(FirebaseAuthException e) {
@@ -163,15 +123,9 @@ class FirebaseUserRepo implements UserRepository {
     if (user == null) {
       throw const AuthenticationException('Nessun utente autenticato');
     }
-
     return _firestore.runTransaction((transaction) async {
-      // Elimina il documento utente
       final userDocRef = _usersCollection.doc(user.uid);
       transaction.delete(userDocRef);
-
-      // Aggiungi qui altre eliminazioni di documenti correlati se necessario
-
-      // Elimina l'utente da Firebase Auth
       await user.delete();
     }).timeout(const Duration(seconds: 20)).catchError((e) {
       if (e is FirebaseAuthException) {
@@ -191,10 +145,3 @@ class AuthenticationException implements Exception {
   String toString() => 'AuthenticationException: $message';
 }
 
-class ValidationException implements Exception {
-  final String message;
-  const ValidationException(this.message);
-
-  @override
-  String toString() => 'ValidationException: $message';
-}

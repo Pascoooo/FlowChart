@@ -36,7 +36,6 @@ class SettingsSection extends StatelessWidget {
               color: cs.surfaceContainer.withOpacity(0.5)
           ),
           child: Column(
-            // Use ListView.separated for clean dividers
             children: List.generate(children.length, (index) {
               return Column(
                 children: [

@@ -40,10 +40,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       ) async {
     emit(const FileSystemLoading());
     try {
-      if (event.fileName.trim().isEmpty) {
-        // Lancia un'eccezione specifica che ErrorService può riconoscere
-        throw Exception('Il nome del file non può essere vuoto.');
-      }
       String fileName = event.fileName.trim();
       await projectRepository.addFileToProject(
         projectId: event.projectId,
@@ -89,9 +85,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       ) async {
     emit(const FileSystemLoading());
     try {
-      if (event.newName.trim().isEmpty) {
-        throw Exception('Il nuovo nome non può essere vuoto.');
-      }
       await projectRepository.renameFile(
           fileId: event.fileId, newName: event.newName.trim(), projectId: event.projectId);
       final List<MyFile> files = await projectRepository.getProjectFiles(projectId: event.projectId);

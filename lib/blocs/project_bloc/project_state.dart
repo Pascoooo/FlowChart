@@ -30,16 +30,6 @@ class ProjectError extends ProjectState {
   List<Object> get props => [message];
 }
 
-/// Stato di successo
-class ProjectSuccess extends ProjectState {
-  final String message;
-
-  const ProjectSuccess({required this.message});
-
-  @override
-  List<Object> get props => [message];
-}
-
 class ProjectsLoaded extends ProjectState {
   final List<MyProject> projects;
   final MyProject? selectedProject;
@@ -51,24 +41,21 @@ class ProjectsLoaded extends ProjectState {
     this.error,
   });
 
+
   ProjectsLoaded copyWith({
     List<MyProject>? projects,
     MyProject? selectedProject,
-    String? error,
-    String? successMessage,
     bool clearSelectedProject = false,
+    String? error,
+    bool clearError = false,
   }) {
     return ProjectsLoaded(
       projects: projects ?? this.projects,
       selectedProject: clearSelectedProject ? null : (selectedProject ?? this.selectedProject),
-      error: error,
+      error: clearError ? null : error,
     );
   }
 
   @override
-  List<Object?> get props => [
-    projects,
-    selectedProject,
-    error,
-  ];
+  List<Object?> get props => [projects, selectedProject, error];
 }

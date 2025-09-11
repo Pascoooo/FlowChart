@@ -1,11 +1,11 @@
-// lib/config/widgets/buttons.dart (CORRETTO)
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
+import '../constants/theme_switch.dart';
 
 class ModernMenuItem extends StatefulWidget {
-  // MODIFICA: Aggiunto iconWidget e reso icon opzionale
-  final IconData? icon;
-  final Widget? iconWidget;
+  final Widget iconWidget;
   final String title;
   final VoidCallback onTap;
   final bool isDestructive;
@@ -13,16 +13,12 @@ class ModernMenuItem extends StatefulWidget {
 
   const ModernMenuItem({
     super.key,
-    this.icon,
-    this.iconWidget,
+    required this.iconWidget,
     required this.title,
     required this.onTap,
     this.isDestructive = false,
     this.isPrimaryAction = false,
-  }) : assert(
-  (icon != null) ^ (iconWidget != null),
-  'Deve essere fornito esattamente uno tra icon e iconWidget.',
-  );
+  });
 
   @override
   State<ModernMenuItem> createState() => _ModernMenuItemState();
@@ -59,22 +55,20 @@ class _ModernMenuItemState extends State<ModernMenuItem>
 
   @override
   Widget build(BuildContext context) {
-    // ... (il resto della logica build rimane invariato)
     final theme = Theme.of(context);
     final baseColorScheme = theme.colorScheme;
     final colorScheme = widget.isDestructive
-        ? ColorScheme.fromSeed(seedColor: Colors.red, brightness: theme.brightness)
+        ? ColorScheme.fromSeed(
+        seedColor: Colors.red, brightness: theme.brightness)
         : baseColorScheme;
 
     final bool isHighlighted = _isHovered || _isPressed;
 
-    final Color iconColor;
     final Color textColor;
     final Gradient? backgroundGradient;
     final List<BoxShadow>? boxShadow;
 
     if (widget.isPrimaryAction) {
-      iconColor = baseColorScheme.onPrimary;
       textColor = baseColorScheme.onPrimary;
       backgroundGradient = LinearGradient(
         colors: [
@@ -92,9 +86,7 @@ class _ModernMenuItemState extends State<ModernMenuItem>
         ),
       ];
     } else {
-      iconColor = isHighlighted
-          ? colorScheme.primary
-          : colorScheme.onSurface.withOpacity(0.7);
+      // iconColor = isHighlighted ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.7); // RIMOSSO
       textColor = isHighlighted
           ? colorScheme.primary
           : baseColorScheme.onSurface.withOpacity(0.8);
@@ -144,11 +136,7 @@ class _ModernMenuItemState extends State<ModernMenuItem>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
-                    // MODIFICA: Logica per scegliere tra icona e widget
-                    if (widget.iconWidget != null)
-                      widget.iconWidget!
-                    else
-                      FaIcon(widget.icon!, size: 18, color: iconColor),
+                    widget.iconWidget,
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
@@ -170,3 +158,116 @@ class _ModernMenuItemState extends State<ModernMenuItem>
     );
   }
 }
+
+class ThemeToggleButton extends StatelessWidget {
+  const ThemeToggleButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 1000),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+            ),
+            child: IconButton(
+              icon: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, animation) => RotationTransition(turns: animation, child: child),
+                child: Icon(
+                  theme.brightness == Brightness.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                  key: ValueKey(theme.brightness),
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              onPressed: () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+
+
+class CreateProjectButton extends StatelessWidget {
+  final int projectCount;
+  final VoidCallback onPressed;
+  const CreateProjectButton({super.key, required this.projectCount, required this.onPressed});
+
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(colors: [theme.colorScheme.primary, theme.colorScheme.secondary]),
+        boxShadow: [
+          BoxShadow(color: theme.colorScheme.primary.withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 6))
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FaIcon(FontAwesomeIcons.plus, size: 16, color: theme.colorScheme.onPrimary),
+                const SizedBox(width: 10),
+                Text(
+                  projectCount == 0 ? "Crea il tuo primo progetto" : "Nuovo Progetto",
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class NavigationButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const NavigationButton({
+    super.key,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      elevation: 2,
+      shadowColor: theme.colorScheme.shadow.withOpacity(0.2),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, size: 16, color: theme.colorScheme.primary),
+        ),
+      ),
+    );
+  }
+}
+

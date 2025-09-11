@@ -12,7 +12,6 @@ class AuthenticationBloc
   AuthenticationBloc({required UserRepository userRepository})
       : _userRepository = userRepository,
         super(const AuthenticationState.unknown()) {
-    // Ascolta i cambiamenti dell'utente dal repository
     _userSubscription = _userRepository.user.listen((user) {
       add(AuthenticationUserChanged(user));
     });

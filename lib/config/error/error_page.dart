@@ -1,222 +1,92 @@
+import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
-import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 
 class ErrorPage extends StatelessWidget {
   final String? error;
-  final VoidCallback? onRetry;
 
   const ErrorPage({
     super.key,
     this.error,
-    this.onRetry,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.home),
-          onPressed: () => context.go('/'),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.brightness_6),
-            onPressed: () {
-              Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
-            },
-          ),
-        ],
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      backgroundColor: isDark
-          ? const Color(0xFF0F1419)
-          : const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: Container(
-            constraints: const BoxConstraints(
-              maxWidth: 800,
-              maxHeight: 600,
-            ),
-            margin: const EdgeInsets.all(32),
-            padding: const EdgeInsets.all(40),
+            constraints: const BoxConstraints(maxWidth: 500),
+            margin: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
+              color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
               boxShadow: [
                 BoxShadow(
-                  color: isDark
-                      ? Colors.black.withOpacity(0.3)
-                      : Colors.grey.withOpacity(0.1),
+                  color: theme.shadowColor.withOpacity(0.05),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
-                BoxShadow(
-                  color: isDark
-                      ? Colors.black.withOpacity(0.2)
-                      : Colors.grey.withOpacity(0.05),
-                  blurRadius: 40,
-                  offset: const Offset(0, 20),
-                ),
               ],
-              border: Border.all(
-                color: isDark
-                    ? Colors.grey.withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.1),
-                width: 1,
-              ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 100,
-                  height: 100,
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.red[900]?.withOpacity(0.2)
-                        : Colors.red[50],
+                    color: theme.colorScheme.error.withOpacity(0.1),
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.red[400]!.withOpacity(0.3)
-                          : Colors.red[100]!,
-                      width: 2,
-                    ),
                   ),
                   child: Icon(
-                    Icons.error_outline,
+                    Icons.error_outline_rounded,
                     size: 48,
-                    color: isDark
-                        ? Colors.red[400]
-                        : Colors.red[600],
+                    color: theme.colorScheme.error,
                   ),
                 ),
-                const SizedBox(height: 32),
-                const Text(
+                const SizedBox(height: 24),
+                Text(
                   'Oops! Qualcosa è andato storto',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                  ),
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Text(
-                  'Si è verificato un errore imprevisto.\nNon preoccuparti, stiamo lavorando per risolverlo.',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: isDark
-                        ? Colors.grey[400]
-                        : Colors.grey[600],
-                    height: 1.5,
-                  ),
+                  'Si è verificato un errore imprevisto. Torna alla pagina principale per continuare.',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
                   textAlign: TextAlign.center,
                 ),
                 if (error != null) ...[
                   const SizedBox(height: 24),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.grey[800]
-                          : Colors.grey[100],
+                      color: theme.dividerColor.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark
-                            ? Colors.grey[700]!
-                            : Colors.grey[300]!,
-                      ),
+                      border: Border.all(color: theme.dividerColor),
                     ),
                     child: Text(
-                      'Dettagli errore: $error',
-                      style: TextStyle(
-                        color: isDark
-                            ? Colors.grey[300]
-                            : Colors.grey[700],
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                      ),
+                      error!,
+                      style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
                       textAlign: TextAlign.center,
                     ),
                   ),
                 ],
-                const SizedBox(height: 40),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _goHome(context),
-                        icon: const Icon(Icons.home, size: 20),
-                        label: const Text(
-                          'Torna alla Home',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 56),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onRetry ?? () => _goHome(context),
-                        icon: const Icon(Icons.refresh, size: 20),
-                        label: const Text(
-                          'Riprova',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 56),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                _buildOrDivider(context),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.help_outline,
-                      size: 16,
-                      color: isDark
-                          ? Colors.grey[500]
-                          : Colors.grey[500],
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Il problema persiste? Contatta il supporto',
-                      style: TextStyle(
-                        color: isDark
-                            ? Colors.grey[500]
-                            : Colors.grey[500],
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 32),
+                ElevatedButton.icon(
+                  onPressed: () => AppRouter.goToAuth(context),
+                  icon: const Icon(Icons.home, size: 20),
+                  label: const Text('Torna alla Home'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 52),
+                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
@@ -224,44 +94,5 @@ class ErrorPage extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Widget _buildOrDivider(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Container(
-            height: 1,
-            color: Theme.of(context).dividerColor,
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
-          child: const Text(
-            "ERRORE",
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Container(
-            height: 1,
-            color: Theme.of(context).dividerColor,
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _goHome(BuildContext context) {
-    context.go('/');
   }
 }

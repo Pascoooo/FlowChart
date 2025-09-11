@@ -7,11 +7,11 @@ import 'package:flowchart_thesis/screens/user_dashboard/dashboard_page.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
-import '../../blocs/project_bloc/logger_service.dart';
 import '../../blocs/project_bloc/project_bloc.dart';
 import '../../screens/auth/views/auth_page.dart';
 import '../../screens/user_dashboard/project_workspace/drawing_page/drawing_editor_page.dart';
 import '../error/error_page.dart';
+import '../services/visibility_service.dart';
 
 class AppRoutes {
   static const String homeName = 'home';
@@ -37,7 +37,6 @@ class AppRouter {
       initialLocation: AppRoutes.authPath,
       errorBuilder: (context, state) => ErrorPage(
         error: state.error?.toString() ?? 'Errore di navigazione',
-        onRetry: () => context.goNamed(AppRoutes.authName),
       ),
       redirect: (context, state) => _handleRedirect(authBloc.state, state),
       refreshListenable: GoRouterRefreshStream(authBloc.stream),
@@ -50,7 +49,8 @@ class AppRouter {
               return BlocProvider<ProjectBloc>(
                 key: ValueKey('project-bloc-${authState.user.userId}'),
                 create: (_) => ProjectBloc(
-                  projectRepository: FirebaseProjectRepo(uid: authState.user.userId), updateLoggerService: UpdateLoggerService(),
+                  projectRepository: FirebaseProjectRepo(uid: authState.user.userId),
+                  visibilityService: VisibilityService(),
                 ),
                 child: child,
               );
@@ -87,8 +87,7 @@ class AppRouter {
           builder: (context, state) {
             final error = state.extra as String?;
             return ErrorPage(
-              error: error ?? 'Errore generico',
-              onRetry: () => context.goNamed(AppRoutes.authName),
+              error: error ?? 'Errore sconosciuto',
             );
           },
         ),
@@ -110,7 +109,8 @@ class AppRouter {
     final currentPath = routerState.uri.path;
     final isAuthPath = currentPath == AppRoutes.authPath;
 
-    if (authState.status == AuthenticationStatus.unauthenticated && !isAuthPath) {
+    if (authState.status == AuthenticationStatus.unauthenticated &&
+        !isAuthPath) {
       return AppRoutes.authPath;
     }
     if (authState.status == AuthenticationStatus.authenticated && isAuthPath) {
@@ -127,7 +127,7 @@ class GoRouterRefreshStream extends ChangeNotifier {
     notifyListeners();
     _subscription = stream.asBroadcastStream().listen(
           (dynamic _) => notifyListeners(),
-    );
+        );
   }
 
   @override

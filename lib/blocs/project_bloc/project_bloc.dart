@@ -1,233 +1,183 @@
+import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:project_repository/project_repository.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Per WriteBatch
-import 'dart:developer' as developer;
-import 'logger_service.dart';
+import '../../config/services/visibility_service.dart';
 import 'project_event.dart';
 import 'project_state.dart';
 
-
 class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
-  final FirebaseProjectRepo projectRepository;
-  // AGGIUNTO: Inietta il servizio di logging
-  final UpdateLoggerService updateLoggerService;
+  final ProjectRepo projectRepository;
+  final VisibilityService visibilityService;
+
+  StreamSubscription? _projectsSubscription;
+  Map<String, DateTime> _timestamps = {};
 
   ProjectBloc({
     required this.projectRepository,
-    // AGGIUNTO: Richiedi il servizio nel costruttore
-    required this.updateLoggerService,
+    required this.visibilityService,
   }) : super(const ProjectInitial()) {
+    on<LoadProjects>(_onLoadProjects);
+    on<ProjectsUpdated>(_onProjectsUpdated);
+    on<SelectProject>(_onSelectProject);
     on<CreateProject>(_onCreateProject);
     on<DeleteProject>(_onDeleteProject);
     on<RenameProject>(_onRenameProject);
-    on<LoadProjects>(_onLoadProjects);
-    on<SelectProject>(_onSelectProject);
     on<DeselectProject>(_onDeselectProject);
+
+    visibilityService.init();
+    visibilityService.onAppHidden;
   }
 
-  // MODIFICATO: La funzione di caricamento ora sincronizza prima gli aggiornamenti pendenti
-  Future<void> _onLoadProjects(
-      LoadProjects event,
-      Emitter<ProjectState> emit,
-      ) async {
+  Future<void> _onLoadProjects(LoadProjects event, Emitter<ProjectState> emit) async {
     emit(const ProjectLoading());
+    await _projectsSubscription?.cancel();
     try {
-      // 1. Controlla e sincronizza gli aggiornamenti pendenti
-      await _syncPendingUpdates();
-
-      // 2. Procedi con il caricamento normale
-      final projects = await projectRepository.getProjects();
-      projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      emit(ProjectsLoaded(projects: projects, selectedProject: null));
+      _timestamps = await projectRepository.getUserTimestamps();
+      _projectsSubscription = projectRepository.projects().listen((projects) {
+        add(ProjectsUpdated(projects));
+      }, onError: (error) {
+        emit(const ProjectError(message: 'Errore di connessione.'));
+      });
     } catch (e) {
-      developer.log('Errore durante il caricamento dei progetti: $e', error: e);
-      emit(const ProjectError(message: 'Errore nel caricamento dei progetti. Riprova più tardi.'));
+      emit(const ProjectError(message: 'Impossibile caricare i dati iniziali.'));
     }
   }
 
-  /// Funzione helper per sincronizzare gli aggiornamenti
-  Future<void> _syncPendingUpdates() async {
-    final pendingUpdates = await updateLoggerService.getPendingUpdates();
-    if (pendingUpdates.isNotEmpty) {
-      developer.log('Trovati ${pendingUpdates.length} aggiornamenti pendenti. Sincronizzazione in corso...');
+  /// CORREZIONE: Aggiorna lo stato preservando e rinfrescando i dati del progetto selezionato.
+  void _onProjectsUpdated(ProjectsUpdated event, Emitter<ProjectState> emit) {
+    MyProject? currentSelectedProject;
+    if (state is ProjectsLoaded) {
+      currentSelectedProject = (state as ProjectsLoaded).selectedProject;
+    }
+
+    final projects = event.projects;
+    projects.sort((a, b) {
+      final timeA = _timestamps[a.projectId] ?? a.updatedAt;
+      final timeB = _timestamps[b.projectId] ?? b.updatedAt;
+      return timeB.compareTo(timeA);
+    });
+
+    if (currentSelectedProject != null) {
       try {
-        await projectRepository.updateProjectTimestamps(pendingUpdates);
-        // La sincronizzazione è andata a buon fine, cancella il file locale
-        await updateLoggerService.deletePendingUpdatesFile();
-        developer.log('Sincronizzazione completata con successo.');
+        // Rinfresca l'oggetto selectedProject con i dati più recenti dalla lista
+        currentSelectedProject = projects.firstWhere((p) => p.projectId == currentSelectedProject!.projectId);
       } catch (e) {
-        // Se la sincronizzazione fallisce, non cancelliamo il file
-        // e lasciamo un log dell'errore. L'app continuerà a funzionare
-        // con i dati vecchi e riproverà al prossimo avvio.
-        developer.log('Sincronizzazione fallita! Gli aggiornamenti verranno ritentati al prossimo avvio.', error: e);
+        // Se non lo trova (è stato cancellato), lo imposta a null
+        currentSelectedProject = null;
       }
-    } else {
-      developer.log('Nessun aggiornamento pendente da sincronizzare.');
     }
+
+    emit(ProjectsLoaded(projects: projects, selectedProject: currentSelectedProject));
   }
 
-
-  // MODIFICATO: La selezione ora aggiorna lo stato localmente e registra l'update.
-  Future<void> _onSelectProject(
-      SelectProject event,
-      Emitter<ProjectState> emit,
-      ) async {
+  void _onSelectProject(SelectProject event, Emitter<ProjectState> emit) {
     if (state is ProjectsLoaded) {
       final currentState = state as ProjectsLoaded;
+      _timestamps[event.project.projectId] = DateTime.now();
 
-      // 1. Registra l'apertura del progetto nel file locale
-      await updateLoggerService.logProjectUpdate(event.project.projectId);
-
-      // 2. Aggiorna l'ordine nell'UI immediatamente (aggiornamento ottimistico)
-      final List<MyProject> updatedList = List.from(currentState.projects);
-
-      // Rimuovi il progetto selezionato e reinseriscilo in cima
-      updatedList.removeWhere((p) => p.projectId == event.project.projectId);
-      updatedList.insert(0, event.project.copyWith(updatedAt: DateTime.now())); // Aggiorna il timestamp localmente
-
-      // 3. Emetti il nuovo stato senza attendere operazioni di rete
-      emit(ProjectsLoaded(
-        projects: updatedList,
-        selectedProject: event.project,
-      ));
+      final updatedList = List<MyProject>.from(currentState.projects);
+      updatedList.sort((a, b) {
+        final timeA = _timestamps[a.projectId] ?? a.updatedAt;
+        final timeB = _timestamps[b.projectId] ?? b.updatedAt;
+        return timeB.compareTo(timeA);
+      });
+      emit(currentState.copyWith(projects: updatedList, selectedProject: event.project));
     }
   }
 
-
-  void _onDeselectProject(
-      DeselectProject event,
-      Emitter<ProjectState> emit,
-      ) {
-    if (state is ProjectsLoaded) {
-      final currentState = state as ProjectsLoaded;
-      emit(currentState.copyWith(clearSelectedProject: true));
-    }
-  }
-
-
-  Future<void> _onCreateProject(
-      CreateProject event,
-      Emitter<ProjectState> emit,
-      ) async {
+  Future<void> _onCreateProject(CreateProject event, Emitter<ProjectState> emit) async {
     final currentState = state;
     emit(const ProjectLoading());
     try {
-      if (event.projectName.trim().isEmpty) {
-        throw Exception('Il nome del progetto non può essere vuoto.');
-      }
-
-      final existingProjects = await projectRepository.getProjects();
-      if (existingProjects.any((p) => p.name == event.projectName.trim())) {
-        throw Exception('Nome già in uso.');
-      }
-
-      await projectRepository.createProject(name: event.projectName.trim());
-      final projects = await projectRepository.getProjects();
-
-      final newProject = projects.firstWhere((p) => p.name == event.projectName.trim());
+      final newProject = await projectRepository.createProject(name: event.projectName.trim());
       await projectRepository.addFileToProject(
         projectId: newProject.projectId,
         fileName: 'main',
         content: '',
       );
+      _timestamps[newProject.projectId] = newProject.updatedAt;
 
-      projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      List<MyProject> updatedList;
+      if (currentState is ProjectsLoaded) {
+        updatedList = List<MyProject>.from(currentState.projects)..add(newProject);
+      } else {
+        updatedList = [newProject];
+      }
 
-      emit(ProjectsLoaded(
-        projects: projects,
-        selectedProject: newProject,
-      ));
+      updatedList.sort((a, b) {
+        final timeA = _timestamps[a.projectId] ?? a.updatedAt;
+        final timeB = _timestamps[b.projectId] ?? b.updatedAt;
+        return timeB.compareTo(timeA);
+      });
+
+      emit(ProjectsLoaded(projects: updatedList, selectedProject: newProject));
     } catch (e) {
-      emit(ProjectError(message: e.toString()));
+      emit(const ProjectError(message: 'Errore nella creazione del progetto.'));
       if (currentState is ProjectsLoaded) {
         emit(currentState);
       }
     }
   }
 
+  /// CORREZIONE: Implementato aggiornamento ottimistico anche per la cancellazione.
+  Future<void> _onDeleteProject(DeleteProject event, Emitter<ProjectState> emit) async {
+    if (state is! ProjectsLoaded) return;
 
+    final currentState = state as ProjectsLoaded;
+    final originalProjects = List<MyProject>.from(currentState.projects);
 
-  Future<void> _onDeleteProject(
-      DeleteProject event,
-      Emitter<ProjectState> emit,
-      ) async {
-    final currentState = state;
+    final updatedProjects = originalProjects.where((p) => p.projectId != event.projectId).toList();
 
-    emit(const ProjectLoading());
+    emit(currentState.copyWith(
+      projects: updatedProjects,
+      clearSelectedProject: currentState.selectedProject?.projectId == event.projectId,
+    ));
+
     try {
       await projectRepository.deleteProject(projectId: event.projectId);
-      final projects = await projectRepository.getProjects();
-
-      MyProject? selectedProject;
-      if (currentState is ProjectsLoaded &&
-          currentState.selectedProject?.projectId != event.projectId) {
-        selectedProject = currentState.selectedProject;
-      }
-
-      projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
-      emit(ProjectsLoaded(
-        projects: projects,
-        selectedProject: selectedProject,
-      ));
     } catch (e) {
-      emit(const ProjectError(message: 'Errore nella cancellazione del progetto.'));
-
-      if (currentState is ProjectsLoaded) {
-        emit(currentState);
-      }
+      emit(currentState.copyWith(
+        projects: originalProjects,
+        error: 'Errore nella cancellazione del progetto.',
+      ));
     }
   }
 
-  Future<void> _onRenameProject(
-      RenameProject event,
-      Emitter<ProjectState> emit,
-      ) async {
-    final currentState = state;
+  Future<void> _onRenameProject(RenameProject event, Emitter<ProjectState> emit) async {
+    if (state is! ProjectsLoaded) return;
 
-    emit(const ProjectLoading());
+    final currentState = state as ProjectsLoaded;
+    final originalProjects = List<MyProject>.from(currentState.projects);
+
+    final updatedProjects = currentState.projects.map((project) {
+      if (project.projectId == event.projectId) {
+        return project.copyWith(name: event.newName.trim());
+      }
+      return project;
+    }).toList();
+
+    emit(currentState.copyWith(projects: updatedProjects));
+
     try {
-      if (event.newName.trim().isEmpty) {
-        throw Exception('Il nuovo nome non può essere vuoto.');
-      }
-
-      final existingProjects = await projectRepository.getProjects();
-      if (existingProjects.any(
-            (p) => p.name == event.newName.trim() && p.projectId != event.projectId,
-      )) {
-        throw Exception('Nome già in uso.');
-      }
-
       await projectRepository.renameProject(
-        projectId: event.projectId,
-        newName: event.newName.trim(),
-      );
-
-      final projects = await projectRepository.getProjects();
-
-      projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
-      MyProject? selectedProject;
-      if (currentState is ProjectsLoaded && currentState.selectedProject != null) {
-        if (currentState.selectedProject!.projectId == event.projectId) {
-          selectedProject = projects.firstWhere(
-                (p) => p.projectId == event.projectId,
-            orElse: () => currentState.selectedProject!,
-          );
-        } else {
-          selectedProject = currentState.selectedProject;
-        }
-      }
-
-      emit(ProjectsLoaded(
-        projects: projects,
-        selectedProject: selectedProject,
-      ));
+          projectId: event.projectId, newName: event.newName.trim());
     } catch (e) {
-      emit(ProjectError(message: e.toString()));
-      if (currentState is ProjectsLoaded) {
-        emit(currentState);
-      }
+      emit(currentState.copyWith(
+        projects: originalProjects,
+        error: 'Errore durante la rinomina del progetto.',
+      ));
     }
+  }
+
+  void _onDeselectProject(DeselectProject event, Emitter<ProjectState> emit) {
+    if (state is ProjectsLoaded) {
+      emit((state as ProjectsLoaded).copyWith(clearSelectedProject: true));
+    }
+  }
+
+  @override
+  Future<void> close() {
+    _projectsSubscription?.cancel();
+    return super.close();
   }
 }

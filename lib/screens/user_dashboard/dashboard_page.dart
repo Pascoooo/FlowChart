@@ -51,28 +51,16 @@ class _DashboardPageState extends State<DashboardPage> {
               }
             },
             child: BlocBuilder<ProjectBloc, ProjectState>(
-              buildWhen: (previous, current) {
-                if (previous.runtimeType != current.runtimeType) return true;
-                if (previous is ProjectsLoaded && current is ProjectsLoaded) {
-                  return previous.selectedProject != current.selectedProject ||
-                      previous.projects.length != current.projects.length;
-                }
-                return true;
-              },
               builder: (context, state) {
-                switch (state.runtimeType) {
-                  case ProjectLoading:
+                switch (state) {
+                  case ProjectLoading():
                     return _buildLoadingView(theme);
-                  case ProjectError:
-                    final errorState = state as ProjectError;
-                    return ErrorPage(
-                      error: errorState.message,
-                      onRetry: () {
-                        context.read<ProjectBloc>().add(const LoadProjects());
-                      },
-                    );
-                  case ProjectsLoaded:
-                    return _buildProjectsLoadedView(state as ProjectsLoaded, theme);
+                  case ProjectError():
+                    return ErrorPage(error: state.message);
+                  case ProjectsLoaded():
+                    return _buildProjectsLoadedView(state, theme);
+                  case ProjectInitial():
+                    return _buildLoadingView(theme);
                   default:
                     return _buildLoadingView(theme);
                 }

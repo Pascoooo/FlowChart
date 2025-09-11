@@ -1,19 +1,16 @@
-
-
 import 'package:flowchart_thesis/screens/user_dashboard/project_selection/widgets/project_carousel.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
-
 import '../../../../config/constants/themes.dart';
 
-class EnhancedProjectContainer extends StatefulWidget {
+class ProjectContainer extends StatefulWidget {
   final List<MyProject> projects;
   final void Function(MyProject) onProjectSelected;
   final void Function(String) onProjectDeleted;
   final void Function(String, String) onProjectRenamed;
 
-  const EnhancedProjectContainer({
+  const ProjectContainer({
     super.key,
     required this.projects,
     required this.onProjectSelected,
@@ -22,10 +19,10 @@ class EnhancedProjectContainer extends StatefulWidget {
   });
 
   @override
-  State<EnhancedProjectContainer> createState() => _EnhancedProjectContainerState();
+  State<ProjectContainer> createState() => ProjectContainerState();
 }
 
-class _EnhancedProjectContainerState extends State<EnhancedProjectContainer>
+class ProjectContainerState extends State<ProjectContainer>
     with TickerProviderStateMixin {
   late AnimationController _containerController;
   late Animation<double> _containerAnimation;
@@ -75,18 +72,17 @@ class _EnhancedProjectContainerState extends State<EnhancedProjectContainer>
             height: AppConstants.projectContainerHeight,
             decoration: _buildContainerDecoration(theme),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.start, // Assicura che inizi dall'alto
-              crossAxisAlignment: CrossAxisAlignment.center, // Per centrare orizzontalmente il titolo
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 30), // Spazio fisso dall'alto del container
+                const SizedBox(height: 30),
                 _buildEnhancedHeader(theme),
-                const SizedBox(height: 20), // Spazio ridotto tra titolo e carosello
-                // MODIFICA: Abbiamo ancora bisogno di un'altezza definita per il carosello se non Expanded
+                const SizedBox(height: 20),
                 SizedBox(
-                  height: 250, // Mantieniamo un'altezza fissa per il carosello
+                  height: 250,
                   child: _buildContent(),
                 ),
-                const Spacer(flex: 2), // MODIFICA: Spacer con flex per spingere il contenuto in alto
+                const Spacer(flex: 2),
               ],
             ),
           ),
@@ -185,7 +181,6 @@ class _EnhancedProjectContainerState extends State<EnhancedProjectContainer>
   }
 }
 
-// widgets/enhanced_empty_state.dart
 class EnhancedEmptyState extends StatefulWidget {
   const EnhancedEmptyState({super.key});
 
@@ -282,106 +277,3 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
   }
 }
 
-class ErrorHandler {
-  static void handleError(BuildContext context, String message, [String? title]) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.error,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
-  static Future<void> handleAsyncError(
-      Future<void> Function() operation,
-      BuildContext context, [
-        String? errorMessage,
-      ]) async {
-    try {
-      await operation();
-    } catch (e) {
-      if (context.mounted) {
-        handleError(context, errorMessage ?? 'Si è verificato un errore');
-      }
-    }
-  }
-}
-
-
-class ValidationUtils {
-  /// Valida il nome di un progetto, gestendo creazione e rinomina.
-  ///
-  /// Restituisce una stringa di errore se la validazione fallisce, altrimenti `null`.
-  /// [currentProjectId] è l'ID del progetto che si sta rinominando (se applicabile).
-  static String? validateProjectName(
-      String? value, List<MyProject> existingProjects,
-      [String? currentProjectId]) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Il nome non può essere vuoto';
-    }
-
-    final trimmedValue = value.trim();
-    final normalizedValue = trimmedValue.toLowerCase();
-
-    // 2. Controllo lunghezza massima
-    if (trimmedValue.length > AppConstants.maxProjectNameLength) {
-      return 'Nome troppo lungo (max ${AppConstants.maxProjectNameLength} caratteri)';
-    }
-
-    // 3. Controllo caratteri non validi
-    if (RegExp(r'[<>:"/\\|?*]').hasMatch(trimmedValue)) {
-      return 'Il nome contiene caratteri non validi';
-    }
-
-    // 4. NUOVO: Controllo per rinomina con lo stesso nome
-    if (currentProjectId != null) {
-      final currentProject = existingProjects.firstWhere(
-            (p) => p.projectId == currentProjectId,
-      );
-      if (currentProject.name.toLowerCase() == normalizedValue) {
-        return 'Nome già in uso';
-      }
-    }
-
-    // 5. Controllo per nomi duplicati (escludendo il progetto corrente in caso di rinomina)
-    final isDuplicate = existingProjects.any((p) =>
-    p.projectId != currentProjectId &&
-        p.name.toLowerCase() == normalizedValue);
-
-    if (isDuplicate) {
-      return 'Nome già in uso';
-    }
-
-    return null; // Validazione superata
-  }
-}
-class NavigationButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const NavigationButton({
-    super.key,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surface,
-      shape: const CircleBorder(),
-      clipBehavior: Clip.antiAlias,
-      elevation: 2,
-      shadowColor: theme.colorScheme.shadow.withOpacity(0.2),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(icon, size: 16, color: theme.colorScheme.primary),
-        ),
-      ),
-    );
-  }
-}

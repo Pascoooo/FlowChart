@@ -1,9 +1,7 @@
-// lib/settings/pages/settings_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../config/services/dialog_service.dart';
@@ -51,7 +49,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      // Il backgroundColor qui serve per le transizioni di pagina o se l'animazione non copre tutto
       backgroundColor: cs.surface,
       appBar: AppBar(
         title: const Text('Impostazioni'),
@@ -65,47 +62,39 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
           tooltip: 'Torna alla schermata precedente',
         ),
       ),
-      // Usiamo uno Stack per sovrapporre l'animazione e il contenuto
       body: Stack(
         children: [
           const AnimatedBackground(),
-
-          // Livello 2: Il contenuto della pagina (la card con le impostazioni)
+          // Contenuto non scrollabile centrato
           Center(
-            child: Scrollbar(
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-                child: FadeTransition(
-                  opacity: _fadeAnimation, // Assumendo che _fadeAnimation sia ancora definita nel tuo State
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 800),
-                    child: Container(
-                      padding: const EdgeInsets.all(32.0),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLowest,
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(color: cs.outline.withOpacity(0.1)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: cs.shadow.withOpacity(isDark ? 0.15 : 0.08),
-                            blurRadius: 30,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: Container(
+                  padding: const EdgeInsets.all(32.0),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: cs.outline.withOpacity(0.1)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: cs.shadow.withOpacity(isDark ? 0.15 : 0.08),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
                       ),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _Header(),
-                          SizedBox(height: 40),
-                          _GeneralSettings(),
-                          SizedBox(height: 24),
-                          _SystemSettings(),
-                        ],
-                      ),
-                    ),
+                    ],
+                  ),
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Header(),
+                      SizedBox(height: 40),
+                      GeneralSettings(),
+                      SizedBox(height: 24),
+                      SystemSettings(),
+                    ],
                   ),
                 ),
               ),
@@ -116,8 +105,8 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     );
   }
 }
-class _Header extends StatelessWidget {
-  const _Header();
+class Header extends StatelessWidget {
+  const Header();
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -126,7 +115,7 @@ class _Header extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
+            decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [cs.primary, cs.primary.withOpacity(0.7)],
               begin: Alignment.topLeft,
@@ -170,9 +159,8 @@ class _Header extends StatelessWidget {
   }
 }
 
-
-class _GeneralSettings extends StatelessWidget {
-  const _GeneralSettings();
+class GeneralSettings extends StatelessWidget {
+  const GeneralSettings();
 
   @override
   Widget build(BuildContext context) {
@@ -193,8 +181,8 @@ class _GeneralSettings extends StatelessWidget {
   }
 }
 
-class _SystemSettings extends StatelessWidget {
-  const _SystemSettings();
+class SystemSettings extends StatelessWidget {
+  const SystemSettings();
 
   void _confirmLogout(BuildContext context) async {
     final bool? confirmed = await DialogService.showConfirmationDialog(
@@ -211,15 +199,27 @@ class _SystemSettings extends StatelessWidget {
   }
 
   void _confirmAccountDeletion(BuildContext context) async {
-    final bool? confirmed = await DialogService.showConfirmationDialog(
+    final bool? firstConfirmation = await DialogService.showConfirmationDialog(
       context,
-      title: 'Conferma Eliminazione Account',
-      message:
-      'Questa azione eliminerà definitivamente il tuo account e tutti i dati associati. Vuoi procedere?',
-      confirmText: 'Elimina Account',
+      title: 'Eliminazione Account',
+      message: 'Questa azione eliminerà definitivamente il tuo account',
+      confirmText: 'Elimina',
       cancelText: 'Annulla',
     );
-    if (confirmed == true && context.mounted) {
+
+    if (firstConfirmation != true || !context.mounted) {
+      return;
+    }
+
+    final bool? secondConfirmation = await DialogService.showConfirmationDialog(
+      context,
+      title: 'Conferma Eliminazione',
+      message: 'Sei sicuro di voler eliminare il tuo account? Questa azione è irreversibile.' ,
+      confirmText: 'Conferma',
+      cancelText: 'Annulla',
+    );
+
+    if (secondConfirmation == true && context.mounted) {
       context.read<AuthenticationBloc>().add(const AuthenticationDeleteAccountRequested());
     }
   }
@@ -234,46 +234,21 @@ class _SystemSettings extends StatelessWidget {
     );
     if (confirmed == true && context.mounted) {
       await context.read<SettingsProvider>().resetAll();
-      // MODIFICA: Usa 'message' invece di 'content'
       DialogService.showInfoDialog(
         context,
         title: 'Successo',
         message: 'Impostazioni ripristinate con successo.',
-        icon: Icons.check_circle_outline, // Puoi aggiungere un'icona per coerenza
+        icon: Icons.check_circle_outline,
       );
     }
   }
 
   void _showAppInfoDialog(BuildContext context) {
-    showAboutDialog(
-      context: context,
-      applicationName: 'Unichart',
-      applicationVersion: '1.0.0', // Puoi usare package_info_plus per ottenere dinamicamente la versione
-      applicationIcon: const Icon(Icons.insert_chart_outlined_rounded, size: 48),
-      applicationLegalese: '© 2024 Unichart. Tutti i diritti riservati.',
-      children: [
-        const SizedBox(height: 12),
-        const Text('Unichart è un\'applicazione per la creazione di diagrammi e grafici in modo semplice e intuitivo.'),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: () {
-            showLicensePage(
-              context: context,
-              applicationName: 'Unichart',
-              applicationVersion: '1.0.0',
-              applicationIcon: const Icon(Icons.insert_chart_outlined_rounded, size: 48),
-              applicationLegalese: '© 2024 Unichart. Tutti i diritti riservati.',
-            );
-          },
-          child: Text(
-            'Visualizza le licenze open source',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              decoration: TextDecoration.underline,
-            ),
-          ),
-        ),
-      ],
+    DialogService.showInfoDialog(
+      context,
+      title: 'Informazioni App',
+      message: 'Unichart\nVersione 1.0.0\n© 2025 Unichart Inc.',
+      icon: Icons.info_outline_rounded,
     );
   }
 

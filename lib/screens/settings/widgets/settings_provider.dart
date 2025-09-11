@@ -9,11 +9,9 @@ class SettingsProvider with ChangeNotifier {
   late bool _autoSaveEnabled;
 
   SettingsProvider(this._prefs) {
-    // Load only the auto-save setting
     _autoSaveEnabled = _prefs.getBool(keyAutoSave) ?? true;
   }
 
-  // Public getter for auto-save
   bool get autoSaveEnabled => _autoSaveEnabled;
 
   Future<void> updateAutoSave(bool newValue) async {

@@ -32,7 +32,6 @@ class SettingsSwitchTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
             children: [
-              // Icon with background
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -42,7 +41,6 @@ class SettingsSwitchTile extends StatelessWidget {
                 child: Icon(icon, color: cs.onSurfaceVariant, size: 22),
               ),
               const SizedBox(width: 16),
-              // Title and Subtitle
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

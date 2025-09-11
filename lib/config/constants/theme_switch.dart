@@ -3,13 +3,12 @@ import "package:flutter/material.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider with ChangeNotifier {
-  static const String _prefsKey = 'theme_mode'; // 'light' | 'dark'
+  static const String _prefsKey = 'theme_mode';
 
   final SharedPreferences _prefs;
   ThemeData _themeMode = lightmode;
 
   ThemeProvider(this._prefs) {
-    // Ripristina il tema salvato, default light
     final saved = _prefs.getString(_prefsKey);
     if (saved == 'dark') {
       _themeMode = darkmode;

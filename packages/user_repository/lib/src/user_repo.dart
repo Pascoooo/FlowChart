@@ -10,12 +10,6 @@ abstract class UserRepository {
   // Sign out from Firebase (and providers where needed)
   Future<void> signOut();
 
-  // Get current Firebase user uid or throw if no user
-  Future<String> getUid();
-
-  // Get current user mapped to MyUser (or null if not authenticated)
-  Future<MyUser?> getCurrentUser();
-
   // Sign in with Google
   Future<MyUser> signInWithGoogle();
 

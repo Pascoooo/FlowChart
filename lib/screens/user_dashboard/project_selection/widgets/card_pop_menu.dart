@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../../config/services/dialog_service.dart';
-import 'project_container.dart';
+import '../../../../config/services/validation_service.dart';
 
 class CardPopupMenu extends StatelessWidget {
   final MyProject project;
@@ -33,7 +32,7 @@ class CardPopupMenu extends StatelessWidget {
               initialValue: project.name,
               confirmText: "Rinomina",
               cancelText: "Annulla",
-              validator: (v) => ValidationUtils.validateProjectName(v, projects, project.projectId));
+              validator: (v) => ValidationService.validateProjectName(v, projects, project.projectId));
           if (newName != null) {
             onRenamed(newName);
           }

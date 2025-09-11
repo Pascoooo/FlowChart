@@ -29,11 +29,15 @@ class MyProject {
     );
   }
 
-  MyProject copyWith({required DateTime updatedAt}) {
+  /// Crea una copia dell'oggetto MyProject, aggiornando solo i campi forniti.
+  MyProject copyWith({
+    String? name,
+    DateTime? updatedAt,
+  }) {
     return MyProject(
-      projectId: projectId,
-      name: name,
-      updatedAt: updatedAt,
+      projectId: projectId, // L'ID non cambia mai
+      name: name ?? this.name, // Usa il nuovo nome se fornito, altrimenti il vecchio
+      updatedAt: updatedAt ?? this.updatedAt, // Usa la nuova data se fornita, altrimenti la vecchia
     );
   }
 }
