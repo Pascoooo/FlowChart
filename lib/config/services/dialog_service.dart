@@ -67,7 +67,10 @@ class DialogService {
     );
   }
 
-  /// Mostra un dialogo per l'inserimento di testo con validazione in tempo reale.
+// lib/config/services/dialog_service.dart
+
+  /// Mostra un dialogo per l'inserimento di testo con uno stile Cupertino personalizzato,
+  /// ma usando un contenitore Material (AlertDialog) per la massima compatibilità web.
   static Future<String?> showInputDialog(
       BuildContext context, {
         required String title,
@@ -80,9 +83,12 @@ class DialogService {
       }) async {
     final controller = TextEditingController(text: initialValue);
 
-    return showCupertinoDialog<String>(
+    return showDialog<String>(
       context: context,
       builder: (context) {
+        // MODIFICA 1: Aggiungiamo una variabile per tracciare il controllo iniziale.
+        var isInitialCheck = true;
+
         return StatefulBuilder(
           builder: (context, setState) {
             String? errorText;
@@ -96,49 +102,119 @@ class DialogService {
                 isButtonEnabled = value.trim().isNotEmpty;
               }
             }
-
-            // Imposta lo stato iniziale
             validate(controller.text);
+            final bool isDuplicateNameError = errorText == 'Nome già in uso';
 
-            return CupertinoAlertDialog(
-              title: Text(title),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (message != null) ...[
-                    Text(message, style: const TextStyle(height: 1.4)),
-                    const SizedBox(height: 16),
-                  ],
-                  CupertinoTextField(
-                    controller: controller,
-                    autofocus: true,
-                    placeholder: hintText,
-                    onChanged: (value) => setState(() => validate(value)),
-                  ),
-                  if (errorText != null)
+            return AlertDialog(
+              elevation: 0,
+              backgroundColor: CupertinoColors.systemGrey6.withOpacity(0.85),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.0)),
+              contentPadding: EdgeInsets.zero,
+              content: Container(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // --- Area Testo ---
                     Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        errorText!,
-                        style: TextStyle(color: CupertinoColors.systemRed.resolveFrom(context)),
-                        textAlign: TextAlign.center,
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                      child: Column(
+                        children: [
+                          Text(
+                            title,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 17,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          if (message != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              message,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          CupertinoTextField(
+                            controller: controller,
+                            autofocus: true,
+                            placeholder: hintText,
+                            onChanged: (value) {
+                              // MODIFICA 2: Al primo cambiamento, disattiviamo il flag.
+                              if (isInitialCheck) {
+                                isInitialCheck = false;
+                              }
+                              setState(() => validate(value));
+                            },
+                          ),
+                          // Spazio per l'errore che si adatta
+                          Container(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            // MODIFICA 3: Nuova logica per mostrare l'errore.
+                            // Nasconde l'errore del nome duplicato SOLO al controllo iniziale.
+                            child: (errorText != null && !(isInitialCheck && isDuplicateNameError))
+                                ? Text(
+                              errorText!,
+                              style: TextStyle(
+                                  color: CupertinoColors.systemRed.resolveFrom(context)),
+                              textAlign: TextAlign.center,
+                            )
+                                : null,
+                          ),
+                        ],
                       ),
                     ),
-                ],
+
+                    const Divider(height: 1, color: CupertinoColors.separator),
+
+                    // --- Area Pulsanti ---
+                    IntrinsicHeight(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: CupertinoButton(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              onPressed: () => Navigator.of(context).pop(null),
+                              child: Text(
+                                cancelText,
+                                style: const TextStyle(
+                                  color: CupertinoColors.activeBlue,
+                                  fontSize: 17,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const VerticalDivider(width: 1, color: CupertinoColors.separator),
+                          Expanded(
+                            child: CupertinoButton(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              onPressed: isButtonEnabled
+                                  ? () => Navigator.of(context).pop(controller.text.trim())
+                                  : null,
+                              child: Text(
+                                confirmText,
+                                style: TextStyle(
+                                  color: isButtonEnabled
+                                      ? CupertinoColors.activeBlue
+                                      : CupertinoColors.placeholderText,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              actions: <CupertinoDialogAction>[
-                CupertinoDialogAction(
-                  onPressed: () => Navigator.of(context).pop(null),
-                  child: Text(cancelText),
-                ),
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  onPressed: isButtonEnabled
-                      ? () => Navigator.of(context).pop(controller.text.trim())
-                      : null,
-                  child: Text(confirmText),
-                ),
-              ],
             );
           },
         );
