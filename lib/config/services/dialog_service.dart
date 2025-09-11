@@ -1,92 +1,65 @@
+// lib/config/services/dialog_service.dart
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+/// Un servizio di utilità per mostrare dialoghi modali standardizzati nell'app.
 class DialogService {
-  /// Mostra un dialogo centrato; il builder riceve il context del dialogo
-  /// così che tutte le chiamate a Navigator.pop usino la rotta del dialogo.
-  static Future<T?> _showCenteredDialog<T>({
-    required BuildContext context,
-    required Widget Function(BuildContext) builder,
-    bool barrierDismissible = true,
-  }) {
-    return showGeneralDialog<T>(
-      context: context,
-      barrierDismissible: barrierDismissible,
-      barrierLabel: '',
-      transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (dialogContext, anim1, anim2) {
-        return Align(
-          alignment: Alignment.center,
-          child: Builder(builder: (inner) => builder(inner)),
-        );
-      },
-      transitionBuilder: (context, anim1, anim2, child) {
-        return Transform.scale(
-          scale: anim1.value,
-          child: Opacity(
-            opacity: anim1.value,
-            child: child,
-          ),
-        );
-      },
-    );
-  }
-
-  /// Mostra un dialogo con un indicatore di caricamento.
-  static Future<void> showLoadingDialog(
+  /// Mostra un dialogo informativo animato con sfondo sfocato.
+  static Future<void> showInfoDialog(
       BuildContext context, {
-        required String message,
-        bool barrierDismissible = false,
-      }) {
-    return _showCenteredDialog<void>(
+        required String title,
+        String? message,
+        required IconData icon,
+        Color? iconColor,
+        String closeText = 'OK',
+      }) async {
+    return showGeneralDialog<void>(
       context: context,
-      barrierDismissible: barrierDismissible,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CupertinoActivityIndicator(),
-            const SizedBox(height: 16),
-            Text(message),
-          ],
-        ),
-      ),
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return _StyledInfoDialog(
+          title: title,
+          message: message,
+          icon: icon,
+          iconColor: iconColor ?? Theme.of(context).colorScheme.primary,
+          closeText: closeText,
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: child,
+        );
+      },
     );
   }
 
-  /// Mostra un dialogo di conferma con due opzioni.
-  /// Restituisce `true` se l'utente conferma, `false` se annulla, `null` se il
-  /// dialogo viene ignorato.
+  /// Mostra un dialogo di conferma in stile nativo (Cupertino).
+  /// Restituisce `true` se l'utente conferma, `false` altrimenti.
   static Future<bool?> showConfirmationDialog(
       BuildContext context, {
         required String title,
         required String message,
-        String cancelText = 'Annulla',
         String confirmText = 'Conferma',
-        VoidCallback? onConfirm,
-      }) {
-    return _showCenteredDialog<bool?>(
+        String cancelText = 'Annulla',
+      }) async {
+    return showCupertinoDialog<bool>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(
-          title,
-          style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
-        ),
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
         content: Text(message),
-        actions: [
+        actions: <CupertinoDialogAction>[
           CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () => Navigator.of(context).pop(false),
             child: Text(cancelText),
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
-            onPressed: () {
-              // Chiudi il dialogo usando il context locale, poi esegui la callback
-              Navigator.pop(dialogContext, true);
-              WidgetsBinding.instance.addPostFrameCallback((_) => onConfirm?.call());
-            },
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(context).pop(true),
             child: Text(confirmText),
           ),
         ],
@@ -94,133 +67,74 @@ class DialogService {
     );
   }
 
-  /// Mostra un dialogo informativo con un titolo, un'icona e un contenuto.
-  static Future<void> showInfoDialog(
-      BuildContext context, {
-        required String title,
-        required Widget content,
-        IconData? icon,
-        bool isFontAwesome = false,
-        String okText = 'OK',
-      }) {
-    return _showCenteredDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: icon != null
-            ? Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            isFontAwesome
-                ? FaIcon(icon, color: Theme.of(dialogContext).colorScheme.primary)
-                : Icon(icon, color: Theme.of(dialogContext).colorScheme.primary),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
-            ),
-          ],
-        )
-            : Text(
-          title,
-          style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
-        ),
-        content: content,
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(okText),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Mostra un dialogo con un campo di testo per l'input.
-  /// Restituisce la stringa inserita o `null` se il dialogo viene annullato.
+  /// Mostra un dialogo per l'inserimento di testo con validazione in tempo reale.
   static Future<String?> showInputDialog(
       BuildContext context, {
         required String title,
         String? message,
-        String? hintText,
         String? initialValue,
-        String cancelText = 'Annulla',
+        String hintText = '',
         String confirmText = 'Conferma',
-        String? Function(String)? validator, // added validator
-      }) {
+        String cancelText = 'Annulla',
+        String? Function(String?)? validator,
+      }) async {
     final controller = TextEditingController(text: initialValue);
 
-    return _showCenteredDialog<String?>(
+    return showCupertinoDialog<String>(
       context: context,
-      builder: (dialogContext) {
-        // Use a StatefulBuilder to manage local dialog state (error message / validation)
+      builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
             String? errorText;
-            // compute current validity based on controller text
-            String current = controller.text.trim();
-            if (validator != null) {
-              errorText = validator(current);
-            } else if (current.isEmpty) {
-              // default validation: non empty
-              errorText = 'Il campo non può essere vuoto';
+            bool isButtonEnabled = false;
+
+            void validate(String value) {
+              if (validator != null) {
+                errorText = validator(value);
+                isButtonEnabled = errorText == null;
+              } else {
+                isButtonEnabled = value.trim().isNotEmpty;
+              }
             }
-            final bool isValid = errorText == null;
+
+            // Imposta lo stato iniziale
+            validate(controller.text);
 
             return CupertinoAlertDialog(
-              title: Text(
-                title,
-                style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
-              ),
+              title: Text(title),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (message != null) ...[
-                    Text(message),
+                    Text(message, style: const TextStyle(height: 1.4)),
                     const SizedBox(height: 16),
                   ],
                   CupertinoTextField(
                     controller: controller,
                     autofocus: true,
                     placeholder: hintText,
-                    padding: const EdgeInsets.all(12),
-                    onChanged: (value) {
-                      setState(() {
-                        final v = value.trim();
-                        if (validator != null) {
-                          errorText = validator(v);
-                        } else {
-                          errorText = v.isEmpty ? 'Il campo non può essere vuoto' : null;
-                        }
-                      });
-                    },
-                    onSubmitted: (value) {
-                      final v = value.trim();
-                      if ((validator != null && validator(v) == null) || (validator == null && v.isNotEmpty)) {
-                        Navigator.of(dialogContext).pop(v);
-                      }
-                    },
+                    onChanged: (value) => setState(() => validate(value)),
                   ),
-                  const SizedBox(height: 8),
                   if (errorText != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 6.0),
-                      // use non-null assertion because we only reach here when errorText != null
-                      child: Text(errorText!, style: TextStyle(color: Colors.red, fontSize: 12)),
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        errorText!,
+                        style: TextStyle(color: CupertinoColors.systemRed.resolveFrom(context)),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                 ],
               ),
-              actions: [
+              actions: <CupertinoDialogAction>[
                 CupertinoDialogAction(
-                  onPressed: () => Navigator.pop(dialogContext, null),
+                  onPressed: () => Navigator.of(context).pop(null),
                   child: Text(cancelText),
                 ),
                 CupertinoDialogAction(
                   isDefaultAction: true,
-                  // Disable the confirm action by providing null when invalid
-                  onPressed: isValid
-                      ? () => Navigator.of(dialogContext).pop(controller.text.trim())
+                  onPressed: isButtonEnabled
+                      ? () => Navigator.of(context).pop(controller.text.trim())
                       : null,
                   child: Text(confirmText),
                 ),
@@ -232,32 +146,351 @@ class DialogService {
     );
   }
 
-  /// Mostra un dialogo completamente personalizzabile.
-  static Future<T?> showCustomDialog<T>(
-      BuildContext context, {
-        required Widget content,
-        Widget? title,
-        List<Widget>? actions,
-        bool barrierDismissible = true,
-      }) {
-    return _showCenteredDialog<T?>(
+  /// Mostra un dialogo di caricamento semplice senza freeze dell'UI
+  static void showLoadingDialog(BuildContext context, {
+    required String message,
+    required bool barrierDismissible
+  }) {
+    showDialog<void>(
       context: context,
       barrierDismissible: barrierDismissible,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: title != null
-            ? DefaultTextStyle(
-          style: TextStyle(color: Theme.of(dialogContext).colorScheme.primary),
-          child: title,
-        )
-            : null,
-        content: content,
-        actions: actions ?? [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('OK'),
+      builder: (context) => PopScope(
+        canPop: barrierDismissible,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Mostra un dialogo di successo con animazione
+  static Future<void> showSuccessDialog(
+      BuildContext context, {
+        required String title,
+        String? message,
+        String closeText = 'OK',
+      }) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => _AnimatedResultDialog(
+        title: title,
+        message: message,
+        icon: Icons.check_circle,
+        iconColor: Colors.green,
+        closeText: closeText,
+        isSuccess: true,
+      ),
+    );
+  }
+
+  /// Mostra un dialogo di errore con animazione
+  static Future<void> showErrorDialog(
+      BuildContext context, {
+        required String title,
+        String? message,
+        String closeText = 'Chiudi',
+      }) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => _AnimatedResultDialog(
+        title: title,
+        message: message,
+        icon: Icons.error,
+        iconColor: Colors.red,
+        closeText: closeText,
+        isSuccess: false,
+      ),
+    );
+  }
+}
+
+class _StyledInfoDialog extends StatelessWidget {
+  final String title;
+  final String? message;
+  final IconData icon;
+  final Color iconColor;
+  final String closeText;
+
+  const _StyledInfoDialog({
+    required this.title,
+    this.message,
+    required this.icon,
+    required this.iconColor,
+    required this.closeText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+      child: Container(
+        color: Colors.black.withOpacity(0.4),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 350, minWidth: 280),
+            child: Material(
+              elevation: 24.0,
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(24),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+                child: _AnimatedDialogContent(
+                  title: title,
+                  message: message,
+                  icon: icon,
+                  iconColor: iconColor,
+                  closeText: closeText,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedDialogContent extends StatefulWidget {
+  final String title;
+  final String? message;
+  final IconData icon;
+  final Color iconColor;
+  final String closeText;
+
+  const _AnimatedDialogContent({
+    required this.title,
+    this.message,
+    required this.icon,
+    required this.iconColor,
+    required this.closeText,
+  });
+
+  @override
+  State<_AnimatedDialogContent> createState() => _AnimatedDialogContentState();
+}
+
+class _AnimatedDialogContentState extends State<_AnimatedDialogContent>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _iconScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _iconScale = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.elasticOut,
+    );
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ScaleTransition(
+          scale: _iconScale,
+          child: Icon(widget.icon, size: 64, color: widget.iconColor),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          widget.title,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        if (widget.message != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            widget.message!,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7)),
           ),
         ],
+        const SizedBox(height: 32),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.iconColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(widget.closeText),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Widget per dialoghi animati di successo/errore
+class _AnimatedResultDialog extends StatefulWidget {
+  final String title;
+  final String? message;
+  final IconData icon;
+  final Color iconColor;
+  final String closeText;
+  final bool isSuccess;
+
+  const _AnimatedResultDialog({
+    required this.title,
+    this.message,
+    required this.icon,
+    required this.iconColor,
+    required this.closeText,
+    required this.isSuccess,
+  });
+
+  @override
+  State<_AnimatedResultDialog> createState() => _AnimatedResultDialogState();
+}
+
+class _AnimatedResultDialogState extends State<_AnimatedResultDialog>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.elasticOut,
+    ));
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+    ));
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 320),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: Icon(
+                  widget.icon,
+                  size: 64,
+                  color: widget.iconColor,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                widget.title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (widget.message != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  widget.message!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.iconColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(widget.closeText),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

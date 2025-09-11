@@ -54,16 +54,18 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
   }
 
   void _clearAllStrokes() {
-    DialogService.showConfirmationDialog(
+    final confirmed = DialogService.showConfirmationDialog(
       context,
       title: "Conferma",
       message: "Sei sicuro di voler cancellare tutto il disegno?",
-      confirmText: "Conferma",
+      confirmText: "Cancella",
       cancelText: "Annulla",
-      onConfirm: () {
-        setState(() => _strokes.clear());
-      },
     );
+    confirmed.then((value) {
+      if (value == true) {
+        setState(() => _strokes.clear());
+      }
+    });
   }
 
   @override

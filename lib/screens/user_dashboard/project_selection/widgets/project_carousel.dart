@@ -1,6 +1,6 @@
 import 'dart:math';
-import 'package:flowchart_thesis/screens/project_selection/widgets/project_card.dart';
-import 'package:flowchart_thesis/screens/project_selection/widgets/project_container.dart';
+import 'package:flowchart_thesis/screens/user_dashboard/project_selection/widgets/project_card.dart';
+import 'package:flowchart_thesis/screens/user_dashboard/project_selection/widgets/project_container.dart';
 import 'package:flutter/material.dart';
 import 'package:project_repository/project_repository.dart';
 

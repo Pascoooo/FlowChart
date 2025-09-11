@@ -2,12 +2,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../../blocs/auth_bloc/authentication_bloc.dart';
-import '../../../blocs/auth_bloc/authentication_event.dart';
-import '../../../blocs/auth_bloc/authentication_state.dart';
-import '../../../config/constants/themes.dart';
-import '../../../config/router/app_router.dart';
-import '../../../config/services/dialog_service.dart';
+
+import '../../../../blocs/auth_bloc/authentication_bloc.dart';
+import '../../../../blocs/auth_bloc/authentication_event.dart';
+import '../../../../blocs/auth_bloc/authentication_state.dart';
+import '../../../../config/constants/themes.dart';
+import '../../../../config/router/app_router.dart';
+import '../../../../config/services/dialog_service.dart';
 
 class WelcomeHeader extends StatefulWidget {
   const WelcomeHeader({super.key});

@@ -118,7 +118,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
 
       final existingProjects = await projectRepository.getProjects();
       if (existingProjects.any((p) => p.name == event.projectName.trim())) {
-        throw Exception('Esiste già un progetto con questo nome.');
+        throw Exception('Nome già in uso.');
       }
 
       await projectRepository.createProject(name: event.projectName.trim());
@@ -195,7 +195,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       if (existingProjects.any(
             (p) => p.name == event.newName.trim() && p.projectId != event.projectId,
       )) {
-        throw Exception('Esiste già un progetto con questo nome.');
+        throw Exception('Nome già in uso.');
       }
 
       await projectRepository.renameProject(

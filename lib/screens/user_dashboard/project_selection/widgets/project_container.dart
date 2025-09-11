@@ -1,10 +1,11 @@
-import 'package:flowchart_thesis/screens/project_selection/widgets/project_carousel.dart';
-import 'package:flowchart_thesis/screens/project_selection/widgets/welcome_header.dart';
+
+
+import 'package:flowchart_thesis/screens/user_dashboard/project_selection/widgets/project_carousel.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 
-import '../../../config/constants/themes.dart';
+import '../../../../config/constants/themes.dart';
 
 class EnhancedProjectContainer extends StatefulWidget {
   final List<MyProject> projects;
@@ -151,7 +152,6 @@ class _EnhancedProjectContainerState extends State<EnhancedProjectContainer>
                   ),
                   child: FaIcon(
                     FontAwesomeIcons.folderOpen,
-                    // MODIFICA: Aumentata la dimensione dell'icona da 20 a 26
                     size: 26,
                     color: theme.colorScheme.primary,
                   ),
@@ -309,36 +309,54 @@ class ErrorHandler {
   }
 }
 
-// utils/validation_utils.dart
+
 class ValidationUtils {
-  static String? validateProjectName(String value, List<MyProject> existingProjects, [String? currentProjectId]) {
-    if (value.trim().isEmpty) {
+  /// Valida il nome di un progetto, gestendo creazione e rinomina.
+  ///
+  /// Restituisce una stringa di errore se la validazione fallisce, altrimenti `null`.
+  /// [currentProjectId] è l'ID del progetto che si sta rinominando (se applicabile).
+  static String? validateProjectName(
+      String? value, List<MyProject> existingProjects,
+      [String? currentProjectId]) {
+    if (value == null || value.trim().isEmpty) {
       return 'Il nome non può essere vuoto';
     }
 
-    if (value.trim().length > AppConstants.maxProjectNameLength) {
+    final trimmedValue = value.trim();
+    final normalizedValue = trimmedValue.toLowerCase();
+
+    // 2. Controllo lunghezza massima
+    if (trimmedValue.length > AppConstants.maxProjectNameLength) {
       return 'Nome troppo lungo (max ${AppConstants.maxProjectNameLength} caratteri)';
     }
 
-    final normalizedValue = value.trim().toLowerCase();
-    final exists = existingProjects.any((p) =>
-    p.projectId != currentProjectId &&
-        p.name.toLowerCase() == normalizedValue
-    );
-
-    if (exists) {
-      return 'Esiste già un progetto con questo nome';
-    }
-
-    // Check for invalid characters
-    if (RegExp(r'[<>:"/\\|?*]').hasMatch(value)) {
+    // 3. Controllo caratteri non validi
+    if (RegExp(r'[<>:"/\\|?*]').hasMatch(trimmedValue)) {
       return 'Il nome contiene caratteri non validi';
     }
 
-    return null;
+    // 4. NUOVO: Controllo per rinomina con lo stesso nome
+    if (currentProjectId != null) {
+      final currentProject = existingProjects.firstWhere(
+            (p) => p.projectId == currentProjectId,
+      );
+      if (currentProject.name.toLowerCase() == normalizedValue) {
+        return 'Nome già in uso';
+      }
+    }
+
+    // 5. Controllo per nomi duplicati (escludendo il progetto corrente in caso di rinomina)
+    final isDuplicate = existingProjects.any((p) =>
+    p.projectId != currentProjectId &&
+        p.name.toLowerCase() == normalizedValue);
+
+    if (isDuplicate) {
+      return 'Nome già in uso';
+    }
+
+    return null; // Validazione superata
   }
 }
-
 class NavigationButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;

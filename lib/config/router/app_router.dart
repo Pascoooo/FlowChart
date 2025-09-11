@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flowchart_thesis/screens/settings/views/settings_page.dart';
-import 'package:flowchart_thesis/screens/user_dashboard/views/dashboard_page.dart';
-import 'package:flowchart_thesis/screens/user_dashboard/sketch_edit/drawing_editor_page.dart';
+import 'package:flowchart_thesis/screens/user_dashboard/dashboard_page.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
 import '../../blocs/project_bloc/logger_service.dart';
 import '../../blocs/project_bloc/project_bloc.dart';
 import '../../screens/auth/views/auth_page.dart';
+import '../../screens/user_dashboard/project_workspace/drawing_page/drawing_editor_page.dart';
 import '../error/error_page.dart';
 
 class AppRoutes {

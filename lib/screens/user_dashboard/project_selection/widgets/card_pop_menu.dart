@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
-import '../../../config/services/dialog_service.dart';
-import '../widgets/project_container.dart';
+import '../../../../config/services/dialog_service.dart';
+import 'project_container.dart';
 
 class CardPopupMenu extends StatelessWidget {
   final MyProject project;
@@ -29,7 +30,7 @@ class CardPopupMenu extends StatelessWidget {
           final newName = await DialogService.showInputDialog(context,
               title: "Rinomina progetto",
               message: "Inserisci un nuovo nome per il progetto",
-              hintText: project.name,
+              initialValue: project.name,
               confirmText: "Rinomina",
               cancelText: "Annulla",
               validator: (v) => ValidationUtils.validateProjectName(v, projects, project.projectId));
@@ -67,7 +68,7 @@ class CardPopupMenu extends StatelessWidget {
           color: theme.colorScheme.surface.withOpacity(0.8),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Icon(Icons.more_vert, size: 16, color: theme.colorScheme.onSurfaceVariant),
+        child: Icon(Icons.more_vert, size: 24, color: theme.colorScheme.onSurfaceVariant),
       ),
     );
   }

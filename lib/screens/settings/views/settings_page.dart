@@ -210,39 +210,70 @@ class _SystemSettings extends StatelessWidget {
     }
   }
 
+  void _confirmAccountDeletion(BuildContext context) async {
+    final bool? confirmed = await DialogService.showConfirmationDialog(
+      context,
+      title: 'Conferma Eliminazione Account',
+      message:
+      'Questa azione eliminerà definitivamente il tuo account e tutti i dati associati. Vuoi procedere?',
+      confirmText: 'Elimina Account',
+      cancelText: 'Annulla',
+    );
+    if (confirmed == true && context.mounted) {
+      context.read<AuthenticationBloc>().add(const AuthenticationDeleteAccountRequested());
+    }
+  }
+
   void _confirmResetSettings(BuildContext context) async {
     final bool? confirmed = await DialogService.showConfirmationDialog(
       context,
       title: 'Conferma Ripristino',
-      message:
-      'Questa azione ripristinerà tutte le impostazioni ai valori predefiniti. Vuoi procedere?',
+      message: 'Questa azione ripristinerà tutte le impostazioni ai valori predefiniti. Vuoi procedere?',
       confirmText: 'Ripristina',
       cancelText: 'Annulla',
     );
     if (confirmed == true && context.mounted) {
       await context.read<SettingsProvider>().resetAll();
-      DialogService.showInfoDialog(context, title: 'Successo', content: const Text('Impostazioni ripristinate con successo.'));
+      // MODIFICA: Usa 'message' invece di 'content'
+      DialogService.showInfoDialog(
+        context,
+        title: 'Successo',
+        message: 'Impostazioni ripristinate con successo.',
+        icon: Icons.check_circle_outline, // Puoi aggiungere un'icona per coerenza
+      );
     }
   }
 
   void _showAppInfoDialog(BuildContext context) {
-    DialogService.showInfoDialog(
-      context,
-      title: 'Informazioni App',
-      icon: FontAwesomeIcons.diagramProject,
-      content: const Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Unichart', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          SizedBox(height: 16),
-          Text('Versione: 1.0.0 (Build 100)'),
-          SizedBox(height: 4),
-          Text('Flutter SDK: 3.24.0'),
-          SizedBox(height: 16),
-          Text('© 2024 Unichart Team. Tutti i diritti riservati.'),
-        ],
-      ),
+    showAboutDialog(
+      context: context,
+      applicationName: 'Unichart',
+      applicationVersion: '1.0.0', // Puoi usare package_info_plus per ottenere dinamicamente la versione
+      applicationIcon: const Icon(Icons.insert_chart_outlined_rounded, size: 48),
+      applicationLegalese: '© 2024 Unichart. Tutti i diritti riservati.',
+      children: [
+        const SizedBox(height: 12),
+        const Text('Unichart è un\'applicazione per la creazione di diagrammi e grafici in modo semplice e intuitivo.'),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: () {
+            showLicensePage(
+              context: context,
+              applicationName: 'Unichart',
+              applicationVersion: '1.0.0',
+              applicationIcon: const Icon(Icons.insert_chart_outlined_rounded, size: 48),
+              applicationLegalese: '© 2024 Unichart. Tutti i diritti riservati.',
+            );
+          },
+          child: Text(
+            'Visualizza le licenze open source',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -276,6 +307,16 @@ class _SystemSettings extends StatelessWidget {
           iconColor: cs.error,
           titleColor: cs.error,
           onTap: () => _confirmLogout(context),
+        ),
+        SettingsTile(
+          title: 'Elimina account',
+          subtitle: 'Rimuovi definitivamente il tuo account',
+          icon: FontAwesomeIcons.userXmark,
+          iconColor: cs.error,
+          titleColor: cs.error,
+          onTap: () {
+            _confirmAccountDeletion(context);
+          },
         ),
       ],
     );

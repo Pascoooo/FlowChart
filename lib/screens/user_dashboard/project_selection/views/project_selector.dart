@@ -3,10 +3,10 @@ import 'package:project_repository/project_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
-import '../../../blocs/project_bloc/project_bloc.dart';
-import '../../../blocs/project_bloc/project_event.dart';
-import '../../../config/constants/theme_switch.dart';
-import '../../../config/services/dialog_service.dart';
+import '../../../../blocs/project_bloc/project_bloc.dart';
+import '../../../../blocs/project_bloc/project_event.dart';
+import '../../../../config/constants/theme_switch.dart';
+import '../../../../config/services/dialog_service.dart';
 import '../widgets/project_container.dart';
 import '../widgets/welcome_header.dart';
 
@@ -29,7 +29,7 @@ class ProjectSelector extends StatelessWidget {
         context,
         title: "Nuovo Progetto",
         message: "Dai un nome al tuo progetto per iniziare",
-        hintText: "es. Il mio diagramma di flusso",
+        hintText: "es. Flowchart",
         confirmText: "Crea Progetto",
         cancelText: "Annulla",
         validator: (v) => ValidationUtils.validateProjectName(v, projects),

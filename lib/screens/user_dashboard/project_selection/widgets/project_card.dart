@@ -91,6 +91,8 @@ class ProjectCard extends StatelessWidget {
                   ),
                 ),
                 Positioned(
+                  height: 32,
+                  width: 32,
                   top: 4,
                   right: 4,
                   child: CardPopupMenu(

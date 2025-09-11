@@ -1,13 +1,13 @@
+import 'package:flowchart_thesis/screens/user_dashboard/project_selection/views/project_selector.dart';
+import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/project_workspace.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../blocs/project_bloc/project_bloc.dart';
-import '../../../blocs/project_bloc/project_event.dart';
-import '../../../blocs/project_bloc/project_state.dart';
-import '../../../config/error/error_page.dart';
-import '../animations/background_animation.dart';
-import '../animations/project_loading_indicator.dart';
-import '../../project_selection/views/project_selector.dart';
-import '../widgets/project_workspace.dart';
+import '../../blocs/project_bloc/project_bloc.dart';
+import '../../blocs/project_bloc/project_event.dart';
+import '../../blocs/project_bloc/project_state.dart';
+import '../../config/error/error_page.dart';
+import 'animations/background_animation.dart';
+import 'animations/project_loading_indicator.dart';
 
 const Duration _kTransitionDuration = Duration(milliseconds: 300);
 const EdgeInsets _kSnackbarMargin = EdgeInsets.all(16.0);

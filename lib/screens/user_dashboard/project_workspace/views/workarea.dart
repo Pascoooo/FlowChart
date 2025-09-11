@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import '../../../config/services/export_service.dart';
 
 class WorkArea extends StatelessWidget {
-  static final GlobalKey workareaKey = GlobalKey();
+  final GlobalKey repaintKey;
 
-  const WorkArea({super.key});
+  const WorkArea({super.key, required this.repaintKey});
 
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      key: workareaKey,
+      key: repaintKey,
       child: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
