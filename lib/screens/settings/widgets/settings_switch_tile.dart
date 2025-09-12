@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+// classe non utilizzata ma potenzialmente utile in futuro
+
 class SettingsSwitchTile extends StatelessWidget {
   final String title;
   final String subtitle;

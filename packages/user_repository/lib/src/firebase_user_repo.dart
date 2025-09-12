@@ -104,20 +104,6 @@ class FirebaseUserRepo implements UserRepository {
     };
   }
 
-  /// Funzione helper per cancellare ricorsivamente tutte le sottocollezioni di un documento
-  Future<void> _deleteSubcollections(DocumentReference docRef) async {
-    final projectsCollection = docRef.collection('projects');
-    final projectsSnapshot = await projectsCollection.get();
-    for (final projectDoc in projectsSnapshot.docs) {
-      // Per ogni progetto, cancella la sua sottocollezione 'files'
-      final filesCollection = projectDoc.reference.collection('files');
-      final filesSnapshot = await filesCollection.get();
-      for (final fileDoc in filesSnapshot.docs) {
-        await fileDoc.reference.delete();
-      }
-      await projectDoc.reference.delete();
-    }
-  }
 
   @override
   Future<void> deleteAccount() async {
@@ -125,16 +111,9 @@ class FirebaseUserRepo implements UserRepository {
     if (user == null) {
       throw const AuthenticationException('Nessun utente autenticato.');
     }
+
     try {
-      final String uid = user.uid;
-      final firestoreUserDoc = _usersCollection.doc(uid);
-      final rtdbUserLogsRef = _rtdb.ref('users/$uid');
-
-      await _deleteSubcollections(firestoreUserDoc);
-      await firestoreUserDoc.delete();
-      await rtdbUserLogsRef.remove();
       await user.delete();
-
     } on FirebaseAuthException catch (e) {
       if (e.code == 'requires-recent-login') {
         throw const AuthenticationException(

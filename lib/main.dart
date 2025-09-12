@@ -1,5 +1,4 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flowchart_thesis/screens/settings/widgets/settings_provider.dart';
 import 'package:firebase_ui_auth/firebase_ui_auth.dart';
 import 'package:firebase_ui_oauth_google/firebase_ui_oauth_google.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
@@ -27,7 +26,6 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider(prefs)),
         Provider<UserRepository>(create: (_) => FirebaseUserRepo()),
-        ChangeNotifierProvider(create: (_) => SettingsProvider(prefs)),
       ],
       child: const MyApp(),
     ),
