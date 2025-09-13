@@ -6,9 +6,7 @@ import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../config/services/dialog_service.dart';
 import '../../user_dashboard/animations/background_animation.dart';
-import '../widgets/settings_provider.dart';
 import '../widgets/settings_section.dart';
-import '../widgets/settings_switch_tile.dart';
 import '../widgets/settings_tile.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -90,9 +88,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Header(),
-                      SizedBox(height: 40),
-                      GeneralSettings(),
-                      SizedBox(height: 24),
+                      SizedBox(height: 35),
                       SystemSettings(),
                     ],
                   ),
@@ -159,27 +155,6 @@ class Header extends StatelessWidget {
   }
 }
 
-class GeneralSettings extends StatelessWidget {
-  const GeneralSettings();
-
-  @override
-  Widget build(BuildContext context) {
-    final settingsProvider = context.watch<SettingsProvider>();
-
-    return SettingsSection(
-      title: 'Generale',
-      children: [
-        SettingsSwitchTile(
-          title: 'Salvataggio automatico',
-          subtitle: 'Salva automaticamente le modifiche ai diagrammi',
-          icon: Icons.save_alt_rounded,
-          value: settingsProvider.autoSaveEnabled,
-          onChanged: (v) => context.read<SettingsProvider>().updateAutoSave(v),
-        ),
-      ],
-    );
-  }
-}
 
 class SystemSettings extends StatelessWidget {
   const SystemSettings();
@@ -233,7 +208,6 @@ class SystemSettings extends StatelessWidget {
       cancelText: 'Annulla',
     );
     if (confirmed == true && context.mounted) {
-      await context.read<SettingsProvider>().resetAll();
       DialogService.showInfoDialog(
         context,
         title: 'Successo',

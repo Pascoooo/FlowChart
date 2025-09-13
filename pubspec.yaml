@@ -32,6 +32,8 @@ dependencies:
     path: packages/file_repository
   project_repository:
     path: packages/project_repository
+  flowchart_repository:
+    path: packages/flowchart_repository
 
   bloc: any
   flutter_web_plugins:
