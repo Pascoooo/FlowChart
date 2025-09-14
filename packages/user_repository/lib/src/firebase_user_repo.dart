@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../user_repository.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:http/http.dart' as http;
+
+const String kFunctionsRegion = 'europe-west8';
 
 class FirebaseUserRepo implements UserRepository {
   final FirebaseAuth _firebaseAuth;
@@ -66,11 +70,9 @@ class FirebaseUserRepo implements UserRepository {
       final provider = GoogleAuthProvider()..addScope('email')..addScope('profile');
       final credential = await _firebaseAuth.signInWithPopup(provider);
       final firebaseUser = credential.user;
-
       if (firebaseUser == null) {
         throw const AuthenticationException('Google sign in fallito.');
       }
-
       final userDoc = await _usersCollection.doc(firebaseUser.uid).get();
       if (userDoc.exists) {
         return MyUser.fromEntity(MyUserEntity.fromDocument(userDoc.data()!));
@@ -104,28 +106,58 @@ class FirebaseUserRepo implements UserRepository {
     };
   }
 
-
   @override
   Future<void> deleteAccount() async {
     final user = _firebaseAuth.currentUser;
     if (user == null) {
-      throw const AuthenticationException('Nessun utente autenticato.');
+      throw const AuthenticationException('Nessun utente autenticato da eliminare.');
     }
 
     try {
-      await user.delete();
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
-        throw const AuthenticationException(
-            'Questa operazione richiede un login recente. Per favore, esegui nuovamente il logout e il login.');
+      final idToken = await user.getIdToken();
+      final projectId = Firebase.app().options.projectId;
+
+      // 2. Costruisci l'URL della tua funzione
+      final uri = Uri.https(
+        '$kFunctionsRegion-$projectId.cloudfunctions.net',
+        'deleteUserAuthHttp', // Assicurati che questo sia il nome corretto
+      );
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $idToken',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(<String, dynamic>{}),
+      );
+
+      if (response.statusCode == 200) {
+        await _firebaseAuth.signOut();
+        return;
+      } else {
+        String serverMessage = 'Si è verificato un errore durante l\'eliminazione.';
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map && data['message'] is String) {
+            serverMessage = data['message'];
+          }
+        } catch (_) {
+          // Ignora gli errori di parsing e usa il messaggio di errore generico
+        }
+        throw AuthenticationException(serverMessage);
       }
+    } on FirebaseAuthException catch (e) {
       throw _mapFirebaseAuthException(e);
     } catch (e) {
-      debugPrint('[deleteAccount] errore: $e');
-      throw const AuthenticationException('Errore durante l\'eliminazione dell\'account.');
+      if (e is AuthenticationException) {
+        rethrow;
+      }
+      throw const AuthenticationException('Errore di connessione o imprevisto.');
     }
   }
 }
+
 
 class AuthenticationException implements Exception {
   final String message;
