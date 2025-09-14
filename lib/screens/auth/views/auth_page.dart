@@ -8,7 +8,8 @@ import '../../../config/constants/theme_switch.dart';
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/auth_bloc/authentication_state.dart';
-import '../../../config/error/error_banner.dart'; // Assicurati che il percorso sia corretto per il tuo ErrorBanner animato
+// MIGLIORAMENTO: Importiamo il nuovo BannerService
+import '../../../config/services/banner_service.dart';
 import '../widgets/auth_header.dart';
 import '../widgets/brand_panel.dart';
 import '../widgets/social_buttons.dart';
@@ -60,7 +61,7 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  Future<void> _handleGoogleSignIn() async {
+  void _handleGoogleSignIn() {
     context.read<AuthenticationBloc>().add(
       const AuthenticationGoogleSignInRequested(),
     );
@@ -72,43 +73,47 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     final mediaQuery = MediaQuery.of(context);
     final isWide = mediaQuery.size.width >= 1200;
 
-    return BlocConsumer<AuthenticationBloc, AuthenticationState>(
+    // Usiamo un BlocListener per gestire azioni come navigazione e banner
+    return BlocListener<AuthenticationBloc, AuthenticationState>(
       listener: (context, state) {
+        // Azione 1: Navigazione in caso di successo
         if (state.status == AuthenticationStatus.authenticated) {
           AppRouter.goToHome(context);
         }
 
+        // MIGLIORAMENTO: Azione 2: Mostra il banner di errore con il nuovo servizio
         if (state.errorMessage != null) {
-          Future.delayed(const Duration(seconds: 5), () {
-            if (mounted) {
-              context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
-            }
-          });
+          // Mostra il banner...
+          BannerService.showError(context, state.errorMessage!);
+          // ...e pulisce subito lo stato dell'errore.
+          context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
         }
       },
-      builder: (context, state) {
-        if (state.status == AuthenticationStatus.unknown) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
+      // Usiamo un BlocBuilder per costruire la UI in base allo stato
+      child: BlocBuilder<AuthenticationBloc, AuthenticationState>(
+        builder: (context, state) {
+          if (state.status == AuthenticationStatus.unknown) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          final isGoogleLoading = state.isLoading;
+          return Scaffold(
+            backgroundColor: theme.colorScheme.surface,
+            body: SafeArea(
+              child: isWide
+                  ? _buildWideLayout(isGoogleLoading)
+                  : _buildNarrowLayout(isGoogleLoading),
             ),
           );
-        }
-        final bannerMessage = state.errorMessage;
-        final isGoogleLoading = state.isLoading;
-        return Scaffold(
-          backgroundColor: theme.colorScheme.surface,
-          body: SafeArea(
-            child: isWide
-                ? _buildWideLayout(bannerMessage, isGoogleLoading)
-                : _buildNarrowLayout(bannerMessage, isGoogleLoading),
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 
-  Widget _buildWideLayout(String? bannerMessage, bool isGoogleLoading) {
+  // MIGLIORAMENTO: Rimosso il parametro del banner, non serve più
+  Widget _buildWideLayout(bool isGoogleLoading) {
     return Row(
       children: [
         const Expanded(flex: 5, child: BrandPanel()),
@@ -117,13 +122,8 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (bannerMessage != null) _buildErrorBanner(bannerMessage),
-                  _buildAuthCard(isGoogleLoading),
-                ],
-              ),
+              // Non mostriamo più il banner qui
+              child: _buildAuthCard(isGoogleLoading),
             ),
           ),
         ),
@@ -131,35 +131,20 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildNarrowLayout(String? bannerMessage, bool isGoogleLoading) {
+  Widget _buildNarrowLayout(bool isGoogleLoading) {
     return Center(
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (bannerMessage != null) _buildErrorBanner(bannerMessage),
-              _buildAuthCard(isGoogleLoading),
-            ],
-          ),
+          // Non mostriamo più il banner qui
+          child: _buildAuthCard(isGoogleLoading),
         ),
       ),
     );
   }
 
-  Widget _buildErrorBanner(String message) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-      child: ErrorBanner(
-        message: message,
-        onClose: () {
-          context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
-        },
-      ),
-    );
-  }
+
 
   Widget _buildAuthCard(bool isGoogleLoading) {
     final theme = Theme.of(context);

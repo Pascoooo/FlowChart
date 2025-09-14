@@ -1,4 +1,6 @@
-from firebase_admin import auth, firestore, db
+# user_actions.py
+
+from firebase_admin import auth, firestore, db, storage
 
 class UserActionException(Exception):
     def __init__(self, message, status_code):
@@ -9,7 +11,26 @@ def delete_firebase_user(uid: str) -> None:
     try:
         print(f"Inizio processo di eliminazione completo per UID: {uid}")
 
-        # 1. Eliminazione dati da Firestore
+        # NUOVO: 1. Eliminazione file da Firebase Storage
+        bucket = storage.bucket() # Ottiene il bucket di default
+
+        # Elimina la foto profilo (se esiste)
+        profile_pic_blob = bucket.blob(f"profile_pictures/{uid}.jpg")
+        if profile_pic_blob.exists():
+            print(f"Eliminazione foto profilo: {profile_pic_blob.name}")
+            profile_pic_blob.delete()
+            print(f"Foto profilo per l'utente {uid} eliminata.")
+
+        # Elimina tutti i file in una potenziale cartella utente (es: 'users/uid/')
+        # Questo elimina in modo ricorsivo tutti i file e le sottocartelle
+        blobs_to_delete = list(bucket.list_blobs(prefix=f"users/{uid}/"))
+        if blobs_to_delete:
+            print(f"Trovati {len(blobs_to_delete)} file nella cartella 'users/{uid}/'. Inizio eliminazione.")
+            for blob in blobs_to_delete:
+                blob.delete()
+            print(f"Tutti i file nella cartella 'users/{uid}/' sono stati eliminati.")
+
+        # 2. Eliminazione dati da Firestore
         firestore_client = firestore.client()
         user_doc_ref = firestore_client.collection('users').document(uid)
 
@@ -17,13 +38,13 @@ def delete_firebase_user(uid: str) -> None:
         firestore_client.recursive_delete(user_doc_ref)
         print(f"Dati Firestore per l'utente {uid} eliminati.")
 
-        # 2. Eliminazione dati da Realtime Database
+        # 3. Eliminazione dati da Realtime Database
         print(f"Eliminazione dati da Realtime Database: users/{uid}")
         rtdb_ref = db.reference(f'users/{uid}')
         rtdb_ref.delete()
         print(f"Dati Realtime Database per l'utente {uid} eliminati.")
 
-        # 3. Eliminazione account utente da Firebase Authentication (ultimo passo)
+        # 4. Eliminazione account utente da Firebase Authentication (ultimo passo)
         print(f"Eliminazione utente da Firebase Auth: {uid}")
         auth.delete_user(uid)
         print(f"Utente {uid} eliminato con successo da Firebase Auth.")

@@ -6,12 +6,11 @@ import '../../blocs/project_bloc/project_bloc.dart';
 import '../../blocs/project_bloc/project_event.dart';
 import '../../blocs/project_bloc/project_state.dart';
 import '../../config/error/error_page.dart';
+import '../../config/services/banner_service.dart';
 import 'animations/background_animation.dart';
 import 'animations/project_loading_indicator.dart';
 
 const Duration _kTransitionDuration = Duration(milliseconds: 300);
-const EdgeInsets _kSnackbarMargin = EdgeInsets.all(16.0);
-const double _kSnackbarBorderRadius = 12.0;
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -37,17 +36,7 @@ class _DashboardPageState extends State<DashboardPage> {
           BlocListener<ProjectBloc, ProjectState>(
             listener: (context, state) {
               if (state is ProjectsLoaded && state.error != null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(state.error!),
-                    backgroundColor: theme.colorScheme.error,
-                    behavior: SnackBarBehavior.floating,
-                    margin: _kSnackbarMargin,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(_kSnackbarBorderRadius),
-                    ),
-                  ),
-                );
+                BannerService.showError(context, state.error!);
               }
             },
             child: BlocBuilder<ProjectBloc, ProjectState>(
@@ -112,4 +101,3 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 }
-

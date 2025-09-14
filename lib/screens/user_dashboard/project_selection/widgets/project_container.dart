@@ -98,25 +98,25 @@ class ProjectContainerState extends State<ProjectContainer>
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
-          theme.colorScheme.surface.withOpacity(0.9),
-          theme.colorScheme.surfaceContainerLow.withOpacity(0.6),
+          theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+          theme.colorScheme.surface.withValues(alpha: 0.9),
+          theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.6),
         ],
         stops: const [0.0, 0.5, 1.0],
       ),
       border: Border.all(
-        color: theme.colorScheme.outline.withOpacity(0.2),
+        color: theme.colorScheme.outline.withValues(alpha: 0.2),
         width: 1.5,
       ),
       boxShadow: [
         BoxShadow(
-          color: theme.colorScheme.shadow.withOpacity(0.1),
+          color: theme.colorScheme.shadow.withValues(alpha: 0.1),
           blurRadius: 32,
           spreadRadius: 4,
           offset: const Offset(0, 12),
         ),
         BoxShadow(
-          color: theme.colorScheme.primary.withOpacity(0.05),
+          color: theme.colorScheme.primary.withValues(alpha: 0.05),
           blurRadius: 16,
           spreadRadius: 2,
           offset: const Offset(0, 4),
@@ -140,8 +140,8 @@ class ProjectContainerState extends State<ProjectContainer>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        theme.colorScheme.primary.withOpacity(0.2),
-                        theme.colorScheme.secondary.withOpacity(0.1),
+                        theme.colorScheme.primary.withValues(alpha: 0.2),
+                        theme.colorScheme.secondary.withValues(alpha: 0.1),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(AppStyles.borderRadiusSmall),
@@ -211,6 +211,17 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    if (_floatingController.isAnimating) {
+      _floatingController.stop();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _floatingController.repeat(reverse: true);
+    });
+  }
+
+  @override
   void dispose() {
     _floatingController.dispose();
     super.dispose();
@@ -242,7 +253,7 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
                 child: FaIcon(
                   FontAwesomeIcons.folderPlus,
                   size: 48,
-                  color: theme.colorScheme.primary.withOpacity(0.7),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.7),
                 ),
               ),
               const SizedBox(height: 24),
@@ -258,7 +269,7 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(AppStyles.borderRadiusMedium),
-                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 ),
                 child: Text(
                   "Inizia il tuo viaggio creativo con il primo progetto",
@@ -276,4 +287,3 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
     );
   }
 }
-

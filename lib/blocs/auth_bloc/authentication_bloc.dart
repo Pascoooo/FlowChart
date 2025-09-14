@@ -20,10 +20,11 @@ class AuthenticationBloc
     on<AuthenticationGoogleSignInRequested>(_onGoogleSignInRequested);
     on<AuthenticationLogoutRequested>(_onLogoutRequested);
     on<AuthenticationDeleteAccountRequested>(_onDeleteAccountRequested);
+    on<AuthenticationDisplayNameUpdateRequested> (_onDisplayNameUpdateRequested);
+    on<AuthenticationPhotoUpdateRequested>(_onPhotoUpdateRequested);
     on<AuthenticationErrorCleared>(_onAuthenticationErrorCleared);
   }
 
-  /// Aggiorna lo stato del BLoC quando lo stato dell'utente cambia.
   void _onUserChanged(
       AuthenticationUserChanged event, Emitter<AuthenticationState> emit) {
     final user = event.user;
@@ -34,52 +35,97 @@ class AuthenticationBloc
     }
   }
 
-  /// Gestisce la richiesta di autenticazione con Google.
   Future<void> _onGoogleSignInRequested(
       AuthenticationGoogleSignInRequested event,
       Emitter<AuthenticationState> emit) async {
     emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
       await _userRepository.signInWithGoogle();
+      // Il successo viene gestito da _onUserChanged
     } catch (e) {
-      emit(const AuthenticationState.unauthenticated(
-          errorMessage: 'Errore di autenticazione Google.'
+      // Miglioramento: Propaga il messaggio di errore specifico
+      final errorMessage = e is AuthenticationException ? e.message : 'Errore di autenticazione Google.';
+      emit(state.copyWith(
+        isLoading: false,
+        status: AuthenticationStatus.unauthenticated,
+        errorMessage: errorMessage,
       ));
     }
   }
 
-  /// Gestisce la richiesta di logout.
-  Future<void> _onLogoutRequested(
-      AuthenticationLogoutRequested event, Emitter<AuthenticationState> emit) async {
-    emit(state.copyWith(isLoading: true));
+  Future<void> _onLogoutRequested(AuthenticationLogoutRequested event,
+      Emitter<AuthenticationState> emit) async {
+    emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
       await _userRepository.signOut();
     } catch (e) {
+      // Miglioramento: Propaga il messaggio di errore specifico
+      final errorMessage = e is AuthenticationException ? e.message : 'Errore durante il logout.';
       emit(state.copyWith(
-          isLoading: false,
-          errorMessage: 'Errore durante il logout.'
-      ));
+          isLoading: false, errorMessage: errorMessage));
     }
   }
 
-  /// Gestisce la richiesta di eliminazione dell'account.
-  /// Emette uno stato di caricamento e poi tenta di eliminare l'account.
-  /// In caso di errore, emette uno stato con il messaggio di errore.
-  /// Se l'eliminazione ha successo, l'utente verrà automaticamente disconnesso
   Future<void> _onDeleteAccountRequested(
       AuthenticationDeleteAccountRequested event,
       Emitter<AuthenticationState> emit) async {
-    emit(state.copyWith(isLoading: true));
+    emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
       await _userRepository.deleteAccount();
     } catch (e) {
+      // Miglioramento: Propaga il messaggio di errore specifico
+      final errorMessage = e is AuthenticationException ? e.message : 'Errore durante l\'eliminazione dell\'account.';
       emit(state.copyWith(
           isLoading: false,
-          errorMessage: 'Errore durante l\'eliminazione dell\'account.'
-      ));
+          errorMessage: errorMessage));
     }
   }
 
+  Future<void> _onDisplayNameUpdateRequested(
+      AuthenticationDisplayNameUpdateRequested event,
+      Emitter<AuthenticationState> emit,
+      ) async {
+    emit(state.copyWith(isLoading: true, errorMessage: null));
+    try {
+      await _userRepository.updateUserDisplayName(event.displayName);
+      emit(state.copyWith(isLoading: false));
+
+    } catch (e) {
+      emit(state.copyWith(
+        isLoading: false,
+        errorMessage: e is AuthenticationException
+            ? e.message
+            : "Errore durante l'aggiornamento del nome.",
+      ));
+    }
+  }
+// bloc (authentication_bloc.dart)
+  Future<void> _onPhotoUpdateRequested(
+      AuthenticationPhotoUpdateRequested event,
+      Emitter<AuthenticationState> emit,
+      ) async {
+    emit(state.copyWith(isLoading: true, errorMessage: null));
+    try {
+      // Now this returns the URL string
+      final newPhotoURL = await _userRepository.updateUserPhoto(event.photoFileBytes);
+
+      // Create an updated user object
+      final updatedUser = state.user.copyWith(photoURL: newPhotoURL);
+
+      // Emit the new state with the updated user and isLoading set to false
+      emit(state.copyWith(
+        user: updatedUser,
+        isLoading: false,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        isLoading: false,
+        errorMessage: e is AuthenticationException
+            ? e.message
+            : "Errore durante l'aggiornamento della foto.",
+      ));
+    }
+  }
   void _onAuthenticationErrorCleared(
       AuthenticationErrorCleared event,
       Emitter<AuthenticationState> emit,

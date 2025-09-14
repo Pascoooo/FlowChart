@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'models/models.dart';
 
 abstract class UserRepository {
@@ -15,4 +17,10 @@ abstract class UserRepository {
 
   // Account Deletetion
   Future<void> deleteAccount();
+
+  // Update Display Name
+  Future<void> updateUserDisplayName(String displayName);
+
+  // Update Photo
+  Future<String> updateUserPhoto(Uint8List photoFileBytes);
 }

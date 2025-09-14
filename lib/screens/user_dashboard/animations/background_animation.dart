@@ -20,6 +20,19 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProv
     )..repeat();
   }
 
+  // Gestisce l'hot reload su Web per evitare frame su view già dismessa
+  @override
+  void reassemble() {
+    super.reassemble();
+    if (_controller.isAnimating) {
+      _controller.stop();
+    }
+    // Riavvia dopo il frame di reload
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _controller.repeat();
+    });
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -42,16 +55,16 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProv
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    theme.colorScheme.primary.withOpacity(0.05),
-                    theme.colorScheme.secondary.withOpacity(0.05),
-                    theme.colorScheme.surface.withOpacity(0.1),
+                    theme.colorScheme.primary.withValues(alpha: 0.05),
+                    theme.colorScheme.secondary.withValues(alpha: 0.05),
+                    theme.colorScheme.surface.withValues(alpha: 0.1),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
                     blurRadius: 100,
                     spreadRadius: 20,
                   ),

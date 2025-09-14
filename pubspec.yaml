@@ -13,6 +13,7 @@ dependencies:
   provider: ^6.1.1
   shared_preferences:
   popover:
+  file_picker: ^8.0.0
   go_router: ^16.1.0
   firebase_core: ^4.0.0
   firebase_auth: ^6.0.1

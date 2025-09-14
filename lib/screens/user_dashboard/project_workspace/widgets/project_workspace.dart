@@ -10,6 +10,7 @@ import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../config/services/dialog_service.dart';
+import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/export_service.dart';
 
 import '../views/workarea.dart';
@@ -149,12 +150,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
       child: BlocListener<FileSystemBloc, FileSystemState>(
         listener: (context, state) {
           if (state is FileSystemError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: Theme.of(context).colorScheme.error,
-              ),
-            );
+            BannerService.showError(context, state.message);
           }
         },
         child: AnimatedBuilder(

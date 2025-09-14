@@ -40,11 +40,11 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: theme.colorScheme.outline.withOpacity(0.1),
+                  color: theme.colorScheme.outline.withValues(alpha: 0.1),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.shadow.withOpacity(0.1),
+                    color: theme.colorScheme.shadow.withValues(alpha: 0.1),
                     blurRadius: 24,
                     offset: const Offset(4, 0),
                   ),
@@ -81,7 +81,7 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
         gradient: LinearGradient(
           colors: [
             Colors.transparent,
-            theme.colorScheme.outline.withOpacity(0.1),
+            theme.colorScheme.outline.withValues(alpha: 0.1),
             Colors.transparent,
           ],
         ),
@@ -117,6 +117,17 @@ class _SidebarHeaderState extends State<_SidebarHeader>
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    if (_floatingController.isAnimating) {
+      _floatingController.stop();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _floatingController.repeat(reverse: true);
+    });
+  }
+
+  @override
   void dispose() {
     _floatingController.dispose();
     super.dispose();
@@ -144,7 +155,7 @@ class _SidebarHeaderState extends State<_SidebarHeader>
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.secondary.withOpacity(0.1),
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -177,7 +188,7 @@ class _SidebarHeaderState extends State<_SidebarHeader>
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.3),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -335,13 +346,13 @@ class FileListItem extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? theme.colorScheme.primary.withOpacity(0.1)
+              ? theme.colorScheme.primary.withValues(alpha: 0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
-                ? theme.colorScheme.primary.withOpacity(0.3)
-                : theme.colorScheme.outline.withOpacity(0.1),
+                ? theme.colorScheme.primary.withValues(alpha: 0.3)
+                : theme.colorScheme.outline.withValues(alpha: 0.1),
           ),
         ),
         child: ListTile(
@@ -349,7 +360,7 @@ class FileListItem extends StatelessWidget {
               Icons.insert_drive_file,
               color: isSelected
                   ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface.withOpacity(0.6),
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
             title: Row(
               children: [
@@ -371,7 +382,7 @@ class FileListItem extends StatelessWidget {
                     child: Icon(
                       Icons.star,
                       size: 16,
-                      color: theme.colorScheme.primary.withOpacity(0.8),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.8),
                     ),
                   ),
               ],
@@ -381,7 +392,7 @@ class FileListItem extends StatelessWidget {
                 : PopupMenuButton<String>(
               icon: Icon(
                 Icons.more_vert,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
               onSelected: (value) {
                 if (value == 'rename') {
@@ -474,13 +485,13 @@ class CreateFileButton extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            theme.colorScheme.primary.withOpacity(0.1),
-            theme.colorScheme.primary.withOpacity(0.05),
+            theme.colorScheme.primary.withValues(alpha: 0.1),
+            theme.colorScheme.primary.withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.primary.withOpacity(0.2),
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
         ),
       ),
       child: ListTile(
@@ -513,10 +524,10 @@ class BottomActions extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.1),
+            color: theme.colorScheme.shadow.withValues(alpha: 0.1),
             blurRadius: 24,
             offset: const Offset(4, 0),
           ),
