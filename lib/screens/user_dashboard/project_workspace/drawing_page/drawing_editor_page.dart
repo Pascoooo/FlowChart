@@ -70,50 +70,67 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Editor di Disegno"),
-        automaticallyImplyLeading: false,
+    // Forza tema chiaro solo per questa pagina
+    final lightTheme = Theme.of(context).copyWith(
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: Colors.grey[100],
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 1,
       ),
-      body: Column(
-        children: [
-          DrawingToolbar(
-            drawingMode: _drawingMode,
-            strokeWidth: _strokeWidth,
-            eraserWidth: _eraserWidth,
-            strokeColor: _strokeColor,
-            availableColors: _availableColors,
-            onToggleDrawingMode: () => _setDrawingMode(true),
-            onToggleEraserMode: () => _setDrawingMode(false),
-            onStrokeWidthChanged: (value) => setState(() => _strokeWidth = value),
-            onEraserWidthChanged: (value) => setState(() => _eraserWidth = value),
-            onColorSelected: (color) => setState(() => _strokeColor = color),
-            onClearAll: _clearAllStrokes,
+    );
+
+    return Theme(
+      data: lightTheme,
+      child: MediaQuery(
+        data: MediaQuery.of(context).copyWith(platformBrightness: Brightness.light),
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text("Editor di Disegno"),
+            automaticallyImplyLeading: false,
           ),
-          Expanded(
-            child: DrawingCanvas(
-              canvasKey: _canvasKey,
-              strokes: _strokes,
-              isDrawingMode: _drawingMode,
-              strokeWidth: _strokeWidth,
-              eraserWidth: _eraserWidth,
-              strokeColor: _strokeColor,
-              onPanStart: (details) => _addStroke(Stroke(
-                points: [details],
-                color: _drawingMode ? _strokeColor : Colors.transparent,
-                width: _drawingMode ? _strokeWidth : _eraserWidth,
-                isEraser: !_drawingMode,
-              )),
-              onPanUpdate: (details) {
-                if (_currentStroke != null) {
-                  _currentStroke!.points.add(details);
-                  _addPointsToStroke(_currentStroke!.points);
-                }
-              },
-              onPanEnd: _endStroke,
-            ),
+          body: Column(
+            children: [
+              DrawingToolbar(
+                drawingMode: _drawingMode,
+                strokeWidth: _strokeWidth,
+                eraserWidth: _eraserWidth,
+                strokeColor: _strokeColor,
+                availableColors: _availableColors,
+                onToggleDrawingMode: () => _setDrawingMode(true),
+                onToggleEraserMode: () => _setDrawingMode(false),
+                onStrokeWidthChanged: (value) => setState(() => _strokeWidth = value),
+                onEraserWidthChanged: (value) => setState(() => _eraserWidth = value),
+                onColorSelected: (color) => setState(() => _strokeColor = color),
+                onClearAll: _clearAllStrokes,
+              ),
+              Expanded(
+                child: DrawingCanvas(
+                  canvasKey: _canvasKey,
+                  strokes: _strokes,
+                  isDrawingMode: _drawingMode,
+                  strokeWidth: _strokeWidth,
+                  eraserWidth: _eraserWidth,
+                  strokeColor: _strokeColor,
+                  onPanStart: (details) => _addStroke(Stroke(
+                    points: [details],
+                    color: _drawingMode ? _strokeColor : Colors.transparent,
+                    width: _drawingMode ? _strokeWidth : _eraserWidth,
+                    isEraser: !_drawingMode,
+                  )),
+                  onPanUpdate: (details) {
+                    if (_currentStroke != null) {
+                      _currentStroke!.points.add(details);
+                      _addPointsToStroke(_currentStroke!.points);
+                    }
+                  },
+                  onPanEnd: _endStroke,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -158,7 +175,7 @@ class DrawingToolbar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black12.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -260,7 +277,7 @@ class _ToolButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isActive ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent,
+            color: isActive ? Theme.of(context).primaryColor.withValues(alpha: 0.1) : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
