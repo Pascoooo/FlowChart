@@ -23,4 +23,13 @@ abstract class UserRepository {
 
   // Update Photo
   Future<String> updateUserPhoto(Uint8List photoFileBytes);
+
+  // richiede il permesso per google drive
+  Future<bool> requestGoogleDrivePermission();
+
+  // revoca il permesso per google drive
+  Future<void> revokeGoogleDrivePermission();
+
+  // se l'utente ha dato il permesso per google drive, salva il file su drive
+  Future<void> uploadFileToDrive(String fileName, Uint8List fileBytes);
 }

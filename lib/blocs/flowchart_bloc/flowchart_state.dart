@@ -2,7 +2,6 @@
 import 'package:equatable/equatable.dart';
 import 'dart:convert';
 
-// --- IMPROVEMENT 1: Made FlowchartShape Equatable ---
 class FlowchartShape extends Equatable {
   final String id;
   final String type;
@@ -32,7 +31,6 @@ class FlowchartShape extends Equatable {
     );
   }
 
-  // --- IMPROVEMENT 2: Added JSON serialization ---
   factory FlowchartShape.fromJson(Map<String, dynamic> json) {
     return FlowchartShape(
       id: json['id'],
@@ -75,7 +73,36 @@ class FlowchartLoaded extends FlowchartState {
     this.selectedShapeId,
   });
 
-  // --- IMPROVEMENT 2: Added JSON serialization helpers ---
+  // CORREZIONE: Uso di parametri con nome opzionali per gestire null espliciti
+  FlowchartLoaded copyWith({
+    List<FlowchartShape>? shapes,
+    String? selectedShapeId,
+    bool clearSelection = false,
+  }) {
+    return FlowchartLoaded(
+      shapes: shapes ?? this.shapes,
+      selectedShapeId: clearSelection ? null : (selectedShapeId ?? this.selectedShapeId),
+    );
+  }
+
+  // Metodi helper per semplificare l'uso
+  FlowchartLoaded withShapes(List<FlowchartShape> shapes) =>
+      copyWith(shapes: shapes);
+
+  FlowchartLoaded withSelection(String? shapeId) =>
+      copyWith(selectedShapeId: shapeId);
+
+  FlowchartLoaded clearSelection() =>
+      copyWith(clearSelection: true);
+
+  // AGGIUNTO: Metodo specifico per deselezionare
+  FlowchartLoaded deselect() {
+    return FlowchartLoaded(
+      shapes: shapes,
+      selectedShapeId: null,
+    );
+  }
+
   String toJson() {
     final List<Map<String, dynamic>> shapesJson =
     shapes.map((shape) => shape.toJson()).toList();
@@ -83,18 +110,39 @@ class FlowchartLoaded extends FlowchartState {
   }
 
   factory FlowchartLoaded.fromJson(String jsonString) {
+    List<FlowchartShape> parsed = const [];
     if (jsonString.isEmpty) {
-      return const FlowchartLoaded(shapes: []);
+      final start = _defaultStartShape();
+      return FlowchartLoaded(shapes: [start], selectedShapeId: start.id);
     }
     try {
       final List<dynamic> shapesJson = jsonDecode(jsonString);
-      final List<FlowchartShape> shapes =
-      shapesJson.map((json) => FlowchartShape.fromJson(json)).toList();
-      return FlowchartLoaded(shapes: shapes);
+      parsed = shapesJson.map((json) => FlowchartShape.fromJson(json)).toList();
     } catch (e) {
-      // If parsing fails, return an empty state
-      return const FlowchartLoaded(shapes: []);
+      final start = _defaultStartShape();
+      return FlowchartLoaded(shapes: [start], selectedShapeId: start.id);
     }
+
+    if (parsed.isEmpty) {
+      final start = _defaultStartShape();
+      return FlowchartLoaded(shapes: [start], selectedShapeId: start.id);
+    }
+    return FlowchartLoaded(shapes: parsed);
+  }
+
+  static FlowchartShape _defaultStartShape() {
+    final id = 'start_${DateTime.now().microsecondsSinceEpoch}';
+    return FlowchartShape(
+      id: id,
+      type: 'circle',
+      x: 120,
+      y: 120,
+      properties: const {
+        'width': 90.0,
+        'height': 90.0,
+        'text': 'Start',
+      },
+    );
   }
 
   @override

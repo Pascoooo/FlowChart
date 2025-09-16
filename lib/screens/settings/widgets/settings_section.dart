@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 class SettingsSection extends StatelessWidget {
   final String title;
+  final Widget? status;
   final List<Widget> children;
 
   const SettingsSection({
     super.key,
     required this.title,
+    this.status,
     required this.children,
   });
 
@@ -20,13 +22,20 @@ class SettingsSection extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Text(
-            title.toUpperCase(),
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: cs.primary,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                title.toUpperCase(),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: cs.primary,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(width: 12), // Spazio tra titolo ed etichetta
+              if (status != null) status!,
+            ],
           ),
         ),
         Container(

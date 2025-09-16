@@ -39,12 +39,10 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                ),
+                border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.shadow.withValues(alpha: 0.1),
+                    color: theme.colorScheme.shadow.withOpacity(0.1),
                     blurRadius: 24,
                     offset: const Offset(4, 0),
                   ),
@@ -54,19 +52,21 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
                 children: [
                   const _SidebarHeader(),
                   _buildDivider(theme),
-                  // MODIFICA: Passiamo il projectId in modo sicuro al widget figlio.
+                  // La lista dei file si espande per riempire lo spazio
                   Expanded(
                     child: _FileSystemView(
                       projectId: widget.selectedProject.projectId,
                     ),
                   ),
-                  CreateFileButton(
-                      projectId: widget.selectedProject.projectId),
+                  // MODIFICA: Il pulsante "Nuovo File" è ora qui,
+                  // sempre in fondo alla sezione dei file.
+                  CreateFileButton(projectId: widget.selectedProject.projectId),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
+          // Le azioni in basso rimangono separate
           const BottomActions(),
         ],
       ),
@@ -81,7 +81,7 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
         gradient: LinearGradient(
           colors: [
             Colors.transparent,
-            theme.colorScheme.outline.withValues(alpha: 0.1),
+            theme.colorScheme.outline.withOpacity(0.1),
             Colors.transparent,
           ],
         ),
@@ -155,7 +155,7 @@ class _SidebarHeaderState extends State<_SidebarHeader>
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.secondary.withValues(alpha: 0.1),
+                  color: theme.colorScheme.secondary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -188,7 +188,7 @@ class _SidebarHeaderState extends State<_SidebarHeader>
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                    color: theme.colorScheme.primary.withOpacity(0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -223,9 +223,7 @@ class _SidebarHeaderState extends State<_SidebarHeader>
   }
 }
 
-/// Vista del file system che mostra i file.
 class _FileSystemView extends StatelessWidget {
-  // MODIFICA: Riceve il projectId
   final String projectId;
   const _FileSystemView({required this.projectId});
 
@@ -245,18 +243,26 @@ class _FileSystemView extends StatelessWidget {
                 child: Text("Nessun file presente.\nCreane uno per iniziare!",
                     textAlign: TextAlign.center));
           }
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: state.files.length,
-            itemBuilder: (context, index) {
-              final file = state.files[index];
-              return FileListItem(
-                file: file,
-                isSelected: file.fileId == state.activeFileId,
-                // MODIFICA: Passa il projectId al widget figlio.
-                projectId: projectId,
-              );
-            },
+          final orderedFiles = List<MyFile>.from(state.files);
+          orderedFiles.sort((a, b) {
+            if (a.name == 'main') return -1;
+            if (b.name == 'main') return 1;
+            return a.name.compareTo(b.name);
+          });
+
+          return Scrollbar(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: orderedFiles.length,
+              itemBuilder: (context, index) {
+                final file = orderedFiles[index];
+                return FileListItem(
+                  file: file,
+                  isSelected: file.fileId == state.activeFileId,
+                  projectId: projectId,
+                );
+              },
+            ),
           );
         }
         return const SizedBox.shrink();
@@ -304,11 +310,9 @@ class FileListItem extends StatelessWidget {
         });
 
     if (newName == null) return;
-
     final value = newName.trim();
     if (value.isEmpty) return;
 
-    // MODIFICA: Usa il projectId ricevuto in modo sicuro.
     context.read<FileSystemBloc>().add(
       RenameFile(
         fileId: file.fileId,
@@ -346,13 +350,13 @@ class FileListItem extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? theme.colorScheme.primary.withValues(alpha: 0.1)
+              ? theme.colorScheme.primary.withOpacity(0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
-                ? theme.colorScheme.primary.withValues(alpha: 0.3)
-                : theme.colorScheme.outline.withValues(alpha: 0.1),
+                ? theme.colorScheme.primary.withOpacity(0.3)
+                : theme.colorScheme.outline.withOpacity(0.1),
           ),
         ),
         child: ListTile(
@@ -360,7 +364,7 @@ class FileListItem extends StatelessWidget {
               Icons.insert_drive_file,
               color: isSelected
                   ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  : theme.colorScheme.onSurface.withOpacity(0.6),
             ),
             title: Row(
               children: [
@@ -382,7 +386,7 @@ class FileListItem extends StatelessWidget {
                     child: Icon(
                       Icons.star,
                       size: 16,
-                      color: theme.colorScheme.primary.withValues(alpha: 0.8),
+                      color: theme.colorScheme.primary.withOpacity(0.8),
                     ),
                   ),
               ],
@@ -392,7 +396,7 @@ class FileListItem extends StatelessWidget {
                 : PopupMenuButton<String>(
               icon: Icon(
                 Icons.more_vert,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
               ),
               onSelected: (value) {
                 if (value == 'rename') {
@@ -468,7 +472,6 @@ class CreateFileButton extends StatelessWidget {
         });
 
     if (newName == null) return;
-
     final value = newName.trim();
     if (value.isEmpty) return;
 
@@ -485,13 +488,13 @@ class CreateFileButton extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            theme.colorScheme.primary.withValues(alpha: 0.1),
-            theme.colorScheme.primary.withValues(alpha: 0.05),
+            theme.colorScheme.primary.withOpacity(0.1),
+            theme.colorScheme.primary.withOpacity(0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+          color: theme.colorScheme.primary.withOpacity(0.2),
         ),
       ),
       child: ListTile(
@@ -524,10 +527,10 @@ class BottomActions extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.1),
+            color: theme.colorScheme.shadow.withOpacity(0.1),
             blurRadius: 24,
             offset: const Offset(4, 0),
           ),

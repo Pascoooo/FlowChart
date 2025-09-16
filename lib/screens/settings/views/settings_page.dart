@@ -1,5 +1,3 @@
-// settings_page.dart
-
 import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -80,12 +78,10 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerLowest,
                     borderRadius: BorderRadius.circular(28),
-                    // Correzione: usa .withValues(alpha: ...) per Material 3
-                    border: Border.all(color: cs.outline.withValues(alpha: 0.1)),
+                    border: Border.all(color: cs.outline.withOpacity(0.1)),
                     boxShadow: [
                       BoxShadow(
-                        // Correzione: usa .withValues(alpha: ...)
-                        color: cs.shadow.withValues(alpha: isDark ? 0.15 : 0.08),
+                        color: cs.shadow.withOpacity(isDark ? 0.15 : 0.08),
                         blurRadius: 30,
                         offset: const Offset(0, 10),
                       ),
@@ -126,16 +122,14 @@ class Header extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              // Correzione: usa .withValues(alpha: ...)
-              colors: [cs.primary, cs.primary.withValues(alpha: 0.7)],
+              colors: [cs.primary, cs.primary.withOpacity(0.7)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                // Correzione: usa .withValues(alpha: ...)
-                color: cs.primary.withValues(alpha: 0.3),
+                color: cs.primary.withOpacity(0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               )
@@ -207,41 +201,31 @@ class _ProfileSettingsState extends State<ProfileSettings> {
 
   Future<void> _pickAndUpdatePhoto() async {
     try {
-      Uint8List? bytes;
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp'],
+        type: FileType.image,
         allowMultiple: false,
         withData: true,
-        dialogTitle: 'Seleziona un\'immagine',
       );
-      if (result == null) {
-        BannerService.showInfo(context, 'Selezione annullata');
+      if (result == null || result.files.single.bytes == null) {
+        if (mounted) BannerService.showInfo(context, 'Selezione annullata');
         return;
       }
-      final file = result.files.single;
-      if (file.bytes == null || file.bytes!.isEmpty) {
-        BannerService.showError(context, 'File non valido.');
-        return;
-      }
-      bytes = file.bytes!;
+      final bytes = result.files.single.bytes!;
+      var processed = bytes;
+      try {
+        final image = img.decodeImage(processed);
+        if (image != null) {
+          final resizedImage = img.copyResize(image, width: 1024);
+          processed = Uint8List.fromList(img.encodeJpg(resizedImage, quality: 85));
+        }
+      } catch (_) {}
       if (mounted) {
-        var processed = bytes;
-        try {
-          final image = img.decodeImage(processed);
-          if (image != null) {
-            final resizedImage = img.copyResize(image, width: 1024);
-            processed = Uint8List.fromList(img.encodeJpg(resizedImage, quality: 85));
-          }
-        } catch (_) {/* fallback: usa bytes originali */}
-        // --- END RESIZE LOGIC ---
-        if (!mounted) return;
         context
             .read<AuthenticationBloc>()
             .add(AuthenticationPhotoUpdateRequested(processed));
       }
     } catch (e) {
-      BannerService.showError(context, 'Selezione immagine non riuscita.');
+      if(mounted) BannerService.showError(context, 'Selezione immagine non riuscita.');
     }
   }
 
@@ -354,9 +338,26 @@ class _ProfileSettingsState extends State<ProfileSettings> {
   }
 }
 
-// Il widget SystemSettings è già corretto e ben implementato
 class SystemSettings extends StatelessWidget {
   const SystemSettings({super.key});
+
+  void _connectToGoogleDrive(BuildContext context) {
+    context.read<AuthenticationBloc>().add(const AuthenticationDrivePermissionRequested());
+  }
+
+  void _disconnectFromGoogleDrive(BuildContext context) async {
+    final bool? confirmed = await DialogService.showConfirmationDialog(
+      context,
+      title: 'Disconnetti Google Drive',
+      message: 'Sei sicuro di voler revocare i permessi per Google Drive? Non potrai più salvare o accedere ai tuoi file.',
+      confirmText: 'Disconnetti',
+      cancelText: 'Annulla',
+    );
+
+    if (confirmed == true && context.mounted) {
+      context.read<AuthenticationBloc>().add(const AuthenticationDrivePermissionRevoked());
+    }
+  }
 
   void _confirmLogout(BuildContext context) async {
     final bool? confirmed = await DialogService.showConfirmationDialog(
@@ -427,42 +428,149 @@ class SystemSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return SettingsSection(
-      title: 'Sistema e Account',
-      children: [
-        SettingsTile(
-          title: 'Informazioni app',
-          subtitle: 'Versione, build e licenze',
-          icon: Icons.info_outline_rounded,
-          onTap: () => _showAppInfoDialog(context),
+
+    return BlocConsumer<AuthenticationBloc, AuthenticationState>(
+      listener: (context, state) {
+        if (state.errorMessage != null) {
+          BannerService.showError(context, state.errorMessage!);
+          context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
+        }
+      },
+      builder: (context, state) {
+        final bool isDriveConnected = state.user.driveConnected;
+
+        // Controlla se una qualsiasi operazione del BLoC è in corso
+        final isOperationLoading = state.isLoading;
+
+        return Column(
+          children: [
+            SettingsSection(
+              title: 'Integrazioni',
+              status: _StatusLabel(isConnected: isDriveConnected),
+              children: [
+                if (isOperationLoading)
+                  const Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else
+                  SettingsTile(
+                    title: 'Google Drive',
+                    subtitle: isDriveConnected
+                        ? 'Account collegato con successo'
+                        : 'Collega il tuo account per salvare i file',
+                    icon: FontAwesomeIcons.googleDrive,
+                    trailing: _ConnectionButton(
+                      isConnected: isDriveConnected,
+                      onConnect: () => _connectToGoogleDrive(context),
+                      onDisconnect: () => _disconnectFromGoogleDrive(context),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            SettingsSection(
+              title: 'Sistema',
+              children: [
+                SettingsTile(
+                  title: 'Informazioni app',
+                  subtitle: 'Versione, build e licenze',
+                  icon: Icons.info_outline_rounded,
+                  onTap: () => _showAppInfoDialog(context),
+                ),
+                SettingsTile(
+                  title: 'Ripristina impostazioni',
+                  subtitle: 'Reimposta tutte le preferenze',
+                  icon: Icons.restart_alt_rounded,
+                  onTap: () => _confirmResetSettings(context),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Divider(indent: 16, endIndent: 16),
+                ),
+                SettingsTile(
+                  title: 'Logout',
+                  subtitle: 'Esci dal tuo account Unichart',
+                  icon: FontAwesomeIcons.rightFromBracket,
+                  iconColor: cs.error,
+                  titleColor: cs.error,
+                  onTap: () => _confirmLogout(context),
+                ),
+                SettingsTile(
+                  title: 'Elimina account',
+                  subtitle: 'Rimuovi definitivamente il tuo account',
+                  icon: FontAwesomeIcons.userXmark,
+                  iconColor: cs.error,
+                  titleColor: cs.error,
+                  onTap: () => _confirmAccountDeletion(context),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+class _StatusLabel extends StatelessWidget {
+  final bool isConnected;
+  const _StatusLabel({required this.isConnected});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = isConnected ? Colors.green.shade600 : theme.colorScheme.error;
+    final text = isConnected ? 'CONNESSO' : 'NON CONNESSO';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w900, // Testo più bold
+          letterSpacing: 0.8,
         ),
-        SettingsTile(
-          title: 'Ripristina impostazioni',
-          subtitle: 'Reimposta tutte le preferenze',
-          icon: Icons.restart_alt_rounded,
-          onTap: () => _confirmResetSettings(context),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8.0),
-          child: Divider(indent: 16, endIndent: 16),
-        ),
-        SettingsTile(
-          title: 'Logout',
-          subtitle: 'Esci dal tuo account Unichart',
-          icon: FontAwesomeIcons.rightFromBracket,
-          iconColor: cs.error,
-          titleColor: cs.error,
-          onTap: () => _confirmLogout(context),
-        ),
-        SettingsTile(
-          title: 'Elimina account',
-          subtitle: 'Rimuovi definitivamente il tuo account',
-          icon: FontAwesomeIcons.userXmark,
-          iconColor: cs.error,
-          titleColor: cs.error,
-          onTap: () => _confirmAccountDeletion(context),
-        ),
-      ],
+      ),
+    );
+  }
+}
+
+// WIDGET PER IL PULSANTE (MODIFICATO)
+class _ConnectionButton extends StatelessWidget {
+  final bool isConnected;
+  final VoidCallback onConnect;
+  final VoidCallback onDisconnect;
+
+  const _ConnectionButton({
+    required this.isConnected,
+    required this.onConnect,
+    required this.onDisconnect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = isConnected ? theme.colorScheme.error : Colors.green.shade600;
+    final text = isConnected ? 'DISCONNETTI' : 'CONNETTI';
+    final action = isConnected ? onDisconnect : onConnect;
+
+    return OutlinedButton(
+      onPressed: action,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color,
+        side: BorderSide(color: color.withOpacity(0.5), width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13), // Testo più bold
+      ),
     );
   }
 }

@@ -5,50 +5,57 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:universal_html/html.dart' as html;
 
-/// Servizio per esportare un widget come immagine PNG.
+/// Servizio con funzioni di utilità per l'esportazione.
 class ExportService {
-  static Future<void> exportWidgetToPng({
+
+  /// **Metodo di Preparazione Universale**
+  /// Genera i byte di un'immagine PNG da un widget identificato da una GlobalKey.
+  /// Restituisce Uint8List in caso di successo, altrimenti null.
+  static Future<Uint8List?> generatePngBytes({required GlobalKey key}) async {
+    try {
+      final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        throw Exception('Render boundary non trovato.');
+      }
+      // Aumenta il pixelRatio per una migliore qualità dell'immagine
+      final image = await boundary.toImage(pixelRatio: 1.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } catch (e) {
+      print("Errore durante la generazione dei byte PNG: $e");
+      return null;
+    }
+  }
+
+  /// **Metodo di Download Locale Completo**
+  /// Avvia il download di un file tramite il browser e mostra i dialoghi di feedback.
+  static Future<void> downloadFileWithDialog({
     required BuildContext context,
-    required GlobalKey key,
+    required Uint8List bytes,
     required String fileName,
   }) async {
     try {
-      final boundary =
-          key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-
-      if (boundary == null) {
-        throw Exception('Impossibile trovare il widget da esportare.');
-      }
-      final image = await boundary.toImage(pixelRatio: 1.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final pngBytes = byteData!.buffer.asUint8List();
-
-      _downloadFile(pngBytes, '$fileName.png');
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', '$fileName.png')
+        ..click();
+      html.Url.revokeObjectUrl(url);
 
       if (!context.mounted) return;
-      DialogService.showInfoDialog(context,
+      await DialogService.showInfoDialog(context,
           title: 'Esportazione completata',
-          message: 'Il file è stato esportato con successo.',
+          message: 'Il file è stato scaricato con successo.',
           closeText: 'OK',
           icon: Icons.check_circle_outline);
     } catch (e) {
       if (context.mounted) {
-        DialogService.showInfoDialog(context,
+        await DialogService.showInfoDialog(context,
             title: 'Errore di esportazione',
-            message: 'Si è verificato un errore durante l\'esportazione: $e',
+            message: 'Si è verificato un errore durante il download: $e',
             closeText: 'OK',
             icon: Icons.error_outline);
       }
     }
-  }
-
-  /// Avvia il download di un file con i byte specificati e il nome del file.
-  static void _downloadFile(Uint8List bytes, String fileName) {
-    final blob = html.Blob([bytes]);
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.AnchorElement(href: url)
-      ..setAttribute('download', fileName)
-      ..click();
-    html.Url.revokeObjectUrl(url);
   }
 }

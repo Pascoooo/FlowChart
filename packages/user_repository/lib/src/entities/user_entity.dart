@@ -7,6 +7,7 @@ class MyUserEntity {
   final String photoURL;
   final Timestamp? nameLastUpdatedAt;
   final Timestamp? photoLastUpdatedAt;
+  final bool driveConnected;
 
   const MyUserEntity({
     required this.userId,
@@ -15,9 +16,9 @@ class MyUserEntity {
     required this.photoURL,
     this.nameLastUpdatedAt,
     this.photoLastUpdatedAt,
+    this.driveConnected = false,
   });
 
-  /// Converte un documento Firestore in un oggetto MyUserEntity.
   static MyUserEntity fromDocument(Map<String, dynamic> doc) {
     return MyUserEntity(
       userId: doc['userId'] as String,
@@ -26,10 +27,10 @@ class MyUserEntity {
       photoURL: doc['photoURL'] as String,
       nameLastUpdatedAt: doc['nameLastUpdatedAt'] as Timestamp?,
       photoLastUpdatedAt: doc['photoLastUpdatedAt'] as Timestamp?,
+      driveConnected: doc['driveConnected'] as bool? ?? false,
     );
   }
 
-  /// Converte un oggetto MyUserEntity in una mappa per Firestore.
   Map<String, Object?> toDocument() {
     return {
       'userId': userId,
@@ -38,6 +39,7 @@ class MyUserEntity {
       'photoURL': photoURL,
       'nameLastUpdatedAt': nameLastUpdatedAt,
       'photoLastUpdatedAt': photoLastUpdatedAt,
+      'driveConnected': driveConnected,
     };
   }
 }

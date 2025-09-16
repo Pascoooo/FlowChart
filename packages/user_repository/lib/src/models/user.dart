@@ -9,6 +9,7 @@ class MyUser extends Equatable {
   final String photoURL;
   final Timestamp? nameLastUpdatedAt;
   final Timestamp? photoLastUpdatedAt;
+  final bool driveConnected; // NUOVO CAMPO
 
   const MyUser({
     required this.userId,
@@ -17,22 +18,19 @@ class MyUser extends Equatable {
     required this.photoURL,
     this.nameLastUpdatedAt,
     this.photoLastUpdatedAt,
+    this.driveConnected = false, // VALORE DI DEFAULT
   });
 
-  /// Utente vuoto per stati iniziali o di logout.
   static const empty = MyUser(
     userId: '',
     email: '',
     name: '',
     photoURL: '',
-    nameLastUpdatedAt: null,
-    photoLastUpdatedAt: null,
+    driveConnected: false, // AGGIUNTO QUI
   );
 
-  /// Getter per controllare se l'utente è vuoto.
   bool get isEmpty => this == MyUser.empty;
 
-  /// Crea una copia dell'utente con valori aggiornati.
   MyUser copyWith({
     String? userId,
     String? email,
@@ -40,6 +38,7 @@ class MyUser extends Equatable {
     String? photoURL,
     Timestamp? nameLastUpdatedAt,
     Timestamp? photoLastUpdatedAt,
+    bool? driveConnected, // AGGIUNTO QUI
   }) {
     return MyUser(
       userId: userId ?? this.userId,
@@ -48,10 +47,10 @@ class MyUser extends Equatable {
       photoURL: photoURL ?? this.photoURL,
       nameLastUpdatedAt: nameLastUpdatedAt ?? this.nameLastUpdatedAt,
       photoLastUpdatedAt: photoLastUpdatedAt ?? this.photoLastUpdatedAt,
+      driveConnected: driveConnected ?? this.driveConnected, // AGGIUNTO QUI
     );
   }
 
-  /// Converte il modello di dominio in un'entità dati.
   MyUserEntity toEntity() {
     return MyUserEntity(
       userId: userId,
@@ -60,10 +59,10 @@ class MyUser extends Equatable {
       photoURL: photoURL,
       nameLastUpdatedAt: nameLastUpdatedAt,
       photoLastUpdatedAt: photoLastUpdatedAt,
+      driveConnected: driveConnected, // AGGIUNTO QUI
     );
   }
 
-  /// Crea un modello di dominio da un'entità dati.
   static MyUser fromEntity(MyUserEntity entity) {
     return MyUser(
       userId: entity.userId,
@@ -72,14 +71,9 @@ class MyUser extends Equatable {
       photoURL: entity.photoURL,
       nameLastUpdatedAt: entity.nameLastUpdatedAt,
       photoLastUpdatedAt: entity.photoLastUpdatedAt,
+      driveConnected: entity.driveConnected, // AGGIUNTO QUI
     );
   }
-
-  @override
-  String toString() {
-    return 'MyUser: $userId, $name';
-  }
-
 
   @override
   List<Object?> get props => [
@@ -89,5 +83,6 @@ class MyUser extends Equatable {
     photoURL,
     nameLastUpdatedAt,
     photoLastUpdatedAt,
+    driveConnected, // AGGIUNTO QUI
   ];
 }

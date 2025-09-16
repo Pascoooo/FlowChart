@@ -1,20 +1,31 @@
 import 'package:file_repository/file_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
-import '../../../../blocs/file_bloc/file_system_bloc.dart';
-import '../../../../blocs/file_bloc/file_system_state.dart';
+import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
+import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
+import 'package:flowchart_thesis/blocs/file_bloc/file_system_bloc.dart';
+import 'package:flowchart_thesis/blocs/file_bloc/file_system_state.dart';
+import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
+import 'package:flowchart_thesis/config/services/dialog_service.dart';
+
+import '../../../../config/services/banner_service.dart';
 
 class TopBar extends StatefulWidget {
   final MyProject selectedProject;
   final VoidCallback onEdit;
   final VoidCallback onExport;
+  final bool showGrid;
+  final VoidCallback onToggleGrid;
 
   const TopBar({
     super.key,
     required this.selectedProject,
     required this.onEdit,
     required this.onExport,
+    required this.showGrid,
+    required this.onToggleGrid,
   });
 
   @override
@@ -29,13 +40,8 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _initAnimations();
-    _slideController.forward();
-  }
-
-  void _initAnimations() {
     _slideController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     );
     _slideAnimation = Tween<Offset>(
@@ -45,13 +51,11 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
       parent: _slideController,
       curve: Curves.easeOutCubic,
     ));
-    _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
+    _opacityAnimation = CurvedAnimation(
       parent: _slideController,
-      curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
-    ));
+      curve: Curves.easeIn,
+    );
+    _slideController.forward();
   }
 
   @override
@@ -62,33 +66,46 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<FileSystemBloc, FileSystemState>(
-      builder: (context, state) {
-        final Widget child;
-        if (state is FileSystemLoaded) {
-          child = _AdvancedTopBar(
-            state: state,
-            selectedProjectName: widget.selectedProject.name,
-            onEdit: widget.onEdit,
-            onExport: widget.onExport,
-          );
-        } else {
-          child = _SimpleTopBar(projectName: widget.selectedProject.name);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double minBarWidth = 450.0;
+        if (constraints.maxWidth < minBarWidth) {
+          return const SizedBox.shrink();
         }
 
-        return SlideTransition(
-          position: _slideAnimation,
-          child: FadeTransition(
-            opacity: _opacityAnimation,
-            child: child,
-          ),
+        return BlocBuilder<FileSystemBloc, FileSystemState>(
+          builder: (context, state) {
+            final Widget child;
+            if (state is FileSystemLoaded) {
+              child = _AdvancedTopBar(
+                state: state,
+                selectedProjectName: widget.selectedProject.name,
+                onEdit: widget.onEdit,
+                onExport: widget.onExport,
+                showGrid: widget.showGrid,
+                onToggleGrid: widget.onToggleGrid,
+                animation: _opacityAnimation,
+              );
+            } else {
+              child = _SimpleTopBar(projectName: widget.selectedProject.name);
+            }
+
+            return SlideTransition(
+              position: _slideAnimation,
+              child: FadeTransition(
+                opacity: _opacityAnimation,
+                child: child,
+              ),
+            );
+          },
         );
       },
     );
   }
 }
 
-/// TopBar mostrata durante il caricamento o in stati non "Loaded".
+// -----------------------------------------------------------------------------
+
 class _SimpleTopBar extends StatelessWidget {
   final String projectName;
   const _SimpleTopBar({required this.projectName});
@@ -129,7 +146,7 @@ class _SimpleTopBar extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  "Caricamento...",
+                  "Loading...",
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurface.withOpacity(0.6),
                   ),
@@ -149,58 +166,376 @@ class _SimpleTopBar extends StatelessWidget {
   }
 }
 
-/// TopBar mostrata quando il file system è caricato.
+// --- (Widget _SimpleTopBar e _AnimatedFlowchartActions come nella versione precedente corretta)
+// ... Li ometto qui per brevità, ma sono inclusi nel file completo sotto
+
 class _AdvancedTopBar extends StatelessWidget {
   final FileSystemLoaded state;
   final String selectedProjectName;
   final VoidCallback onEdit;
   final VoidCallback onExport;
+  final bool showGrid;
+  final VoidCallback onToggleGrid;
+  final Animation<double> animation;
 
   const _AdvancedTopBar({
     required this.state,
     required this.selectedProjectName,
     required this.onEdit,
     required this.onExport,
+    required this.showGrid,
+    required this.onToggleGrid,
+    required this.animation,
   });
+
+  // ... (helper methods _addShape, _resetFlowchart, _deleteSelected come prima)
+  void _addShape(BuildContext context,
+      {required String type,
+      required double w,
+      required double h,
+      String text = ''}) {
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    context.read<FlowchartBloc>().add(
+          AddShape(
+            FlowchartShape(
+              id: id,
+              type: type,
+              x: 120,
+              y: 120,
+              properties: {'width': w, 'height': h, 'text': text},
+            ),
+          ),
+        );
+  }
+
+  Future<void> _resetFlowchart(BuildContext context) async {
+    final bool? confirmed = await DialogService.showConfirmationDialog(
+      context,
+      title: 'Conferma reset',
+      message:
+          'Sei sicuro di voler resettare il flowchart? Tutte le forme tranne "Start" verranno eliminate.',
+      confirmText: 'Resetta',
+      cancelText: 'Annulla',
+    );
+    if (confirmed == true && context.mounted) {
+      context.read<FlowchartBloc>().add(const ResetFlowchart());
+    }
+  }
+
+  Future<void> _deleteSelected(BuildContext context, String shapeId) async {
+    // Aggiungiamo un controllo per sicurezza, anche se la UI dovrebbe già bloccarlo
+    if (shapeId.startsWith('start_')) {
+      BannerService.showInfo(
+          context, 'La forma "Start" non può essere eliminata.');
+      return;
+    }
+
+    bool? confirmed = await DialogService.showConfirmationDialog(
+      context,
+      title: 'Conferma eliminazione',
+      message: 'Sei sicuro di voler eliminare la forma selezionata?',
+      confirmText: 'Elimina',
+      cancelText: 'Annulla',
+    );
+    if (confirmed == true && context.mounted) {
+      context.read<FlowchartBloc>().add(RemoveShape(shapeId));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      height: 80,
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+    final hasSelectedFile = state.activeFileId != null;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double minWidthForCenterActions = 750.0;
+        final bool showCenterActions =
+            hasSelectedFile && constraints.maxWidth >= minWidthForCenterActions;
+
+        return Container(
+          height: 80,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            border:
+                Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.shadow.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _Breadcrumb(
-              state: state,
-              selectedProjectName: selectedProjectName,
-            ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: _Breadcrumb(
+                      state: state,
+                      selectedProjectName: selectedProjectName,
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const UndoRedoControls(),
+                      IconButton(
+                          icon: const Icon(Icons.edit, size: 20),
+                          onPressed: onEdit),
+                      const SizedBox(width: 8),
+                      IconButton(
+                          icon: const Icon(Icons.download, size: 20),
+                          onPressed: onExport),
+                    ],
+                  ),
+                ],
+              ),
+              if (showCenterActions)
+                BlocBuilder<FlowchartBloc, FlowchartState>(
+                  builder: (context, flowchartState) {
+                    final String? selectedShapeId =
+                        flowchartState is FlowchartLoaded
+                            ? flowchartState.selectedShapeId
+                            : null;
+
+                    // NUOVO CONTROLLO: La forma "Start" non può essere eliminata
+                    final bool isStartShapeSelected =
+                        selectedShapeId?.startsWith('start_') ?? false;
+
+                    return _AnimatedFlowchartActions(
+                      animation: animation,
+                      showGrid: showGrid,
+                      onToggleGrid: onToggleGrid,
+                      onAddShape: _addShape,
+                      onReset: _resetFlowchart,
+                      selectedShapeId: selectedShapeId,
+                      // Passiamo l'informazione per disabilitare il pulsante
+                      isDeletionEnabled:
+                          selectedShapeId != null && !isStartShapeSelected,
+                      onDeleteSelected: _deleteSelected,
+                    );
+                  },
+                ),
+            ],
           ),
-          _ActionButtons(
-            hasSelectedFile: state.activeFileId != null,
-            onEdit: onEdit,
-            onExport: onExport,
+        );
+      },
+    );
+  }
+}
+
+// --- (Widget _Breadcrumb come prima, nessun errore)
+
+// --- FIX: Riattivato e migliorato UndoRedoControls ---
+class UndoRedoControls extends StatelessWidget {
+  const UndoRedoControls({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Usiamo watch per far sì che i pulsanti si ricostruiscano quando canUndo/canRedo cambiano.
+    final bloc = context.watch<FlowchartBloc>();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _UndoRedoButton(
+          icon: Icons.undo_rounded,
+          tooltip:
+              bloc.canUndo ? 'Annulla: ${bloc.nextUndoDescription}' : 'Annulla',
+          enabled: bloc.canUndo,
+          onPressed: bloc.canUndo ? () => bloc.add(const UndoCommand()) : null,
+        ),
+        const SizedBox(width: 4),
+        _UndoRedoButton(
+          icon: Icons.redo_rounded,
+          tooltip:
+              bloc.canRedo ? 'Ripeti: ${bloc.nextRedoDescription}' : 'Ripeti',
+          enabled: bloc.canRedo,
+          onPressed: bloc.canRedo ? () => bloc.add(const RedoCommand()) : null,
+        ),
+      ],
+    );
+  }
+}
+
+// --- (Widget _UndoRedoButton come prima, nessun errore)
+
+// --- FIX: Riattivato KeyboardShortcuts ---
+class KeyboardShortcuts extends StatelessWidget {
+  final Widget child;
+
+  const KeyboardShortcuts({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ):
+            const UndoIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY):
+            const RedoIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift,
+            LogicalKeyboardKey.keyZ): const RedoIntent(),
+      },
+      child: Actions(
+        actions: {
+          UndoIntent: CallbackAction<UndoIntent>(
+            onInvoke: (UndoIntent intent) {
+              final bloc = context.read<FlowchartBloc>();
+              if (bloc.canUndo) {
+                bloc.add(const UndoCommand());
+              }
+              return null;
+            },
           ),
-        ],
+          RedoIntent: CallbackAction<RedoIntent>(
+            onInvoke: (RedoIntent intent) {
+              final bloc = context.read<FlowchartBloc>();
+              if (bloc.canRedo) {
+                bloc.add(const RedoCommand());
+              }
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: child,
+        ),
       ),
     );
   }
 }
 
-/// Widget per la visualizzazione del breadcrumb.
+class UndoIntent extends Intent {
+  const UndoIntent();
+}
+
+class RedoIntent extends Intent {
+  const RedoIntent();
+}
+
+// Ho rimesso anche gli altri widget che avevo omesso prima per completezza
+
+class _AnimatedFlowchartActions extends StatelessWidget {
+  final bool isDeletionEnabled;
+  final Animation<double> animation;
+  final bool showGrid;
+  final VoidCallback onToggleGrid;
+  final void Function(BuildContext,
+      {required String type,
+      required double w,
+      required double h,
+      String text}) onAddShape;
+  final void Function(BuildContext) onReset;
+  final String? selectedShapeId;
+  final void Function(BuildContext, String shapeId) onDeleteSelected;
+
+  const _AnimatedFlowchartActions({
+    required this.isDeletionEnabled,
+    required this.animation,
+    required this.showGrid,
+    required this.onToggleGrid,
+    required this.onAddShape,
+    required this.onReset,
+    this.selectedShapeId,
+    required this.onDeleteSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final buttons = <Widget>[
+      _buildAnimatedButton(
+        context: context,
+        tooltip: showGrid ? 'Nascondi griglia' : 'Mostra griglia',
+        icon: showGrid ? Icons.grid_off_rounded : Icons.grid_on_rounded,
+        onPressed: onToggleGrid,
+        interval: const Interval(0.2, 0.6),
+      ),
+      _buildAnimatedButton(
+        context: context,
+        tooltip: 'Nuovo rettangolo',
+        icon: Icons.crop_square_rounded,
+        onPressed: () => onAddShape(context,
+            type: 'rectangle', w: 140, h: 80, text: 'Rettangolo'),
+        interval: const Interval(0.3, 0.7),
+      ),
+      _buildAnimatedButton(
+        context: context,
+        tooltip: 'Nuovo diamante',
+        icon: Icons.diamond_outlined,
+        onPressed: () => onAddShape(context,
+            type: 'diamond', w: 120, h: 120, text: 'Decisione'),
+        interval: const Interval(0.4, 0.8),
+      ),
+      _buildAnimatedButton(
+        context: context,
+        tooltip: 'Nuovo cerchio',
+        icon: Icons.circle_outlined,
+        onPressed: () =>
+            onAddShape(context, type: 'circle', w: 90, h: 90, text: 'End'),
+        interval: const Interval(0.5, 0.9),
+      ),
+      _buildAnimatedButton(
+        context: context,
+        tooltip: 'Elimina forma selezionata',
+        icon: Icons.delete_rounded,
+        onPressed: isDeletionEnabled
+            ? () => onDeleteSelected(context, selectedShapeId!)
+            : null,
+        interval: const Interval(0.6, 1.0),
+      ),
+      _buildAnimatedButton(
+        context: context,
+        tooltip: 'Reset flowchart',
+        icon: Icons.delete_sweep_rounded,
+        onPressed: () => onReset(context),
+        interval: const Interval(0.7, 1.0),
+      ),
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(buttons.length, (index) {
+        if (index == 0) return buttons[index];
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [const SizedBox(width: 8), buttons[index]],
+        );
+      }),
+    );
+  }
+
+  Widget _buildAnimatedButton({
+    required BuildContext context,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required Interval interval,
+  }) {
+    final tween = Tween<double>(begin: 0.0, end: 1.0);
+    final curvedAnimation = CurvedAnimation(parent: animation, curve: interval);
+
+    return FadeTransition(
+      opacity: tween.animate(curvedAnimation),
+      child: ScaleTransition(
+        scale: tween.animate(curvedAnimation),
+        child: IconButton(
+          tooltip: tooltip,
+          icon: Icon(icon, size: 20),
+          onPressed: onPressed,
+        ),
+      ),
+    );
+  }
+}
+
 class _Breadcrumb extends StatelessWidget {
   final FileSystemLoaded state;
   final String selectedProjectName;
@@ -215,14 +550,13 @@ class _Breadcrumb extends StatelessWidget {
 
     if (hasSelectedFile && state.files.isNotEmpty) {
       final matchingFile = state.files.firstWhere(
-        (file) => file.fileId == state.activeFileId,
-        orElse: () => const MyFile(fileId: '', name: 'Unknown', content: '')
-      );
+          (file) => file.fileId == state.activeFileId,
+          orElse: () => const MyFile(fileId: '', name: 'Unknown', content: ''));
       currentFileName = matchingFile.name;
-        }
+    }
 
     final textStyle =
-    theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500);
+        theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500);
     final separator = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Icon(
@@ -237,10 +571,6 @@ class _Breadcrumb extends StatelessWidget {
         Icon(Icons.auto_awesome,
             size: 16, color: theme.colorScheme.primary.withOpacity(0.7)),
         const SizedBox(width: 8),
-        Text("Unichart",
-            style: textStyle?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6))),
-        separator,
         Flexible(
           child: Text(
             selectedProjectName,
@@ -252,19 +582,21 @@ class _Breadcrumb extends StatelessWidget {
         ),
         if (hasSelectedFile) ...[
           separator,
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.secondary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              currentFileName,
-              style: textStyle?.copyWith(
-                  color: theme.colorScheme.secondary,
-                  fontWeight: FontWeight.w600),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                currentFileName,
+                style: textStyle?.copyWith(
+                    color: theme.colorScheme.secondary,
+                    fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ],
@@ -273,8 +605,7 @@ class _Breadcrumb extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color:
-              theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
@@ -290,33 +621,36 @@ class _Breadcrumb extends StatelessWidget {
   }
 }
 
-/// Widget per i pulsanti di azione della TopBar.
-class _ActionButtons extends StatelessWidget {
-  final bool hasSelectedFile;
-  final VoidCallback onEdit;
-  final VoidCallback onExport;
+class _UndoRedoButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final bool enabled;
+  final VoidCallback? onPressed;
 
-  const _ActionButtons({
-    required this.hasSelectedFile,
-    required this.onEdit,
-    required this.onExport,
+  const _UndoRedoButton({
+    required this.icon,
+    required this.tooltip,
+    required this.enabled,
+    this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (!hasSelectedFile) {
-      return const SizedBox.shrink();
-    }
+    final theme = Theme.of(context);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-            icon: const Icon(Icons.edit, size: 20), onPressed: onEdit),
-        const SizedBox(width: 8),
-        IconButton(
-            icon: const Icon(Icons.download, size: 20), onPressed: onExport),
-      ],
+    return Tooltip(
+      message: tooltip,
+      child: AnimatedOpacity(
+        opacity: enabled ? 1.0 : 0.4,
+        duration: const Duration(milliseconds: 200),
+        child: IconButton(
+          icon: Icon(icon, size: 20),
+          onPressed: onPressed,
+          color: enabled
+              ? theme.colorScheme.onSurface
+              : theme.colorScheme.onSurface.withOpacity(0.4),
+        ),
+      ),
     );
   }
 }

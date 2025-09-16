@@ -13,10 +13,12 @@ dependencies:
   # firebase
   firebase_auth:
   cloud_firestore:
-  google_sign_in:
+  google_sign_in: ^6.2.1
   firebase_database:
   firebase_storage:
   equatable:
+  googleapis:
+  googleapis_auth:
 
   # utils
   rxdart: ^0.27.7

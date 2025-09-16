@@ -1,10 +1,17 @@
-// lib/screens/user_dashboard/project_workspace/project_workspace.dart
+import 'dart:ui' as ui;
+
+import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
+import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/sidebar.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/topbar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:universal_html/html.dart' as html;
+import '../../../../blocs/auth_bloc/authentication_bloc.dart';
+import '../../../../blocs/auth_bloc/authentication_event.dart';
+import '../../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
@@ -12,9 +19,7 @@ import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../config/services/dialog_service.dart';
 import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/export_service.dart';
-
 import '../views/workarea.dart';
-
 
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
@@ -32,6 +37,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
   late Animation<Offset> _workareaSlideAnimation;
   late Animation<double> _workareaScaleAnimation;
   late Animation<double> _fadeAnimation;
+  bool _showGrid = true;
 
   @override
   void initState() {
@@ -93,7 +99,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
     super.dispose();
   }
 
-
   String _getCurrentFileName(FileSystemLoaded state) {
     if (state.activeFileId != null && state.files.isNotEmpty) {
       final matchingFile = state.files.firstWhere(
@@ -112,20 +117,41 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
     html.WindowBase popup =
     html.window.open(url.toString(), 'editor', 'width=1200,height=800');
     if (popup.closed!) {
-      throw ('Popups blocked');
+      throw ('Popup bloccati');
     }
   }
 
   Future<void> _handleExport(BuildContext innerContext) async {
-    final state = innerContext.read<FileSystemBloc>().state;
+    final fileState = innerContext.read<FileSystemBloc>().state;
 
-    if (state is FileSystemLoaded && state.activeFileId != null) {
-      final fileName = _getCurrentFileName(state);
-      await ExportService.exportWidgetToPng(
-        context: context,
-        key: _workareaKey,
-        fileName: fileName,
-      );
+    if (fileState is FileSystemLoaded && fileState.activeFileId != null) {
+      final fileName = _getCurrentFileName(fileState);
+
+      // 1. PREPARAZIONE: Genera i byte dell'immagine, indipendentemente dalla destinazione.
+      final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
+
+      if (pngBytes == null) {
+        if (mounted) BannerService.showError(context, "Errore fatale durante la creazione dell'immagine.");
+        return;
+      }
+
+      final authState = innerContext.read<AuthenticationBloc>().state;
+      if (authState.user.driveConnected) {
+        // 2a. AZIONE DRIVE: Invia l'evento al BLoC con i dati pronti.
+        innerContext.read<AuthenticationBloc>().add(
+          ExportFlowchartToDriveRequested(
+            fileName: '$fileName.png',
+            fileBytes: pngBytes,
+          ),
+        );
+      } else {
+        // 2b. AZIONE LOCALE: Chiama il nuovo metodo di download che gestisce anche i dialoghi.
+        await ExportService.downloadFileWithDialog(
+          context: innerContext,
+          bytes: pngBytes,
+          fileName: fileName,
+        );
+      }
     } else {
       if (!mounted) return;
       await DialogService.showInfoDialog(
@@ -139,23 +165,77 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
     }
   }
 
+  void _toggleGrid() {
+    setState(() {
+      _showGrid = !_showGrid;
+    });
+  }
 
   @override
   Widget build(BuildContext outerContext) {
-    return BlocProvider<FileSystemBloc>(
-      key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
-      create: (context) => FileSystemBloc(
-        projectRepository: context.read<ProjectBloc>().projectRepository,
-      )..add(RefreshFileSystem(projectId: widget.selectedProject.projectId)),
-      child: BlocListener<FileSystemBloc, FileSystemState>(
-        listener: (context, state) {
-          if (state is FileSystemError) {
-            BannerService.showError(context, state.message);
-          }
-        },
-        child: AnimatedBuilder(
-          animation: _slideInController,
-          builder: (innerContext, child) {
+    return KeyboardShortcuts(
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<FlowchartBloc>(create: (_) => FlowchartBloc()),
+          BlocProvider<FileSystemBloc>(
+            key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
+            create: (context) => FileSystemBloc(
+              projectRepository: context.read<ProjectBloc>().projectRepository,
+            )..add(RefreshFileSystem(projectId: widget.selectedProject.projectId)),
+          ),
+        ],
+        child: MultiBlocListener(
+          listeners: [
+            // --- NUOVO LISTENER PER IL FEEDBACK SULL'EXPORT ---
+            BlocListener<AuthenticationBloc, AuthenticationState>(
+              listenWhen: (previous, current) {
+                // Ascolta solo quando lo stato di caricamento finisce
+                return previous.isLoading && !current.isLoading;
+              },
+              listener: (context, state) {
+                // Controlla se c'era un'operazione legata a Drive in corso
+                // (Questo è un controllo implicito, ma funziona nel nostro flusso)
+                if (state.errorMessage != null) {
+                  // Se c'è un errore, mostralo
+                  BannerService.showError(context, state.errorMessage!);
+                  // Pulisci l'errore per non mostrarlo di nuovo
+                  context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
+                } else {
+                  // Se non ci sono errori, l'operazione è andata a buon fine
+                  BannerService.showSuccess(
+                      context, "Diagramma esportato con successo su Google Drive!");
+                }
+              },
+            ),
+            BlocListener<FileSystemBloc, FileSystemState>(
+              listener: (context, state) {
+                if (state is FileSystemLoaded) {
+                  if (state.activeFileId == null && state.files.isNotEmpty) {
+                    final mainFile = state.files.firstWhere(
+                          (f) => f.name == 'main',
+                      orElse: () => state.files.first,
+                    );
+                    context.read<FileSystemBloc>().add(OpenFile(
+                      projectId: widget.selectedProject.projectId,
+                      fileId: mainFile.fileId,
+                      fileName: mainFile.name,
+                    ));
+                    return;
+                  }
+
+                  if (state.activeFileId != null) {
+                    final activeFile = state.files.firstWhere((f) => f.fileId == state.activeFileId);
+                    context.read<FlowchartBloc>().add(LoadFlowchart(activeFile.content));
+                  }
+                } else if (state is FileSystemError) {
+                  BannerService.showError(context, state.message);
+                }
+              },
+            ),
+          ],
+          child: AnimatedBuilder(
+            animation: _slideInController,
+            builder: (innerContext, child) {
             return _WorkspaceLayout(
               sidebarSlideAnimation: _sidebarSlideAnimation,
               topbarSlideAnimation: _topbarSlideAnimation,
@@ -165,13 +245,14 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
               selectedProject: widget.selectedProject,
               workareaKey: _workareaKey,
               onEdit: _onEdit,
-              onExport: () {
-                _handleExport(innerContext);
-              },
+              onExport: () => _handleExport(innerContext),
+              showGrid: _showGrid,
+              toggleGrid: _toggleGrid,
             );
           },
         ),
       ),
+    ),
     );
   }
 }
@@ -186,6 +267,8 @@ class _WorkspaceLayout extends StatelessWidget {
   final GlobalKey workareaKey;
   final VoidCallback onEdit;
   final VoidCallback onExport;
+  final bool showGrid;
+  final VoidCallback toggleGrid;
 
   const _WorkspaceLayout({
     required this.sidebarSlideAnimation,
@@ -197,6 +280,8 @@ class _WorkspaceLayout extends StatelessWidget {
     required this.workareaKey,
     required this.onEdit,
     required this.onExport,
+    required this.showGrid,
+    required this.toggleGrid,
   });
 
   @override
@@ -227,6 +312,8 @@ class _WorkspaceLayout extends StatelessWidget {
                       selectedProject: selectedProject,
                       onEdit: onEdit,
                       onExport: onExport,
+                      showGrid: showGrid,
+                      onToggleGrid: toggleGrid,
                     ),
                   ),
                 ),
@@ -238,7 +325,7 @@ class _WorkspaceLayout extends StatelessWidget {
                       scale: workareaScaleAnimation,
                       child: FadeTransition(
                         opacity: fadeAnimation,
-                        child: _WorkspaceContent(workareaKey: workareaKey),
+                        child: _WorkspaceContent(workareaKey: workareaKey, showGrid: showGrid),
                       ),
                     ),
                   ),
@@ -252,34 +339,41 @@ class _WorkspaceLayout extends StatelessWidget {
   }
 }
 
-
 class _WorkspaceContent extends StatelessWidget {
   final GlobalKey workareaKey;
+  final bool showGrid;
 
-  const _WorkspaceContent({required this.workareaKey});
+  const _WorkspaceContent({required this.workareaKey, required this.showGrid});
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<FileSystemBloc>().state;
     final hasActiveFile =
-        state is FileSystemLoaded && state.activeFileId != null;
+          state is FileSystemLoaded && state.activeFileId != null;
 
     return Stack(
-      alignment: Alignment.center,
       children: [
+        // WorkArea sempre visibile: consente di creare e vedere le forme subito
+        WorkArea(repaintKey: workareaKey, showGrid: showGrid),
         if (!hasActiveFile)
-          const Center(
-            child: Text(
-              'Seleziona o crea un file per iniziare a lavorare.',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+          const Positioned.fill(
+            child: IgnorePointer(
+              ignoring: true,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.grey),
+                    SizedBox(height: 8),
+                    Text(
+                      'Seleziona o crea un file per salvare le modifiche.',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        Visibility(
-          visible: hasActiveFile,
-          maintainState: true,
-          maintainAnimation: true,
-          child: WorkArea(repaintKey: workareaKey),
-        ),
       ],
     );
   }

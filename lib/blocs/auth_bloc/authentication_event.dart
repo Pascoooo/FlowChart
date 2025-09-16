@@ -44,6 +44,27 @@ class AuthenticationPhotoUpdateRequested extends AuthenticationEvent {
   List<Object?> get props => [photoFileBytes];
 }
 
+class AuthenticationDrivePermissionRequested extends AuthenticationEvent {
+  const AuthenticationDrivePermissionRequested();
+}
+
+class AuthenticationDrivePermissionRevoked extends AuthenticationEvent {
+  const AuthenticationDrivePermissionRevoked();
+}
+
+class ExportFlowchartToDriveRequested extends AuthenticationEvent {
+  final String fileName;
+  final Uint8List fileBytes;
+
+  const ExportFlowchartToDriveRequested({
+    required this.fileName,
+    required this.fileBytes,
+  });
+
+  @override
+  List<Object?> get props => [fileName, fileBytes];
+}
+
 class AuthenticationErrorCleared extends AuthenticationEvent {
   const AuthenticationErrorCleared();
 }

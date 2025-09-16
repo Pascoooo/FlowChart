@@ -22,6 +22,9 @@ class AuthenticationBloc
     on<AuthenticationDeleteAccountRequested>(_onDeleteAccountRequested);
     on<AuthenticationDisplayNameUpdateRequested> (_onDisplayNameUpdateRequested);
     on<AuthenticationPhotoUpdateRequested>(_onPhotoUpdateRequested);
+    on<AuthenticationDrivePermissionRequested>(_onDrivePermissionRequested);
+    on<AuthenticationDrivePermissionRevoked>(_onDrivePermissionRevoked);
+    on<ExportFlowchartToDriveRequested>(_onExportFlowchartToDriveRequested);
     on<AuthenticationErrorCleared>(_onAuthenticationErrorCleared);
   }
 
@@ -126,6 +129,73 @@ class AuthenticationBloc
       ));
     }
   }
+
+  Future<void> _onDrivePermissionRequested(
+      AuthenticationDrivePermissionRequested event,
+      Emitter<AuthenticationState> emit,
+      ) async {
+    emit(state.copyWith(isLoading: true, errorMessage: null));
+    try {
+      final bool granted = await _userRepository.requestGoogleDrivePermission();
+      if (!granted) {
+        emit(state.copyWith(
+          isLoading: false,
+          errorMessage: "Autorizzazione per Google Drive non concessa.",
+        ));
+      } else {
+        // Il listener dello stream `user` si occuperà di aggiornare la UI con
+        // `driveConnected: true`, quindi qui basta fermare il caricamento.
+        emit(state.copyWith(isLoading: false));
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        isLoading: false,
+        errorMessage: e is AuthenticationException
+            ? e.message
+            : "Errore durante la richiesta dei permessi.",
+      ));
+    }
+  }
+
+  Future<void> _onDrivePermissionRevoked(
+      AuthenticationDrivePermissionRevoked event,
+      Emitter<AuthenticationState> emit,
+      ) async {
+    emit(state.copyWith(isLoading: true, errorMessage: null));
+    try {
+      await _userRepository.revokeGoogleDrivePermission();
+      // Anche qui, il listener dello stream `user` aggiornerà la UI.
+      emit(state.copyWith(isLoading: false));
+    } catch (e) {
+      emit(state.copyWith(
+        isLoading: false,
+        errorMessage: e is AuthenticationException
+            ? e.message
+            : "Errore durante la disconnessione da Drive.",
+      ));
+    }
+  }
+
+  Future<void> _onExportFlowchartToDriveRequested(
+      ExportFlowchartToDriveRequested event,
+      Emitter<AuthenticationState> emit,
+      ) async {
+    emit(state.copyWith(isLoading: true, errorMessage: null));
+    try {
+      await _userRepository.uploadFileToDrive(
+          event.fileName, event.fileBytes);
+      emit(state.copyWith(isLoading: false));
+    } catch (e) {
+      emit(state.copyWith(
+        isLoading: false,
+        errorMessage: e is AuthenticationException
+            ? e.message
+            : "Errore durante l'esportazione su Google Drive.",
+      ));
+    }
+  }
+
+
   void _onAuthenticationErrorCleared(
       AuthenticationErrorCleared event,
       Emitter<AuthenticationState> emit,
