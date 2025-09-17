@@ -25,6 +25,7 @@ class AuthenticationBloc
     on<AuthenticationDrivePermissionRequested>(_onDrivePermissionRequested);
     on<AuthenticationDrivePermissionRevoked>(_onDrivePermissionRevoked);
     on<ExportFlowchartToDriveRequested>(_onExportFlowchartToDriveRequested);
+    on<ClearDriveExportStatus>(_onClearDriveExportStatus);
     on<AuthenticationErrorCleared>(_onAuthenticationErrorCleared);
   }
 
@@ -102,20 +103,14 @@ class AuthenticationBloc
       ));
     }
   }
-// bloc (authentication_bloc.dart)
   Future<void> _onPhotoUpdateRequested(
       AuthenticationPhotoUpdateRequested event,
       Emitter<AuthenticationState> emit,
       ) async {
     emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
-      // Now this returns the URL string
       final newPhotoURL = await _userRepository.updateUserPhoto(event.photoFileBytes);
-
-      // Create an updated user object
       final updatedUser = state.user.copyWith(photoURL: newPhotoURL);
-
-      // Emit the new state with the updated user and isLoading set to false
       emit(state.copyWith(
         user: updatedUser,
         isLoading: false,
@@ -143,8 +138,6 @@ class AuthenticationBloc
           errorMessage: "Autorizzazione per Google Drive non concessa.",
         ));
       } else {
-        // Il listener dello stream `user` si occuperà di aggiornare la UI con
-        // `driveConnected: true`, quindi qui basta fermare il caricamento.
         emit(state.copyWith(isLoading: false));
       }
     } catch (e) {
@@ -180,19 +173,27 @@ class AuthenticationBloc
       ExportFlowchartToDriveRequested event,
       Emitter<AuthenticationState> emit,
       ) async {
-    emit(state.copyWith(isLoading: true, errorMessage: null));
+    emit(state.copyWith(driveExportStatus: DriveExportStatus.loading, isLoading: true));
     try {
-      await _userRepository.uploadFileToDrive(
-          event.fileName, event.fileBytes);
-      emit(state.copyWith(isLoading: false));
+      await _userRepository.uploadFileToDrive(event.fileName, event.fileBytes);
+      emit(state.copyWith(driveExportStatus: DriveExportStatus.success, isLoading: false));
     } catch (e) {
+      final errorMessage = e is AuthenticationException
+          ? e.message
+          : "Errore durante l'esportazione su Google Drive.";
       emit(state.copyWith(
+        driveExportStatus: DriveExportStatus.failure,
         isLoading: false,
-        errorMessage: e is AuthenticationException
-            ? e.message
-            : "Errore durante l'esportazione su Google Drive.",
+        errorMessage: errorMessage,
       ));
     }
+  }
+
+  void _onClearDriveExportStatus(
+      ClearDriveExportStatus event,
+      Emitter<AuthenticationState> emit,
+      ) {
+    emit(state.copyWith(driveExportStatus: DriveExportStatus.initial));
   }
 
 
@@ -200,8 +201,9 @@ class AuthenticationBloc
       AuthenticationErrorCleared event,
       Emitter<AuthenticationState> emit,
       ) {
-    emit(state.copyWith(errorMessage: null));
+    emit(state.copyWith(clearErrorMessage: true));
   }
+
 
   @override
   Future<void> close() {

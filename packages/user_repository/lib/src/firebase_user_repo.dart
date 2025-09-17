@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -32,41 +32,43 @@ class FirebaseUserRepo implements UserRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
+  final FirebaseFunctions _functions;
   late final CollectionReference<Map<String, dynamic>> _usersCollection;
 
   FirebaseUserRepo({
     FirebaseAuth? firebaseAuth,
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
+    FirebaseFunctions? functions,
   })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
         _firestore = firestore ?? FirebaseFirestore.instance,
-        _storage = storage ?? FirebaseStorage.instance {
+        _storage = storage ?? FirebaseStorage.instance,
+        _functions = functions ?? FirebaseFunctions.instanceFor(region: kFunctionsRegion) {
     _usersCollection = _firestore.collection('users');
   }
 
-  //________________________________________________________________________________
-  // Sezione: Flusso Utente Principale
-  //________________________________________________________________________________
 
+  /// Stream che emette l'utente corrente (`MyUser`) o `null`.
+  ///
+  /// Si mette in ascolto dei cambiamenti di stato di Firebase Auth.
+  /// Se l'utente è autenticato, si collega al suo documento Firestore per
+  /// fornire aggiornamenti in tempo reale sul profilo.
   @override
   Stream<MyUser?> get user {
     return _firebaseAuth.authStateChanges().switchMap((firebaseUser) {
       if (firebaseUser == null) {
-        // Se l'utente non è autenticato, emette `null`.
         return Stream.value(null);
       } else {
-        // Altrimenti, si mette in ascolto del documento utente su Firestore
-        // per emettere aggiornamenti in tempo reale (es. cambio nome, connessione a Drive).
         return _usersCollection.doc(firebaseUser.uid).snapshots().map((snapshot) =>
         snapshot.exists ? MyUser.fromEntity(MyUserEntity.fromDocument(snapshot.data()!)) : null);
       }
-    }).distinct(); // Emette solo se l'oggetto utente è effettivamente cambiato.
+    }).distinct();
   }
 
-  //________________________________________________________________________________
-  // Sezione: Metodi di Autenticazione
-  //________________________________________________________________________________
-
+  /// Esegue il login con Google tramite un popup.
+  ///
+  /// Se l'utente è nuovo, crea il suo documento su Firestore.
+  /// Se l'utente esiste già, restituisce i dati esistenti.
   @override
   Future<MyUser> signInWithGoogle() async {
     try {
@@ -78,13 +80,10 @@ class FirebaseUserRepo implements UserRepository {
         throw const AuthenticationException('Google sign in fallito: utente non ricevuto.');
       }
 
-      // Controlla se l'utente esiste già in Firestore.
       final userDoc = await _usersCollection.doc(firebaseUser.uid).get();
       if (userDoc.exists) {
-        // Se esiste, restituisce i dati esistenti.
         return MyUser.fromEntity(MyUserEntity.fromDocument(userDoc.data()!));
       } else {
-        // Altrimenti, crea un nuovo documento per il nuovo utente.
         return await _createUserFromFirebase(firebaseUser);
       }
     } on FirebaseAuthException catch (e) {
@@ -94,6 +93,7 @@ class FirebaseUserRepo implements UserRepository {
     }
   }
 
+  /// Esegue il logout dell'utente corrente.
   @override
   Future<void> signOut() async {
     try {
@@ -105,6 +105,10 @@ class FirebaseUserRepo implements UserRepository {
     }
   }
 
+  /// Elimina l'account dell'utente corrente e tutti i dati associati.
+  ///
+  /// Utilizza una Cloud Function (`deleteUserAuthHttp`) per garantire
+  /// l'eliminazione sicura dei dati su Auth, Firestore e Storage.
   @override
   Future<void> deleteAccount() async {
     final user = _firebaseAuth.currentUser;
@@ -113,58 +117,26 @@ class FirebaseUserRepo implements UserRepository {
     }
 
     try {
-      // Ottiene il token ID JWT per autenticare la richiesta alla Cloud Function.
-      final idToken = await user.getIdToken();
-      final projectId = Firebase.app().options.projectId;
-
-      // Costruisce l'URL della Cloud Function.
-      final uri = Uri.https(
-        '$kFunctionsRegion-$projectId.cloudfunctions.net',
+      // Metodo raccomandato utilizzando il SDK di Firebase Functions
+      final callable = _functions.httpsCallable(
         kDeleteUserFunctionName,
+        options: HttpsCallableOptions(timeout: kApiTimeoutDuration),
       );
-
-      // Esegue la chiamata HTTP sicura.
-      final response = await http.post(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $idToken',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(<String, dynamic>{}),
-      ).timeout(kApiTimeoutDuration);
-
-      if (response.statusCode != 200) {
-        // Se la funzione fallisce, tenta di leggere il messaggio di errore dal corpo della risposta.
-        String serverMessage = 'Errore del server durante l\'eliminazione.';
-        try {
-          final data = jsonDecode(response.body);
-          if (data is Map && data['message'] is String) {
-            serverMessage = data['message'];
-          }
-        } catch (_) {}
-        throw AuthenticationException(serverMessage);
-      }
-
-      // Se la funzione ha successo (status 200), il backend ha già eliminato l'utente.
-      // Eseguiamo il logout localmente per completare il processo.
-      await _firebaseAuth.signOut();
-
+      await callable.call();
+    } on FirebaseFunctionsException catch (e) {
+      final message = e.message ?? 'Errore del server durante l\'eliminazione.';
+      throw AuthenticationException(message);
     } on TimeoutException {
       throw const AuthenticationException('La richiesta ha impiegato troppo tempo. Controlla la tua connessione.');
-    } on FirebaseAuthException catch (e) {
-      throw _mapFirebaseAuthException(e);
-    } on AuthenticationException {
-      rethrow; // Rilancia le eccezioni già gestite.
     } catch (e) {
       throw const AuthenticationException('Errore di connessione o imprevisto durante l\'eliminazione.');
     }
   }
 
 
-  //________________________________________________________________________________
-  // Sezione: Gestione Profilo Utente
-  //________________________________________________________________________________
-
+  /// Aggiorna il nome visualizzato dell'utente.
+  ///
+  /// Impone un limite di una modifica ogni 24 ore.
   @override
   Future<void> updateUserDisplayName(String displayName) async {
     final firebaseUser = _firebaseAuth.currentUser;
@@ -176,14 +148,12 @@ class FirebaseUserRepo implements UserRepository {
       final userDoc = await userDocRef.get();
       if (!userDoc.exists) throw const AuthenticationException("Documento utente non trovato.");
 
-      // Logica di Rate-Limiting: controlla quando è stata l'ultima modifica.
       final data = userDoc.data()!;
       final lastUpdate = data['nameLastUpdatedAt'] as Timestamp?;
       if (lastUpdate != null && DateTime.now().difference(lastUpdate.toDate()).inHours < 24) {
         throw const AuthenticationException("Puoi modificare il nome solo una volta ogni 24 ore.");
       }
 
-      // Aggiorna sia l'oggetto User di Firebase Auth che il documento Firestore.
       await firebaseUser.updateDisplayName(displayName);
       await userDocRef.update({
         'name': displayName,
@@ -199,6 +169,10 @@ class FirebaseUserRepo implements UserRepository {
     }
   }
 
+  /// Aggiorna la foto profilo dell'utente.
+  ///
+  /// Carica il file su Firebase Storage e aggiorna gli URL su Auth e Firestore.
+  /// Impone un limite di una modifica ogni 24 ore.
   @override
   Future<String> updateUserPhoto(Uint8List photoFileBytes) async {
     final firebaseUser = _firebaseAuth.currentUser;
@@ -209,19 +183,16 @@ class FirebaseUserRepo implements UserRepository {
       final userDoc = await userDocRef.get();
       if (!userDoc.exists) throw const AuthenticationException("Documento utente non trovato.");
 
-      // Logica di Rate-Limiting: controlla quando è stata l'ultima modifica.
       final data = userDoc.data()!;
       final lastUpdate = data['photoLastUpdatedAt'] as Timestamp?;
       if (lastUpdate != null && DateTime.now().difference(lastUpdate.toDate()).inHours < 24) {
         throw const AuthenticationException("Puoi modificare la foto solo una volta ogni 24 ore.");
       }
 
-      // Carica la nuova immagine su Firebase Storage.
       final ref = _storage.ref('profile_pictures').child('${firebaseUser.uid}.jpg');
       await ref.putData(photoFileBytes);
       final photoURL = await ref.getDownloadURL();
 
-      // Esegue gli aggiornamenti in parallelo per efficienza.
       await Future.wait([
         firebaseUser.updatePhotoURL(photoURL),
         userDocRef.update({
@@ -241,29 +212,23 @@ class FirebaseUserRepo implements UserRepository {
     }
   }
 
-  //________________________________________________________________________________
-  // Sezione: Integrazione Google Drive
-  //________________________________________________________________________________
-
+  /// Richiede all'utente il permesso di accedere a Google Drive.
+  ///
+  /// Se concesso, imposta `driveConnected` a `true` nel documento Firestore dell'utente.
+  /// Restituisce `true` se il permesso è stato concesso, `false` se l'utente ha annullato.
   @override
   Future<bool> requestGoogleDrivePermission() async {
     final user = _firebaseAuth.currentUser;
     if (user == null) throw const AuthenticationException("Utente non autenticato.");
 
     try {
-      // Richiede una ri-autenticazione forzando la richiesta del nuovo scope per Drive.
       final provider = GoogleAuthProvider()..addScope(kDriveScope);
       await user.reauthenticateWithPopup(provider);
 
-      // Se l'utente concede il permesso, aggiorniamo il suo stato su Firestore.
-      await _usersCollection.doc(user.uid).set(
-        {'driveConnected': true},
-        SetOptions(merge: true),
-      );
+      await _usersCollection.doc(user.uid).update({'driveConnected': true});
       return true;
 
     } on FirebaseAuthException catch (e) {
-      // Se l'utente chiude il popup, non è un errore, ma un'azione intenzionale.
       if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
         return false;
       }
@@ -273,14 +238,16 @@ class FirebaseUserRepo implements UserRepository {
     }
   }
 
+  /// Revoca i permessi di accesso a Google Drive.
+  ///
+  /// Chiama l'endpoint di revoca di Google e imposta `driveConnected` a `false`
+  /// nel documento Firestore dell'utente, indipendentemente dall'esito della chiamata API.
   @override
   Future<void> revokeGoogleDrivePermission() async {
     final user = _firebaseAuth.currentUser;
     if (user == null) throw const AuthenticationException("Utente non autenticato.");
 
     try {
-      // Per revocare un token è necessario un token di accesso valido.
-      // La ri-autenticazione è il modo più sicuro per ottenerne uno nuovo.
       final provider = GoogleAuthProvider();
       final userCredential = await user.reauthenticateWithPopup(provider);
       final accessToken = userCredential.credential?.accessToken;
@@ -289,7 +256,6 @@ class FirebaseUserRepo implements UserRepository {
         throw const AuthenticationException("Impossibile ottenere il token per la revoca.");
       }
 
-      // Chiama l'endpoint di revoca di Google.
       await http.post(
         Uri.parse('https://oauth2.googleapis.com/revoke'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -297,15 +263,11 @@ class FirebaseUserRepo implements UserRepository {
       );
 
     } finally {
-      // Indipendentemente dal successo della chiamata API (il token potrebbe essere già scaduto),
-      // aggiorniamo lo stato interno dell'applicazione per riflettere la disconnessione.
-      await _usersCollection.doc(user.uid).set(
-        {'driveConnected': false},
-        SetOptions(merge: true),
-      );
+      await _usersCollection.doc(user.uid).update({'driveConnected': false});
     }
   }
 
+  /// Carica un file su Google Drive nella cartella dell'applicazione.
   @override
   Future<void> uploadFileToDrive(String fileName, Uint8List fileBytes) async {
     final user = _firebaseAuth.currentUser;
@@ -314,24 +276,18 @@ class FirebaseUserRepo implements UserRepository {
     }
 
     try {
-      // 1. Re-authenticate with Firebase to get a fresh, valid credential.
-      // This is the correct way to get the access token within your architecture.
-      // If the user has already granted permission, this popup will be brief.
       final provider = GoogleAuthProvider()..addScope(kDriveScope);
       final userCredential = await user.reauthenticateWithPopup(provider);
-
       final accessToken = userCredential.credential?.accessToken;
 
       if (accessToken == null) {
         throw const AuthenticationException("Could not obtain a valid access token for Google Drive.");
       }
 
-      // 2. Create an authenticated HTTP client with the obtained token.
       final authHeaders = {'Authorization': 'Bearer $accessToken'};
       final client = AuthenticatedHttpClient(http.Client(), authHeaders);
       final driveApi = drive.DriveApi(client);
 
-      // 3. Create file metadata and upload.
       final fileToUpload = drive.File()..name = fileName;
       final media = drive.Media(Stream.value(fileBytes), fileBytes.length);
 
@@ -341,39 +297,36 @@ class FirebaseUserRepo implements UserRepository {
       if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
         throw const AuthenticationException("Upload canceled by user.");
       }
-      // Handle other Firebase-specific errors
       throw AuthenticationException("Firebase authentication error during upload: ${e.message}");
     } on AuthenticationException {
-      rethrow; // Re-throw exceptions you've already handled.
+      rethrow;
     } catch (e) {
-      // Catch-all for network errors or other issues
       throw AuthenticationException("Failed to upload to Google Drive: ${e.toString()}");
     }
   }
-  //________________________________________________________________________________
-  // Sezione: Metodi Ausiliari Interni
-  //________________________________________________________________________________
 
   /// Crea un nuovo documento utente in Firestore basato sui dati di Firebase Auth.
+  ///
   Future<MyUser> _createUserFromFirebase(User firebaseUser) async {
     final newUser = MyUser(
       userId: firebaseUser.uid,
       email: firebaseUser.email ?? '',
       name: firebaseUser.displayName ?? '',
       photoURL: firebaseUser.photoURL ?? '',
+      driveConnected: false,
     );
     await setUserData(newUser);
     return newUser;
   }
 
+  /// Scrive o aggiorna i dati di un `MyUser` in Firestore.
   @override
   Future<void> setUserData(MyUser user) async {
     try {
       await _usersCollection
           .doc(user.userId)
-          .set(user.toEntity().toDocument(), SetOptions(merge: true));
+          .set(user.toEntity().toDocument());
     } catch (e) {
-      // Rilancia l'eccezione per essere gestita dal chiamante.
       rethrow;
     }
   }
@@ -390,7 +343,6 @@ class FirebaseUserRepo implements UserRepository {
 }
 
 
-// --- Classi di Utilità ---
 
 /// Un client HTTP che wrappa un altro client e aggiunge gli header di autenticazione
 /// di Google a ogni richiesta inviata. Indispensabile per usare le `googleapis`.
@@ -402,7 +354,6 @@ class AuthenticatedHttpClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) {
-    // Aggiunge gli header di autenticazione alla richiesta originale prima di inviarla.
     request.headers.addAll(_authHeaders);
     return _inner.send(request);
   }

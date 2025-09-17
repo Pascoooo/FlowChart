@@ -19,6 +19,7 @@ dependencies:
   equatable:
   googleapis:
   googleapis_auth:
+  cloud_functions:
 
   # utils
   rxdart: ^0.27.7

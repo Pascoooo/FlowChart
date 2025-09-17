@@ -1,20 +1,22 @@
-// dart
 import 'package:equatable/equatable.dart';
 import 'package:user_repository/user_repository.dart';
 
 enum AuthenticationStatus { unknown, authenticated, unauthenticated }
+enum DriveExportStatus { initial, loading, success, failure }
 
 class AuthenticationState extends Equatable {
   final AuthenticationStatus status;
   final MyUser user;
   final bool isLoading;
   final String? errorMessage;
+  final DriveExportStatus driveExportStatus;
 
   const AuthenticationState._({
     required this.status,
     this.user = MyUser.empty,
     this.isLoading = false,
     this.errorMessage,
+    this.driveExportStatus = DriveExportStatus.initial,
   });
 
   const AuthenticationState.unknown()
@@ -37,12 +39,15 @@ class AuthenticationState extends Equatable {
     MyUser? user,
     bool? isLoading,
     String? errorMessage,
+    DriveExportStatus? driveExportStatus,
+    bool clearErrorMessage = false,
   }) {
     return AuthenticationState._(
       status: status ?? this.status,
       user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
-      errorMessage: errorMessage,
+      errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
+      driveExportStatus: driveExportStatus ?? this.driveExportStatus,
     );
   }
 
@@ -52,5 +57,6 @@ class AuthenticationState extends Equatable {
     user,
     isLoading,
     errorMessage,
+    driveExportStatus,
   ];
 }

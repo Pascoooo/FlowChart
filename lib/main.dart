@@ -16,11 +16,6 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   setUrlStrategy(const HashUrlStrategy());
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  FirebaseUIAuth.configureProviders([
-    GoogleProvider(
-      clientId: '641983601905-i7cuvuaau6pod7btq5k3jo63t6hpnu90.apps.googleusercontent.com',
-    ),
-  ]);
 
   runApp(
     MultiProvider(

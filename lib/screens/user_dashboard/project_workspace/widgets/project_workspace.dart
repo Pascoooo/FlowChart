@@ -156,7 +156,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
               ),
             );
           } else {
-            // Fallback: se Drive non è connesso, chiedi comunque all'utente.
             await DialogService.showExportLocationDialog(
               context: innerContext,
               pngBytes: pngBytes,
@@ -166,7 +165,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
           break;
 
         case ExportPreference.alwaysAsk:
-        // LA CHIAMATA ORA È PIÙ PULITA E USA IL SERVIZIO
           await DialogService.showExportLocationDialog(
             context: innerContext,
             pngBytes: pngBytes,
@@ -208,24 +206,20 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
         ],
         child: MultiBlocListener(
           listeners: [
-            // --- NUOVO LISTENER PER IL FEEDBACK SULL'EXPORT ---
             BlocListener<AuthenticationBloc, AuthenticationState>(
               listenWhen: (previous, current) {
-                // Ascolta solo quando lo stato di caricamento finisce
-                return previous.isLoading && !current.isLoading;
+                return previous.driveExportStatus != current.driveExportStatus;
               },
               listener: (context, state) {
-                // Controlla se c'era un'operazione legata a Drive in corso
-                // (Questo è un controllo implicito, ma funziona nel nostro flusso)
-                if (state.errorMessage != null) {
-                  // Se c'è un errore, mostralo
-                  BannerService.showError(context, state.errorMessage!);
-                  // Pulisci l'errore per non mostrarlo di nuovo
-                  context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
-                } else {
-                  // Se non ci sono errori, l'operazione è andata a buon fine
+                if (state.driveExportStatus == DriveExportStatus.success) {
                   BannerService.showSuccess(
                       context, "Diagramma esportato con successo su Google Drive!");
+                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
+                }
+                else if (state.driveExportStatus == DriveExportStatus.failure) {
+                  BannerService.showError(context, state.errorMessage ?? "Esportazione fallita.");
+                  context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
+                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
                 }
               },
             ),
@@ -258,23 +252,23 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
           child: AnimatedBuilder(
             animation: _slideInController,
             builder: (innerContext, child) {
-            return _WorkspaceLayout(
-              sidebarSlideAnimation: _sidebarSlideAnimation,
-              topbarSlideAnimation: _topbarSlideAnimation,
-              workareaSlideAnimation: _workareaSlideAnimation,
-              workareaScaleAnimation: _workareaScaleAnimation,
-              fadeAnimation: _fadeAnimation,
-              selectedProject: widget.selectedProject,
-              workareaKey: _workareaKey,
-              onEdit: _onEdit,
-              onExport: () => _handleExport(innerContext),
-              showGrid: _showGrid,
-              toggleGrid: _toggleGrid,
-            );
-          },
+              return _WorkspaceLayout(
+                sidebarSlideAnimation: _sidebarSlideAnimation,
+                topbarSlideAnimation: _topbarSlideAnimation,
+                workareaSlideAnimation: _workareaSlideAnimation,
+                workareaScaleAnimation: _workareaScaleAnimation,
+                fadeAnimation: _fadeAnimation,
+                selectedProject: widget.selectedProject,
+                workareaKey: _workareaKey,
+                onEdit: _onEdit,
+                onExport: () => _handleExport(innerContext),
+                showGrid: _showGrid,
+                toggleGrid: _toggleGrid,
+              );
+            },
+          ),
         ),
       ),
-    ),
     );
   }
 }
@@ -371,11 +365,10 @@ class _WorkspaceContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<FileSystemBloc>().state;
     final hasActiveFile =
-          state is FileSystemLoaded && state.activeFileId != null;
+        state is FileSystemLoaded && state.activeFileId != null;
 
     return Stack(
       children: [
-        // WorkArea sempre visibile: consente di creare e vedere le forme subito
         WorkArea(repaintKey: workareaKey, showGrid: showGrid),
         if (!hasActiveFile)
           const Positioned.fill(

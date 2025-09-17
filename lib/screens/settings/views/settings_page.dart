@@ -12,6 +12,7 @@ import '../../../config/services/dialog_service.dart';
 import '../../../config/services/banner_service.dart';
 import '../../user_dashboard/animations/background_animation.dart';
 import '../widgets/export_setting.dart';
+import '../widgets/settings_provider.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/settings_tile.dart';
 
@@ -431,7 +432,24 @@ class SystemSettings extends StatelessWidget {
     final cs = theme.colorScheme;
 
     return BlocConsumer<AuthenticationBloc, AuthenticationState>(
+      listenWhen: (previous, current) {
+        final didDisconnect = previous.user.driveConnected && !current.user.driveConnected;
+        final hasNewError = current.errorMessage != null;
+        return didDisconnect || hasNewError;
+      },
       listener: (context, state) {
+        if (!state.user.driveConnected) {
+          final settingsProvider = context.read<SettingsProvider>();
+          if (settingsProvider.exportPreference == ExportPreference.drive) {
+            settingsProvider.updateExportPreference(ExportPreference.alwaysAsk);
+            DialogService.showInfoDialog(
+              context,
+              title: 'Google Drive Disconnesso',
+              message: 'Il tuo account Google Drive è stato disconnesso. La preferenza di esportazione è stata cambiata a "Chiedi sempre".',
+              icon: Icons.info_outline_rounded,
+            );
+          }
+        }
         if (state.errorMessage != null) {
           BannerService.showError(context, state.errorMessage!);
           context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
@@ -439,10 +457,7 @@ class SystemSettings extends StatelessWidget {
       },
       builder: (context, state) {
         final bool isDriveConnected = state.user.driveConnected;
-
-        // Controlla se una qualsiasi operazione del BLoC è in corso
         final isOperationLoading = state.isLoading;
-
         return Column(
           children: [
             SettingsSection(
@@ -469,6 +484,7 @@ class SystemSettings extends StatelessWidget {
                   ),
               ],
             ),
+            // La classe ExportSettings viene da 'export_setting.dart' e non necessita modifiche.
             const ExportSettings(),
             const SizedBox(height: 20),
             SettingsSection(
@@ -514,6 +530,7 @@ class SystemSettings extends StatelessWidget {
     );
   }
 }
+
 class _StatusLabel extends StatelessWidget {
   final bool isConnected;
   const _StatusLabel({required this.isConnected});
@@ -542,7 +559,6 @@ class _StatusLabel extends StatelessWidget {
   }
 }
 
-// WIDGET PER IL PULSANTE (MODIFICATO)
 class _ConnectionButton extends StatelessWidget {
   final bool isConnected;
   final VoidCallback onConnect;
@@ -571,7 +587,7 @@ class _ConnectionButton extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13), // Testo più bold
+        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
       ),
     );
   }

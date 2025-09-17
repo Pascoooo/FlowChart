@@ -199,7 +199,6 @@ class DialogService {
     );
   }
 
-  /// **Dialogo di Esportazione con le Modifiche Richieste**
   static Future<void> showExportLocationDialog({
     required BuildContext context,
     required Uint8List pngBytes,
@@ -230,6 +229,19 @@ class DialogService {
         final isDriveConnected =
             dialogContext.watch<AuthenticationBloc>().state.user.driveConnected;
         bool rememberChoice = false;
+
+        // --- INIZIO MODIFICHE ---
+
+        // 1. Otteniamo lo stile del testo di base dal tema per garantire coerenza.
+        final TextStyle bodyTextStyle = CupertinoTheme.of(dialogContext).textTheme.textStyle;
+
+        // 2. Creiamo uno stile specifico per l'azione "Annulla" partendo
+        //    da quello di base, ma usando un colore grigio dipendente dal tema.
+        final TextStyle cancelActionStyle = bodyTextStyle.copyWith(
+          color: CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, dialogContext),
+        );
+
+        // --- FINE MODIFICHE ---
 
         return StatefulBuilder(builder: (context, setState) {
           return CupertinoAlertDialog(
@@ -266,6 +278,8 @@ class DialogService {
                   _buildRememberChoiceCheckbox(
                     context: context,
                     value: rememberChoice,
+                    // 3. Passiamo lo stile del testo di base al nostro helper.
+                    textStyle: bodyTextStyle,
                     onChanged: (newValue) {
                       setState(() => rememberChoice = newValue);
                     },
@@ -276,7 +290,8 @@ class DialogService {
             actions: [
               CupertinoDialogAction(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Annulla'),
+                // 4. Applichiamo lo stile personalizzato al testo "Annulla".
+                child: Text('Annulla', style: cancelActionStyle),
               ),
             ],
           );
@@ -316,11 +331,11 @@ class DialogService {
     );
   }
 
-  /// **NUOVA IMPLEMENTAZIONE**: Checkbox che si trasforma in icona animata.
   static Widget _buildRememberChoiceCheckbox({
     required BuildContext context,
     required bool value,
     required ValueChanged<bool> onChanged,
+    required TextStyle textStyle, // 3a. Aggiungiamo il parametro per lo stile.
   }) {
     final secondaryLabelColor =
     CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
@@ -341,13 +356,12 @@ class DialogService {
       ),
     );
 
-    // Widget per lo stato "selezionato" (l'icona)
     Widget checkedWidget = SizedBox(
       key: const ValueKey('checked'), // Key per l'animazione
       width: 22,
       height: 22,
       child: Icon(
-        FontAwesomeIcons., // Icona FontAwesome
+        FontAwesomeIcons.check, // Icona FontAwesome
         color: activeColor,
         size: 22,
       ),
@@ -363,7 +377,6 @@ class DialogService {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // AnimatedSwitcher gestisce la transizione tra i due stati
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   transitionBuilder: (child, animation) {
@@ -378,7 +391,8 @@ class DialogService {
                   child: value ? checkedWidget : uncheckedWidget,
                 ),
                 const SizedBox(width: 12),
-                const Text('Ricorda la mia scelta'),
+                // 4a. Applichiamo lo stile ricevuto al testo della checkbox.
+                Text('Ricorda la mia scelta', style: textStyle),
               ],
             ),
           ),

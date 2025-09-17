@@ -65,6 +65,10 @@ class ExportFlowchartToDriveRequested extends AuthenticationEvent {
   List<Object?> get props => [fileName, fileBytes];
 }
 
+class ClearDriveExportStatus extends AuthenticationEvent {
+  const ClearDriveExportStatus();
+}
+
 class AuthenticationErrorCleared extends AuthenticationEvent {
   const AuthenticationErrorCleared();
 }
