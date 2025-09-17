@@ -335,7 +335,7 @@ class DialogService {
     required BuildContext context,
     required bool value,
     required ValueChanged<bool> onChanged,
-    required TextStyle textStyle, // 3a. Aggiungiamo il parametro per lo stile.
+    required TextStyle textStyle,
   }) {
     final secondaryLabelColor =
     CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
@@ -344,28 +344,36 @@ class DialogService {
     final borderColor =
     CupertinoDynamicColor.resolve(CupertinoColors.placeholderText, context);
 
-    // Widget per lo stato "non selezionato" (la checkbox vuota)
-    Widget uncheckedWidget = Container(
-      key: const ValueKey('unchecked'), // Key per l'animazione
-      width: 22,
-      height: 22,
+    // --- INIZIO MODIFICHE ---
+
+    // 1. Definiamo dimensioni più piccole per il riquadro e l'icona.
+    const double boxSize = 18.0;
+    const double iconSize = 12.0;
+
+    // 2. Creiamo un singolo widget per la checkbox.
+    //    Il bordo è sempre visibile e l'icona interna viene animata.
+    Widget checkboxWidget = Container(
+      width: boxSize,
+      height: boxSize,
       decoration: BoxDecoration(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(5), // Raggio leggermente ridotto
         border: Border.all(color: borderColor, width: 1.5),
+      ),
+      // L'animazione ora si applica solo all'icona interna
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutQuad,
+        scale: value ? 1.0 : 0.0, // Appare se 'value' è true, scompare se false
+        child: Icon(
+          FontAwesomeIcons.check,
+          color: activeColor,
+          size: iconSize, // Usa la dimensione ridotta per l'icona
+        ),
       ),
     );
 
-    Widget checkedWidget = SizedBox(
-      key: const ValueKey('checked'), // Key per l'animazione
-      width: 22,
-      height: 22,
-      child: Icon(
-        FontAwesomeIcons.check, // Icona FontAwesome
-        color: activeColor,
-        size: 22,
-      ),
-    );
+    // --- FINE MODIFICHE ---
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -377,21 +385,9 @@ class DialogService {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  transitionBuilder: (child, animation) {
-                    return ScaleTransition(
-                      scale: animation,
-                      child: FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: value ? checkedWidget : uncheckedWidget,
-                ),
+                // 3. Usiamo il nostro nuovo widget al posto di AnimatedSwitcher.
+                checkboxWidget,
                 const SizedBox(width: 12),
-                // 4a. Applichiamo lo stile ricevuto al testo della checkbox.
                 Text('Ricorda la mia scelta', style: textStyle),
               ],
             ),

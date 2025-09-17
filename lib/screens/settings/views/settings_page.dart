@@ -1,15 +1,17 @@
+// dart
 import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
+
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/auth_bloc/authentication_state.dart';
-import '../../../config/services/dialog_service.dart';
 import '../../../config/services/banner_service.dart';
+import '../../../config/services/dialog_service.dart';
 import '../../user_dashboard/animations/background_animation.dart';
 import '../widgets/export_setting.dart';
 import '../widgets/settings_provider.dart';
@@ -31,7 +33,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 450),
       vsync: this,
     );
     _fadeAnimation = CurvedAnimation(
@@ -51,7 +53,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -70,37 +71,22 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
       body: Stack(
         children: [
           const AnimatedBackground(),
-          Center(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 800),
-                child: Container(
-                  padding: const EdgeInsets.all(32.0),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: cs.outline.withOpacity(0.1)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: cs.shadow.withOpacity(isDark ? 0.15 : 0.08),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
-                      ),
+          FadeTransition(
+            opacity: _fadeAnimation,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1000),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: const [
+                      Header(),
+                      SizedBox(height: 20),
+                      ProfileSettings(),
+                      SizedBox(height: 20),
+                      SystemSettings(),
                     ],
-                  ),
-                  child: const SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Header(),
-                        SizedBox(height: 35),
-                        ProfileSettings(),
-                        SizedBox(height: 20),
-                        SystemSettings(),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -131,10 +117,10 @@ class Header extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: cs.primary.withOpacity(0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              )
+                color: cs.primary.withOpacity(0.25),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
             ],
           ),
           child: const Icon(Icons.settings_outlined, color: Colors.white, size: 28),
@@ -145,15 +131,14 @@ class Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Impostazioni Sistema',
-                style: theme.textTheme.headlineSmall?.copyWith(
+                'Centro impostazioni',
+                style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: cs.onSurface,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                'Personalizza e gestisci la tua esperienza.',
+                'Gestisci profilo, integrazioni e preferenze di esportazione',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                 ),
@@ -188,9 +173,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
       final currentName = context.read<AuthenticationBloc>().state.user.name;
       final hasChanged = newName.isNotEmpty && newName != currentName;
       if (hasChanged != _isNameChanged) {
-        setState(() {
-          _isNameChanged = hasChanged;
-        });
+        setState(() => _isNameChanged = hasChanged);
       }
     });
   }
@@ -222,24 +205,18 @@ class _ProfileSettingsState extends State<ProfileSettings> {
         }
       } catch (_) {}
       if (mounted) {
-        context
-            .read<AuthenticationBloc>()
-            .add(AuthenticationPhotoUpdateRequested(processed));
+        context.read<AuthenticationBloc>().add(AuthenticationPhotoUpdateRequested(processed));
       }
-    } catch (e) {
-      if(mounted) BannerService.showError(context, 'Selezione immagine non riuscita.');
+    } catch (_) {
+      if (mounted) BannerService.showError(context, 'Selezione immagine non riuscita.');
     }
   }
 
   void _saveDisplayName() {
     if (!_isNameChanged) return;
     final newName = _nameController.text.trim();
-    context
-        .read<AuthenticationBloc>()
-        .add(AuthenticationDisplayNameUpdateRequested(newName));
-    setState(() {
-      _isNameChanged = false;
-    });
+    context.read<AuthenticationBloc>().add(AuthenticationDisplayNameUpdateRequested(newName));
+    setState(() => _isNameChanged = false);
   }
 
   @override
@@ -265,68 +242,58 @@ class _ProfileSettingsState extends State<ProfileSettings> {
             title: 'Profilo Utente',
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Stack(
-                      alignment: Alignment.bottomRight,
                       children: [
                         CircleAvatar(
-                          radius: 35,
-                          backgroundColor: cs.surfaceContainerHigh,
+                          radius: 40,
                           backgroundImage: backgroundImage,
-                          child: (backgroundImage == null && !isLoading)
-                              ? FaIcon(FontAwesomeIcons.user, size: 30, color: cs.primary)
+                          child: backgroundImage == null
+                              ? Icon(Icons.person_outline_rounded,
+                              size: 42, color: cs.onSurfaceVariant)
                               : null,
                         ),
-                        Material(
-                          color: cs.primary,
-                          shape: const CircleBorder(),
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            onTap: isLoading ? null : _pickAndUpdatePhoto,
-                            child: Padding(
-                              padding: const EdgeInsets.all(6.0),
-                              child: isLoading
-                                  ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                                  : Icon(Icons.edit_rounded, color: cs.onPrimary, size: 16),
+                        Positioned(
+                          right: -4,
+                          bottom: -4,
+                          child: Material(
+                            color: cs.primary,
+                            shape: const CircleBorder(),
+                            elevation: 2,
+                            child: InkWell(
+                              onTap: isLoading ? null : _pickAndUpdatePhoto,
+                              customBorder: const CircleBorder(),
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.edit, color: Colors.white, size: 18),
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 16),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          TextField(
-                            controller: _nameController,
-                            enabled: !isLoading,
-                            decoration: InputDecoration(
-                              labelText: 'Nome Visualizzato',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          ElevatedButton(
-                            onPressed: (_isNameChanged && !isLoading) ? _saveDisplayName : null,
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            child: const Text('Salva Nome'),
-                          ),
-                        ],
+                      child: TextField(
+                        controller: _nameController,
+                        enabled: !isLoading,
+                        decoration: InputDecoration(
+                          labelText: 'Nome visualizzato',
+                          hintText: 'Inserisci il tuo nome',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: (!_isNameChanged || isLoading) ? null : _saveDisplayName,
+                      icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Salva'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
                     ),
                   ],
@@ -351,7 +318,8 @@ class SystemSettings extends StatelessWidget {
     final bool? confirmed = await DialogService.showConfirmationDialog(
       context,
       title: 'Disconnetti Google Drive',
-      message: 'Sei sicuro di voler revocare i permessi per Google Drive? Non potrai più salvare o accedere ai tuoi file.',
+      message:
+      'Sei sicuro di voler revocare i permessi per Google Drive? Non potrai più salvare o accedere ai tuoi file.',
       confirmText: 'Disconnetti',
       cancelText: 'Annulla',
     );
@@ -428,8 +396,7 @@ class SystemSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
+    final cs = Theme.of(context).colorScheme;
 
     return BlocConsumer<AuthenticationBloc, AuthenticationState>(
       listenWhen: (previous, current) {
@@ -445,7 +412,8 @@ class SystemSettings extends StatelessWidget {
             DialogService.showInfoDialog(
               context,
               title: 'Google Drive Disconnesso',
-              message: 'Il tuo account Google Drive è stato disconnesso. La preferenza di esportazione è stata cambiata a "Chiedi sempre".',
+              message:
+              'Il tuo account Google Drive è stato disconnesso. La preferenza di esportazione è stata cambiata a "Chiedi sempre".',
               icon: Icons.info_outline_rounded,
             );
           }
@@ -457,36 +425,43 @@ class SystemSettings extends StatelessWidget {
       },
       builder: (context, state) {
         final bool isDriveConnected = state.user.driveConnected;
-        final isOperationLoading = state.isLoading;
+        final bool isLoading = state.isLoading;
+
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // INTEGRAZIONI - stile semplice "di prima" con switch
             SettingsSection(
               title: 'Integrazioni',
               status: _StatusLabel(isConnected: isDriveConnected),
               children: [
-                if (isOperationLoading)
-                  const Padding(
-                    padding: EdgeInsets.all(20.0),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else
-                  SettingsTile(
-                    title: 'Google Drive',
-                    subtitle: isDriveConnected
-                        ? 'Account collegato con successo'
-                        : 'Collega il tuo account per salvare i file',
-                    icon: FontAwesomeIcons.googleDrive,
-                    trailing: _ConnectionButton(
+                SettingsTile(
+                  title: 'Google Drive',
+                  subtitle: isDriveConnected
+                      ? 'Account collegato'
+                      : 'Collega il tuo account per salvare i file',
+                  icon: FontAwesomeIcons.googleDrive,
+                  iconColor: Colors.green,
+                  trailing: IgnorePointer(
+                    ignoring: isLoading,
+                    child: _ConnectionButton(
                       isConnected: isDriveConnected,
                       onConnect: () => _connectToGoogleDrive(context),
                       onDisconnect: () => _disconnectFromGoogleDrive(context),
                     ),
                   ),
+                ),
               ],
             ),
-            // La classe ExportSettings viene da 'export_setting.dart' e non necessita modifiche.
-            const ExportSettings(),
+
             const SizedBox(height: 20),
+
+            // PREFERENZE DI ESPORTAZIONE (con cerchietti)
+            const ExportSettings(),
+
+            const SizedBox(height: 20),
+
+            // SISTEMA
             SettingsSection(
               title: 'Sistema',
               children: [
@@ -502,10 +477,15 @@ class SystemSettings extends StatelessWidget {
                   icon: Icons.restart_alt_rounded,
                   onTap: () => _confirmResetSettings(context),
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Divider(indent: 16, endIndent: 16),
-                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // ZONA PERICOLOSA
+            SettingsSection(
+              title: 'Operazioni account',
+              children: [
                 SettingsTile(
                   title: 'Logout',
                   subtitle: 'Esci dal tuo account Unichart',
@@ -551,7 +531,7 @@ class _StatusLabel extends StatelessWidget {
         text,
         style: theme.textTheme.labelMedium?.copyWith(
           color: color,
-          fontWeight: FontWeight.w900, // Testo più bold
+          fontWeight: FontWeight.w900,
           letterSpacing: 0.8,
         ),
       ),
