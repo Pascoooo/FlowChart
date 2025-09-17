@@ -16,4 +16,11 @@ abstract class ProjectRepo {
   Future<void> deleteFile({required String projectId, required String fileId});
   Future<void> renameFile({required String projectId, required String fileId, required String newName});
   Future<void> updateFileContent({required String projectId, required String fileId, required String newContent});
+
+  // --- NUOVI METODI PER IL REALTIME DATABASE ---
+  Stream<String?> liveFileContent(String projectId, String fileId);
+  Future<void> updateLiveFileContent(String projectId, String fileId, String content);
+
+  // MODIFICATO: Aggiunto il parametro 'content' per coerenza
+  Future<void> finalizeFileContent(String projectId, String fileId, String content);
 }

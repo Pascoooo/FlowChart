@@ -9,14 +9,18 @@ class FirebaseProjectRepo implements ProjectRepo {
   final String uid;
   final CollectionReference<Map<String, dynamic>> projectCollection;
   final DatabaseReference rtdbLogRef;
+  final DatabaseReference _rtdbSessionRef;
 
   FirebaseProjectRepo({required this.uid})
       : projectCollection = FirebaseFirestore.instance
       .collection('users')
       .doc(uid)
       .collection('projects'),
-      rtdbLogRef = FirebaseDatabase.instance.ref('users/$uid/projectslog');
+        rtdbLogRef = FirebaseDatabase.instance.ref('users/$uid/projectslog'),
+        _rtdbSessionRef = FirebaseDatabase.instance.ref('sessions/$uid');
 
+
+  // ... [TUTTI GLI ALTRI METODI RIMANGONO INVARIATI] ...
 
   @override
   Stream<List<MyProject>> projects() {
@@ -49,7 +53,7 @@ class FirebaseProjectRepo implements ProjectRepo {
       final serializableData = timestamps.map((key, value) => MapEntry(key, value.toIso8601String()));
       return rtdbLogRef.set(serializableData);
     } catch (e) {
-      log('Errore nel salvataggio dei timestamp su RTDB: $e');
+      log('Errore nel salvaggio dei timestamp su RTDB: $e');
       rethrow;
     }
   }
@@ -170,6 +174,32 @@ class FirebaseProjectRepo implements ProjectRepo {
     } catch (e) {
       rethrow;
     }
+  }
+
+  @override
+  Stream<String?> liveFileContent(String projectId, String fileId) {
+    final sessionRef = _rtdbSessionRef.child(projectId).child(fileId).child('content');
+    return sessionRef.onValue.map((event) => event.snapshot.value as String?);
+  }
+
+  @override
+  Future<void> updateLiveFileContent(String projectId, String fileId, String content) {
+    final sessionRef = _rtdbSessionRef.child(projectId).child(fileId).child('content');
+    return sessionRef.set(content);
+  }
+
+  @override
+  Future<void> finalizeFileContent(String projectId, String fileId, String content) async {
+    // MODIFICATO: Rimossa la logica di controllo che causava l'errore.
+    // Ora il repository salva semplicemente il contenuto che riceve.
+    await updateFileContent(
+      projectId: projectId,
+      fileId: fileId,
+      newContent: content,
+    );
+
+    final sessionRef = _rtdbSessionRef.child(projectId).child(fileId).child('content');
+    await sessionRef.remove();
   }
 
   @override
