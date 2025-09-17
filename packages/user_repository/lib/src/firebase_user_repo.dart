@@ -1,18 +1,13 @@
-// firebase_user_repo.dart
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import 'package:rxdart/rxdart.dart';
-
 import '../user_repository.dart';
 
 // --- Costanti Globali ---
@@ -313,46 +308,46 @@ class FirebaseUserRepo implements UserRepository {
 
   @override
   Future<void> uploadFileToDrive(String fileName, Uint8List fileBytes) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw const AuthenticationException("User not authenticated.");
+    }
+
     try {
-      // 1. Inizializza GoogleSignIn con gli scope necessari per Drive
-      final googleSignIn = GoogleSignIn(
-        scopes: [
-          'https://www.googleapis.com/auth/drive.file',
-        ],
-      );
+      // 1. Re-authenticate with Firebase to get a fresh, valid credential.
+      // This is the correct way to get the access token within your architecture.
+      // If the user has already granted permission, this popup will be brief.
+      final provider = GoogleAuthProvider()..addScope(kDriveScope);
+      final userCredential = await user.reauthenticateWithPopup(provider);
 
-      // 2. Prova a ottenere l'utente corrente o effettua sign-in silenzioso
-      GoogleSignInAccount? googleUser = googleSignIn.currentUser;
-      googleUser ??= await googleSignIn.signInSilently();
+      final accessToken = userCredential.credential?.accessToken;
 
-      if (googleUser == null) {
-        // Se il sign-in silenzioso fallisce, l'utente deve autenticarsi
-        throw const AuthenticationException(
-            "Sessione Google non valida o scaduta. Prova a ricollegare l'account dalle impostazioni.");
+      if (accessToken == null) {
+        throw const AuthenticationException("Could not obtain a valid access token for Google Drive.");
       }
 
-      // 3. Ottieni le intestazioni di autenticazione
-      final authHeaders = await googleUser.authHeaders;
-      if (authHeaders.isEmpty || !authHeaders.containsKey('Authorization')) {
-        throw const AuthenticationException("Token di accesso non valido.");
-      }
-
-      // 4. Crea client autenticato e istanza Drive API
+      // 2. Create an authenticated HTTP client with the obtained token.
+      final authHeaders = {'Authorization': 'Bearer $accessToken'};
       final client = AuthenticatedHttpClient(http.Client(), authHeaders);
       final driveApi = drive.DriveApi(client);
 
-      // 5. Crea metadati del file e carica
+      // 3. Create file metadata and upload.
       final fileToUpload = drive.File()..name = fileName;
       final media = drive.Media(Stream.value(fileBytes), fileBytes.length);
 
       await driveApi.files.create(fileToUpload, uploadMedia: media);
 
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
+        throw const AuthenticationException("Upload canceled by user.");
+      }
+      // Handle other Firebase-specific errors
+      throw AuthenticationException("Firebase authentication error during upload: ${e.message}");
     } on AuthenticationException {
-      rethrow; // Rilancia le eccezioni di autenticazione specifiche
+      rethrow; // Re-throw exceptions you've already handled.
     } catch (e) {
-      // Gestisce altri errori generici (es. rete)
-      throw AuthenticationException(
-          "Caricamento su Google Drive non riuscito: ${e.toString()}");
+      // Catch-all for network errors or other issues
+      throw AuthenticationException("Failed to upload to Google Drive: ${e.toString()}");
     }
   }
   //________________________________________________________________________________
