@@ -11,6 +11,7 @@ import '../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../config/services/dialog_service.dart';
 import '../../../config/services/banner_service.dart';
 import '../../user_dashboard/animations/background_animation.dart';
+import '../widgets/export_setting.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/settings_tile.dart';
 
@@ -468,6 +469,7 @@ class SystemSettings extends StatelessWidget {
                   ),
               ],
             ),
+            const ExportSettings(),
             const SizedBox(height: 20),
             SettingsSection(
               title: 'Sistema',

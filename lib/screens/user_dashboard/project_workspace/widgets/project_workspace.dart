@@ -19,6 +19,7 @@ import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../config/services/dialog_service.dart';
 import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/export_service.dart';
+import '../../../settings/widgets/settings_provider.dart';
 import '../views/workarea.dart';
 
 class ProjectWorkspace extends StatefulWidget {
@@ -126,8 +127,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
 
     if (fileState is FileSystemLoaded && fileState.activeFileId != null) {
       final fileName = _getCurrentFileName(fileState);
-
-      // 1. PREPARAZIONE: Genera i byte dell'immagine, indipendentemente dalla destinazione.
       final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
 
       if (pngBytes == null) {
@@ -135,22 +134,45 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
         return;
       }
 
+      final settingsProvider = innerContext.read<SettingsProvider>();
       final authState = innerContext.read<AuthenticationBloc>().state;
-      if (authState.user.driveConnected) {
-        // 2a. AZIONE DRIVE: Invia l'evento al BLoC con i dati pronti.
-        innerContext.read<AuthenticationBloc>().add(
-          ExportFlowchartToDriveRequested(
-            fileName: '$fileName.png',
-            fileBytes: pngBytes,
-          ),
-        );
-      } else {
-        // 2b. AZIONE LOCALE: Chiama il nuovo metodo di download che gestisce anche i dialoghi.
-        await ExportService.downloadFileWithDialog(
-          context: innerContext,
-          bytes: pngBytes,
-          fileName: fileName,
-        );
+      final exportPreference = settingsProvider.exportPreference;
+
+      switch (exportPreference) {
+        case ExportPreference.local:
+          await ExportService.downloadFileWithDialog(
+            context: innerContext,
+            bytes: pngBytes,
+            fileName: fileName,
+          );
+          break;
+
+        case ExportPreference.drive:
+          if (authState.user.driveConnected) {
+            innerContext.read<AuthenticationBloc>().add(
+              ExportFlowchartToDriveRequested(
+                fileName: '$fileName.png',
+                fileBytes: pngBytes,
+              ),
+            );
+          } else {
+            // Fallback: se Drive non è connesso, chiedi comunque all'utente.
+            await DialogService.showExportLocationDialog(
+              context: innerContext,
+              pngBytes: pngBytes,
+              fileName: fileName,
+            );
+          }
+          break;
+
+        case ExportPreference.alwaysAsk:
+        // LA CHIAMATA ORA È PIÙ PULITA E USA IL SERVIZIO
+          await DialogService.showExportLocationDialog(
+            context: innerContext,
+            pngBytes: pngBytes,
+            fileName: fileName,
+          );
+          break;
       }
     } else {
       if (!mounted) return;

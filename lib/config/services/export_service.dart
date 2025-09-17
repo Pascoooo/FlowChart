@@ -7,17 +7,17 @@ import 'package:universal_html/html.dart' as html;
 
 /// Servizio con funzioni di utilità per l'esportazione.
 class ExportService {
-
   /// **Metodo di Preparazione Universale**
   /// Genera i byte di un'immagine PNG da un widget identificato da una GlobalKey.
   /// Restituisce Uint8List in caso di successo, altrimenti null.
   static Future<Uint8List?> generatePngBytes({required GlobalKey key}) async {
     try {
-      final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary =
+          key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
         throw Exception('Render boundary non trovato.');
       }
-      // Aumenta il pixelRatio per una migliore qualità dell'immagine
+      // Aumenta il pixelRatio per una qualità decisamente superiore (ottimo per display retina)
       final image = await boundary.toImage(pixelRatio: 1.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
