@@ -10,12 +10,10 @@ import '../../screens/settings/widgets/settings_provider.dart';
 import 'export_service.dart';
 
 /// **Servizio per la Gestione di Dialoghi Nativi**
-///
-/// Questa classe fornisce metodi statici per mostrare dialoghi modali con un'estetica
-/// nativa iOS, utilizzando i widget di Cupertino e garantendo un'esperienza utente
-/// coerente e professionale.
 class DialogService {
-  /// Mostra un dialogo informativo di base in stile Cupertino.
+  /// **RIPRISTINATO**: Mostra un dialogo informativo di base in stile Cupertino.
+  /// La funzione è stata riportata alla sua versione originale per evitare
+  /// qualsiasi effetto collaterale non desiderato.
   static Future<void> showInfoDialog(
       BuildContext context, {
         required String title,
@@ -24,37 +22,39 @@ class DialogService {
         Color? iconColor,
         String closeText = 'OK',
       }) {
-    // Utilizza il metodo base per la costruzione del dialogo.
-    return _showBaseCupertinoDialog<void>(
+    return showCupertinoDialog<void>(
       context: context,
-      title: title,
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            const SizedBox(height: 12),
-            Icon(icon,
-                size: 48,
-                color: iconColor ??
-                    CupertinoDynamicColor.resolve(
-                        CupertinoColors.label, context)),
-            const SizedBox(height: 8),
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              const SizedBox(height: 12),
+              Icon(icon,
+                  size: 48,
+                  color: iconColor ??
+                      CupertinoDynamicColor.resolve(
+                          CupertinoColors.label, context)),
+              const SizedBox(height: 8),
+            ],
+            if (message != null) Text(message),
           ],
-          if (message != null) Text(message),
+        ),
+        actions: <CupertinoDialogAction>[
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(closeText),
+          ),
         ],
       ),
-      actions: [
-        // Azione di chiusura di default.
-        CupertinoDialogAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(closeText),
-        ),
-      ],
     );
   }
 
-  /// Mostra un dialogo di conferma (sì/no) in stile Cupertino.
+  /// **RIPRISTINATO**: Mostra un dialogo di conferma (sì/no) in stile Cupertino.
+  /// La funzione è stata riportata alla sua versione originale per garantire
+  /// il corretto funzionamento dei valori booleani di ritorno.
   static Future<bool?> showConfirmationDialog(
       BuildContext context, {
         required String title,
@@ -62,27 +62,28 @@ class DialogService {
         String confirmText = 'Conferma',
         String cancelText = 'Annulla',
       }) {
-    // Utilizza il metodo base per la costruzione del dialogo.
-    return _showBaseCupertinoDialog<bool>(
+    return showCupertinoDialog<bool>(
       context: context,
-      title: title,
-      content: Text(message),
-      actions: [
-        CupertinoDialogAction(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(cancelText),
-        ),
-        CupertinoDialogAction(
-          isDefaultAction: true,
-          isDestructiveAction: true, // Stile rosso per azioni distruttive.
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(confirmText),
-        ),
-      ],
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: <CupertinoDialogAction>[
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(cancelText),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(confirmText),
+          ),
+        ],
+      ),
     );
   }
 
-  /// Dialogo con campo di input (invariato come da richiesta).
+  /// Dialogo con campo di input (invariato).
   static Future<String?> showInputDialog(
       BuildContext context, {
         required String title,
@@ -198,32 +199,26 @@ class DialogService {
     );
   }
 
-
-  /// **Dialogo di Esportazione (Refactored)**
-  /// Mostra un dialogo modale centrato per scegliere la destinazione del file.
-  /// L'interfaccia è pulita, professionale e si integra perfettamente con l'estetica iOS.
+  /// **Dialogo di Esportazione con le Modifiche Richieste**
   static Future<void> showExportLocationDialog({
     required BuildContext context,
     required Uint8List pngBytes,
     required String fileName,
   }) {
-    // Funzione interna per gestire la logica di esportazione e chiusura del dialogo.
     void handleExport(BuildContext dialogContext, ExportPreference choice,
         bool shouldRemember) {
       if (shouldRemember) {
-        // Salva la preferenza se l'utente ha spuntato la checkbox.
         dialogContext.read<SettingsProvider>().updateExportPreference(choice);
       }
-      Navigator.of(dialogContext).pop(); // Chiude il dialogo.
+      Navigator.of(dialogContext).pop();
 
-      // Avvia l'azione di esportazione scelta.
       if (choice == ExportPreference.local) {
         ExportService.downloadFileWithDialog(
             context: context, bytes: pngBytes, fileName: fileName);
       } else if (choice == ExportPreference.drive) {
         context.read<AuthenticationBloc>().add(
           ExportFlowchartToDriveRequested(
-              fileName: '${fileName}.png', fileBytes: pngBytes),
+              fileName: '$fileName.png', fileBytes: pngBytes),
         );
       }
     }
@@ -236,48 +231,47 @@ class DialogService {
             dialogContext.watch<AuthenticationBloc>().state.user.driveConnected;
         bool rememberChoice = false;
 
-        // StatefulBuilder è ideale per gestire lo stato locale (la checkbox)
-        // senza dover creare un intero StatefulWidget.
         return StatefulBuilder(builder: (context, setState) {
           return CupertinoAlertDialog(
             title: const Text('Salva Esportazione'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 4),
-                const Text('Scegli dove salvare il diagramma.'),
-                const SizedBox(height: 20),
-                // Layout orizzontale per le opzioni di salvataggio.
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildExportOptionButton(
-                      context: context,
-                      icon: FontAwesomeIcons.computer,
-                      label: 'Dispositivo',
-                      onTap: () => handleExport(
-                          dialogContext, ExportPreference.local, rememberChoice),
-                    ),
-                    _buildExportOptionButton(
-                      context: context,
-                      icon: FontAwesomeIcons.googleDrive,
-                      label: 'Google Drive',
-                      isEnabled: isDriveConnected,
-                      onTap: () => handleExport(
-                          dialogContext, ExportPreference.drive, rememberChoice),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                // Widget per la checkbox "Ricorda la mia scelta".
-                _buildRememberChoiceCheckbox(
-                  context: context,
-                  value: rememberChoice,
-                  onChanged: (newValue) {
-                    setState(() => rememberChoice = newValue);
-                  },
-                ),
-              ],
+            content: SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 4),
+                  const Text('Scegli dove salvare il diagramma.'),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildExportOptionButton(
+                        context: context,
+                        icon: FontAwesomeIcons.computer,
+                        label: 'Dispositivo',
+                        onTap: () => handleExport(dialogContext,
+                            ExportPreference.local, rememberChoice),
+                      ),
+                      _buildExportOptionButton(
+                        context: context,
+                        icon: FontAwesomeIcons.googleDrive,
+                        label: 'Google Drive',
+                        isEnabled: isDriveConnected,
+                        onTap: () => handleExport(dialogContext,
+                            ExportPreference.drive, rememberChoice),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildRememberChoiceCheckbox(
+                    context: context,
+                    value: rememberChoice,
+                    onChanged: (newValue) {
+                      setState(() => rememberChoice = newValue);
+                    },
+                  ),
+                ],
+              ),
             ),
             actions: [
               CupertinoDialogAction(
@@ -291,26 +285,7 @@ class DialogService {
     );
   }
 
-  /// **Metodo Base Privato (DRY)**
-  /// Centralizza la logica per mostrare un `CupertinoAlertDialog`,
-  /// riducendo la duplicazione del codice.
-  static Future<T?> _showBaseCupertinoDialog<T>({
-    required BuildContext context,
-    required String title,
-    Widget? content,
-    List<CupertinoDialogAction> actions = const [],
-  }) {
-    return showCupertinoDialog<T>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: content,
-        actions: actions,
-      ),
-    );
-  }
-
-  /// Helper per costruire i pulsanti di opzione del dialogo di esportazione.
+  /// Helper per i pulsanti di opzione.
   static Widget _buildExportOptionButton({
     required BuildContext context,
     required IconData icon,
@@ -332,26 +307,55 @@ class DialogService {
           children: [
             Icon(icon, size: 32, color: isEnabled ? activeColor : inactiveColor),
             const SizedBox(height: 8),
-            Text(label, style: TextStyle(color: isEnabled ? activeColor : inactiveColor)),
+            Text(label,
+                style:
+                TextStyle(color: isEnabled ? activeColor : inactiveColor)),
           ],
         ),
       ),
     );
   }
 
-  /// Helper per costruire la checkbox "Ricorda la mia scelta".
+  /// **NUOVA IMPLEMENTAZIONE**: Checkbox che si trasforma in icona animata.
   static Widget _buildRememberChoiceCheckbox({
     required BuildContext context,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    final secondaryLabelColor = CupertinoDynamicColor.resolve(
-        CupertinoColors.secondaryLabel, context);
+    final secondaryLabelColor =
+    CupertinoDynamicColor.resolve(CupertinoColors.secondaryLabel, context);
+    final activeColor =
+    CupertinoDynamicColor.resolve(CupertinoColors.activeBlue, context);
+    final borderColor =
+    CupertinoDynamicColor.resolve(CupertinoColors.placeholderText, context);
+
+    // Widget per lo stato "non selezionato" (la checkbox vuota)
+    Widget uncheckedWidget = Container(
+      key: const ValueKey('unchecked'), // Key per l'animazione
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderColor, width: 1.5),
+      ),
+    );
+
+    // Widget per lo stato "selezionato" (l'icona)
+    Widget checkedWidget = SizedBox(
+      key: const ValueKey('checked'), // Key per l'animazione
+      width: 22,
+      height: 22,
+      child: Icon(
+        FontAwesomeIcons., // Icona FontAwesome
+        color: activeColor,
+        size: 22,
+      ),
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Rende l'intera riga cliccabile per una migliore UX.
         GestureDetector(
           onTap: () => onChanged(!value),
           child: Material(
@@ -359,28 +363,26 @@ class DialogService {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Checkbox personalizzata in stile iOS.
-                SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: Transform.scale(
-                    scale: 0.8,
-                    child: Checkbox(
-                      value: value,
-                      onChanged: (v) => onChanged(v ?? false),
-                      activeColor: CupertinoColors.activeGreen,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6)),
-                    ),
-                  ),
+                // AnimatedSwitcher gestisce la transizione tra i due stati
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) {
+                    return ScaleTransition(
+                      scale: animation,
+                      child: FadeTransition(
+                        opacity: animation,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: value ? checkedWidget : uncheckedWidget,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 const Text('Ricorda la mia scelta'),
               ],
             ),
           ),
         ),
-        // Messaggio informativo che appare con un'animazione.
         AnimatedSize(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
