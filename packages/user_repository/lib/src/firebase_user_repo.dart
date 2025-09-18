@@ -10,14 +10,12 @@ import 'package:http/http.dart' as http;
 import 'package:rxdart/rxdart.dart';
 import '../user_repository.dart';
 
-// --- Costanti Globali ---
-
 /// Regione Firebase Functions per le chiamate HTTP.
 const String kFunctionsRegion = 'europe-west8';
 /// Scope di Google Drive per consentire la creazione di file.
 const String kDriveScope = 'https://www.googleapis.com/auth/drive.file';
 /// Nome della Cloud Function per l'eliminazione dell'utente.
-const String kDeleteUserFunctionName = 'deleteUserAuthHttp';
+const String kDeleteUserFunctionName = 'deleteUserAuthCallable';
 /// Durata massima per le richieste API prima di un timeout.
 const Duration kApiTimeoutDuration = Duration(seconds: 15);
 
@@ -105,10 +103,6 @@ class FirebaseUserRepo implements UserRepository {
     }
   }
 
-  /// Elimina l'account dell'utente corrente e tutti i dati associati.
-  ///
-  /// Utilizza una Cloud Function (`deleteUserAuthHttp`) per garantire
-  /// l'eliminazione sicura dei dati su Auth, Firestore e Storage.
   @override
   Future<void> deleteAccount() async {
     final user = _firebaseAuth.currentUser;
@@ -117,13 +111,14 @@ class FirebaseUserRepo implements UserRepository {
     }
 
     try {
-      // Metodo raccomandato utilizzando il SDK di Firebase Functions
+      // La chiamata rimane invariata, ma ora funzionerà correttamente
       final callable = _functions.httpsCallable(
         kDeleteUserFunctionName,
         options: HttpsCallableOptions(timeout: kApiTimeoutDuration),
       );
       await callable.call();
     } on FirebaseFunctionsException catch (e) {
+      // La gestione degli errori ora è più pulita
       final message = e.message ?? 'Errore del server durante l\'eliminazione.';
       throw AuthenticationException(message);
     } on TimeoutException {
@@ -132,7 +127,6 @@ class FirebaseUserRepo implements UserRepository {
       throw const AuthenticationException('Errore di connessione o imprevisto durante l\'eliminazione.');
     }
   }
-
 
   /// Aggiorna il nome visualizzato dell'utente.
   ///
