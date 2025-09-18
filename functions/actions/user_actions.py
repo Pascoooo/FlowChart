@@ -1,62 +1,53 @@
-# user_actions.py
-
+"""
+Modulo contenente le azioni logiche per la gestione degli utenti,
+da richiamare nelle Cloud Functions.
+"""
 from firebase_admin import auth, firestore, db, storage
 
 class UserActionException(Exception):
+    """Eccezione custom per errori durante le azioni sull'utente."""
     def __init__(self, message, status_code):
         super().__init__(message)
         self.status_code = status_code
 
 def delete_firebase_user(uid: str) -> None:
+    """
+    Esegue un'eliminazione a cascata di tutti i dati di un utente
+    attraverso i servizi Firebase: Auth, Firestore, RTDB e Storage.
+    """
     try:
         print(f"Inizio processo di eliminazione completo per UID: {uid}")
 
-        # NUOVO: 1. Eliminazione file da Firebase Storage
-        bucket = storage.bucket() # Ottiene il bucket di default
-
-        # Elimina la foto profilo (se esiste)
+        # 1. Eliminazione file da Firebase Storage
+        bucket = storage.bucket()
         profile_pic_blob = bucket.blob(f"profile_pictures/{uid}.jpg")
         if profile_pic_blob.exists():
-            print(f"Eliminazione foto profilo: {profile_pic_blob.name}")
             profile_pic_blob.delete()
             print(f"Foto profilo per l'utente {uid} eliminata.")
 
-        # Elimina tutti i file in una potenziale cartella utente (es: 'users/uid/')
-        # Questo elimina in modo ricorsivo tutti i file e le sottocartelle
-        blobs_to_delete = list(bucket.list_blobs(prefix=f"users/{uid}/"))
-        if blobs_to_delete:
-            print(f"Trovati {len(blobs_to_delete)} file nella cartella 'users/{uid}/'. Inizio eliminazione.")
-            for blob in blobs_to_delete:
-                blob.delete()
-            print(f"Tutti i file nella cartella 'users/{uid}/' sono stati eliminati.")
-
-        # 2. Eliminazione dati da Firestore
+        # 2. Eliminazione dati da Firestore (ricorsiva)
         firestore_client = firestore.client()
         user_doc_ref = firestore_client.collection('users').document(uid)
-
-        print(f"Eliminazione ricorsiva del documento Firestore: users/{uid}")
         firestore_client.recursive_delete(user_doc_ref)
         print(f"Dati Firestore per l'utente {uid} eliminati.")
 
         # 3. Eliminazione dati da Realtime Database
-        print(f"Eliminazione dati da Realtime Database: users/{uid}")
-        rtdb_ref = db.reference(f'users/{uid}')
-        rtdb_ref.delete()
+        db.reference(f'users/{uid}').delete()
+        db.reference(f'sessions/{uid}').delete()
         print(f"Dati Realtime Database per l'utente {uid} eliminati.")
 
-        # 4. Eliminazione account utente da Firebase Authentication (ultimo passo)
-        print(f"Eliminazione utente da Firebase Auth: {uid}")
+        # 4. Eliminazione account da Firebase Authentication (ultimo passo)
         auth.delete_user(uid)
         print(f"Utente {uid} eliminato con successo da Firebase Auth.")
 
     except auth.UserNotFoundError:
         raise UserActionException(
-            message="User not found in Authentication or has already been deleted.",
+            message="Utente non trovato in Firebase Authentication.",
             status_code=404
         )
     except Exception as e:
-        print(f"Errore durante l'eliminazione completa per l'UID {uid}: {e}")
+        print(f"Errore imprevisto durante l'eliminazione per l'UID {uid}: {e}")
         raise UserActionException(
-            message="An internal error occurred while deleting the user data.",
+            message="Errore interno del server durante l'eliminazione dei dati.",
             status_code=500
         )
