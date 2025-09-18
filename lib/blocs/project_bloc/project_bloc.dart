@@ -1,183 +1,171 @@
-// pascoooo/flowchart/FlowChart-rework/lib/blocs/project_bloc/project_bloc.dart
-
 import 'dart:async';
+import 'dart:convert';
 import 'package:bloc/bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'project_event.dart';
 import 'project_state.dart';
 
+/// Gestisce lo stato e la logica di business per i progetti, orchestrando
+/// il ciclo di vita delle sessioni di lavoro secondo l'architettura User-Driven Recovery.
 class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   final ProjectRepo projectRepository;
-
   StreamSubscription? _projectsSubscription;
-  Map<String, DateTime> _timestamps = {};
 
-  ProjectBloc({
-    required this.projectRepository,
-  }) : super(const ProjectInitial()) {
+  ProjectBloc({required this.projectRepository}) : super(const ProjectInitial()) {
+    // Eventi del ciclo di vita della sessione
+    on<CheckForUnsavedSessions>(_onCheckForUnsavedSessions);
+    on<RecoverSession>(_onRecoverSession);
+    on<DiscardSession>(_onDiscardSession);
     on<LoadProjects>(_onLoadProjects);
+    on<StartSessionAndSelectProject>(_onStartSessionAndSelectProject);
+    on<LeaveProject>(_onLeaveProject);
+
+    // Eventi di notifica e CRUD
     on<ProjectsUpdated>(_onProjectsUpdated);
-    on<SelectProject>(_onSelectProject);
     on<CreateProject>(_onCreateProject);
     on<DeleteProject>(_onDeleteProject);
     on<RenameProject>(_onRenameProject);
-    on<DeselectProject>(_onDeselectProject);
-    on<ProjectsStreamFailed>(_onProjectsStreamFailed);
   }
 
-  Future<void> _onLoadProjects(LoadProjects event, Emitter<ProjectState> emit) async {
-    emit(const ProjectLoading());
-    await _projectsSubscription?.cancel();
+  /// 1. Controlla se ci sono sessioni non salvate all'avvio dell'app.
+  Future<void> _onCheckForUnsavedSessions(CheckForUnsavedSessions event, Emitter<ProjectState> emit) async {
+    emit(const ProjectLoading(message: 'Verifica dati...'));
     try {
-      _timestamps = await projectRepository.getUserTimestamps();
-      _projectsSubscription = projectRepository.projects().listen((projects) {
-        add(ProjectsUpdated(projects));
-      }, onError: (error) {
-        add(ProjectsStreamFailed(error));
-      });
+      final pendingSession = await projectRepository.checkForPendingSessions();
+      if (pendingSession != null) {
+        emit(UnsavedChangesFound(
+            projectId: pendingSession.projectId,
+            projectName: pendingSession.projectName));
+      } else {
+        add(const LoadProjects()); // Nessuna sessione trovata, carica i progetti normalmente
+      }
     } catch (e) {
-      emit(const ProjectError(message: 'Impossibile caricare i dati iniziali.'));
+      emit(const ProjectError(message: 'Impossibile verificare le sessioni.'));
     }
   }
 
+  /// 2a. L'utente ha scelto di recuperare la sessione.
+  Future<void> _onRecoverSession(RecoverSession event, Emitter<ProjectState> emit) async {
+    emit(const ProjectLoading(message: 'Recupero in corso...'));
+    try {
+      await projectRepository.recoverSession(event.projectId);
+      add(const LoadProjects()); // Dopo il recupero, carica i progetti
+    } catch (e) {
+      emit(const ProjectError(message: 'Errore durante il recupero della sessione.'));
+    }
+  }
+
+  /// 2b. L'utente ha scelto di scartare la sessione.
+  Future<void> _onDiscardSession(DiscardSession event, Emitter<ProjectState> emit) async {
+    emit(const ProjectLoading(message: 'Eliminazione dati...'));
+    try {
+      await projectRepository.discardSession(event.projectId);
+      add(const LoadProjects()); // Dopo aver scartato, carica i progetti
+    } catch (e) {
+      emit(const ProjectError(message: 'Errore durante l\'eliminazione della sessione.'));
+    }
+  }
+
+  /// 3. Carica la lista dei progetti e si mette in ascolto di aggiornamenti.
+  Future<void> _onLoadProjects(LoadProjects event, Emitter<ProjectState> emit) async {
+    emit(const ProjectLoading(message: 'Caricamento progetti...'));
+    await _projectsSubscription?.cancel();
+    _projectsSubscription = projectRepository.projects().listen(
+            (projects) => add(ProjectsUpdated(projects)),
+        onError: (_) => emit(const ProjectError(message: 'Errore di connessione.'))
+    );
+  }
+
+  /// 4. Aggiorna lo stato quando lo stream di Firestore emette nuovi dati.
   void _onProjectsUpdated(ProjectsUpdated event, Emitter<ProjectState> emit) {
-    MyProject? currentSelectedProject;
-    if (state is ProjectsLoaded) {
-      currentSelectedProject = (state as ProjectsLoaded).selectedProject;
-    }
-
-    final projects = event.projects;
-    projects.sort((a, b) {
-      final timeA = _timestamps[a.projectId] ?? a.updatedAt;
-      final timeB = _timestamps[b.projectId] ?? b.updatedAt;
-      return timeB.compareTo(timeA);
-    });
-
-    if (currentSelectedProject != null) {
-      try {
-        currentSelectedProject = projects.firstWhere((p) => p.projectId == currentSelectedProject!.projectId);
-      } catch (e) {
-        currentSelectedProject = null;
-      }
-    }
-
-    emit(ProjectsLoaded(projects: projects, selectedProject: currentSelectedProject));
+    // Ordina per data di modifica, la sorgente della verità ora è solo Firestore
+    final projects = event.projects..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    emit(ProjectsLoaded(projects: projects));
   }
 
-  Future<void> _onSelectProject(SelectProject event, Emitter<ProjectState> emit) async {
-    if (state is ProjectsLoaded) {
-      final currentState = state as ProjectsLoaded;
-      _timestamps[event.project.projectId] = DateTime.now();
+  /// 5. Prepara il "banco di lavoro" e naviga nel workspace.
+  Future<void> _onStartSessionAndSelectProject(StartSessionAndSelectProject event, Emitter<ProjectState> emit) async {
+    if (state is! ProjectsLoaded) return;
+    final currentState = state as ProjectsLoaded;
 
-      try {
-        await projectRepository.saveUserTimestamps(_timestamps);
-      } catch (e) {
-        emit(currentState.copyWith(error: "Errore durante la sincronizzazione."));
-      }
-
-      final updatedList = List<MyProject>.from(currentState.projects);
-      updatedList.sort((a, b) {
-        final timeA = _timestamps[a.projectId] ?? a.updatedAt;
-        final timeB = _timestamps[b.projectId] ?? b.updatedAt;
-        return timeB.compareTo(timeA);
-      });
-      emit(currentState.copyWith(projects: updatedList, selectedProject: event.project));
+    emit(const ProjectLoading(message: 'Preparazione ambiente...'));
+    try {
+      await projectRepository.startWorkspaceSession(event.project);
+      emit(currentState.copyWith(selectedProject: event.project));
+    } catch (e) {
+      emit(currentState.copyWith(error: 'Impossibile avviare la sessione di lavoro.'));
     }
   }
 
+  /// 6. Salva il "banco di lavoro" nell'"archivio" e torna alla dashboard.
+  Future<void> _onLeaveProject(LeaveProject event, Emitter<ProjectState> emit) async {
+    if (state is! ProjectsLoaded) return;
+    final currentState = state as ProjectsLoaded;
+    final projectId = currentState.selectedProject?.projectId;
+
+    if (projectId == null) return;
+
+    emit(const ProjectLoading(message: 'Salvataggio in corso...'));
+    try {
+      await projectRepository.endWorkspaceSession(projectId);
+      // Dopo il salvataggio, torna allo stato con la lista dei progetti senza nessuna selezione
+      emit(currentState.copyWith(clearSelectedProject: true));
+    } catch (e) {
+      emit(currentState.copyWith(error: 'Errore critico durante il salvataggio.'));
+    }
+  }
+
+  /// Gestisce la creazione di un nuovo progetto.
   Future<void> _onCreateProject(CreateProject event, Emitter<ProjectState> emit) async {
-    final currentState = state;
-    emit(const ProjectLoading());
     try {
       final newProject = await projectRepository.createProject(name: event.projectName.trim());
+
+      // Crea il contenuto di default con la forma "Start" per il file 'main'
+      final String startShapeId = 'start_${DateTime.now().microsecondsSinceEpoch}';
+      final Map<String, dynamic> defaultShapeData = {
+        'id': startShapeId, 'type': 'circle', 'x': 120.0, 'y': 120.0,
+        'properties': {'width': 90.0, 'height': 90.0, 'text': 'Start'},
+      };
+      final String initialContent = jsonEncode([defaultShapeData]);
+
       await projectRepository.addFileToProject(
-        projectId: newProject.projectId,
-        fileName: 'main',
-        content: '',
+          projectId: newProject.projectId,
+          fileName: 'main',
+          content: initialContent
       );
-      _timestamps[newProject.projectId] = newProject.updatedAt;
 
-      // Salva immediatamente anche alla creazione
-      await projectRepository.saveUserTimestamps(_timestamps);
-
-      List<MyProject> updatedList;
-      if (currentState is ProjectsLoaded) {
-        updatedList = List<MyProject>.from(currentState.projects)..add(newProject);
-      } else {
-        updatedList = [newProject];
-      }
-
-      updatedList.sort((a, b) {
-        final timeA = _timestamps[a.projectId] ?? a.updatedAt;
-        final timeB = _timestamps[b.projectId] ?? b.updatedAt;
-        return timeB.compareTo(timeA);
-      });
-
-      emit(ProjectsLoaded(projects: updatedList, selectedProject: newProject));
+      // Dopo la creazione, avvia direttamente la sessione ed entra nel nuovo progetto
+      add(StartSessionAndSelectProject(project: newProject));
     } catch (e) {
-      emit(const ProjectError(message: 'Errore nella creazione del progetto.'));
-      if (currentState is ProjectsLoaded) {
-        emit(currentState);
+      if (state is ProjectsLoaded) {
+        emit((state as ProjectsLoaded).copyWith(error: 'Errore nella creazione del progetto.'));
+      } else {
+        emit(const ProjectError(message: 'Errore nella creazione del progetto.'));
       }
     }
   }
 
+  /// Gestisce l'eliminazione di un progetto.
   Future<void> _onDeleteProject(DeleteProject event, Emitter<ProjectState> emit) async {
-    if (state is! ProjectsLoaded) return;
-
-    final currentState = state as ProjectsLoaded;
-    final originalProjects = List<MyProject>.from(currentState.projects);
-    final updatedProjects = originalProjects.where((p) => p.projectId != event.projectId).toList();
-
-    emit(currentState.copyWith(
-      projects: updatedProjects,
-      clearSelectedProject: currentState.selectedProject?.projectId == event.projectId,
-    ));
-
     try {
       await projectRepository.deleteProject(projectId: event.projectId);
     } catch (e) {
-      emit(currentState.copyWith(
-        projects: originalProjects,
-        error: 'Errore nella cancellazione del progetto.',
-      ));
+      if (state is ProjectsLoaded) {
+        emit((state as ProjectsLoaded).copyWith(error: 'Errore durante l\'eliminazione.'));
+      }
     }
   }
 
+  /// Gestisce la rinomina di un progetto.
   Future<void> _onRenameProject(RenameProject event, Emitter<ProjectState> emit) async {
-    if (state is! ProjectsLoaded) return;
-
-    final currentState = state as ProjectsLoaded;
-    final originalProjects = List<MyProject>.from(currentState.projects);
-    final updatedProjects = currentState.projects.map((project) {
-      if (project.projectId == event.projectId) {
-        return project.copyWith(name: event.newName.trim());
-      }
-      return project;
-    }).toList();
-
-    emit(currentState.copyWith(projects: updatedProjects));
-
     try {
       await projectRepository.renameProject(
           projectId: event.projectId, newName: event.newName.trim());
     } catch (e) {
-      emit(currentState.copyWith(
-        projects: originalProjects,
-        error: 'Errore durante la rinomina del progetto.',
-      ));
+      if (state is ProjectsLoaded) {
+        emit((state as ProjectsLoaded).copyWith(error: 'Errore durante la rinomina.'));
+      }
     }
-  }
-
-  void _onDeselectProject(DeselectProject event, Emitter<ProjectState> emit) {
-    if (state is ProjectsLoaded) {
-      emit((state as ProjectsLoaded).copyWith(clearSelectedProject: true));
-    }
-  }
-
-  void _onProjectsStreamFailed(ProjectsStreamFailed event, Emitter<ProjectState> emit) {
-    if (state is ProjectError) return;
-    emit(const ProjectError(message: 'Errore di connessione.'));
   }
 
   @override

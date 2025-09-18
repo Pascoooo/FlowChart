@@ -33,7 +33,7 @@ class SettingsSection extends StatelessWidget {
                   letterSpacing: 1.2,
                 ),
               ),
-              const SizedBox(width: 12), // Spazio tra titolo ed etichetta
+              const SizedBox(width: 12),
               if (status != null) status!,
             ],
           ),

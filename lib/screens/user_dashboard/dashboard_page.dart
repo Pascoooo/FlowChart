@@ -1,3 +1,4 @@
+import 'package:flowchart_thesis/config/services/dialog_service.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_selection/views/project_selector.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/project_workspace.dart';
 import 'package:flutter/material.dart';
@@ -23,36 +24,66 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    context.read<ProjectBloc>().add(const LoadProjects());
+    // NUOVO PUNTO DI INIZIO: Avvia il controllo per sessioni non salvate.
+    context.read<ProjectBloc>().add(const CheckForUnsavedSessions());
+  }
+
+  /// Mostra il dialogo di recupero quando viene rilevata una sessione non salvata.
+  void _showRecoveryDialog(BuildContext context, UnsavedChangesFound state) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final bool? wantsToRecover = await DialogService.showConfirmationDialog(
+        context,
+        title: "Lavoro non salvato",
+        message:
+        "Abbiamo trovato una sessione di lavoro non salvata per il progetto '${state.projectName}'. Vuoi recuperarla?",
+        confirmText: "Recupera",
+        cancelText: "Scarta",
+      );
+
+      if (!mounted) return;
+
+      if (wantsToRecover == true) {
+        context.read<ProjectBloc>().add(RecoverSession(projectId: state.projectId));
+      } else {
+        // L'utente ha premuto "Scarta" o ha chiuso il dialogo
+        context.read<ProjectBloc>().add(DiscardSession(projectId: state.projectId));
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       body: Stack(
         children: [
           const AnimatedBackground(),
           BlocListener<ProjectBloc, ProjectState>(
             listener: (context, state) {
-              if (state is ProjectsLoaded && state.error != null) {
+              // Mostra il dialogo di recupero quando lo stato è UnsavedChangesFound
+              if (state is UnsavedChangesFound) {
+                _showRecoveryDialog(context, state);
+              }
+              // Mostra un banner per errori non bloccanti
+              else if (state is ProjectsLoaded && state.error != null) {
                 BannerService.showError(context, state.error!);
               }
             },
             child: BlocBuilder<ProjectBloc, ProjectState>(
               builder: (context, state) {
-                switch (state) {
-                  case ProjectLoading():
-                    return _buildLoadingView(theme);
-                  case ProjectError():
-                    return ErrorPage(error: state.message);
-                  case ProjectsLoaded():
-                    return _buildProjectsLoadedView(state, theme);
-                  case ProjectInitial():
-                    return _buildLoadingView(theme);
-                  default:
-                    return _buildLoadingView(theme);
+                // Gestisce tutti gli stati di caricamento e iniziali
+                if (state is ProjectInitial || state is ProjectLoading || state is UnsavedChangesFound) {
+                  return const ModernLoadingIndicator();
                 }
+                // Gestisce gli errori bloccanti
+                if (state is ProjectError) {
+                  return ErrorPage(error: state.message);
+                }
+                // Gestisce lo stato principale con i dati caricati
+                if (state is ProjectsLoaded) {
+                  return _buildProjectsLoadedView(state);
+                }
+                // Fallback per ogni altro caso
+                return const ModernLoadingIndicator();
               },
             ),
           ),
@@ -61,11 +92,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildLoadingView(ThemeData theme) {
-    return const ModernLoadingIndicator();
-  }
-
-  Widget _buildProjectsLoadedView(ProjectsLoaded state, ThemeData theme) {
+  Widget _buildProjectsLoadedView(ProjectsLoaded state) {
     return AnimatedSwitcher(
       duration: _kTransitionDuration,
       transitionBuilder: (Widget child, Animation<double> animation) {
@@ -73,13 +100,8 @@ class _DashboardPageState extends State<DashboardPage> {
         final offset = isSelector ? const Offset(-1.0, 0.0) : const Offset(1.0, 0.0);
 
         return SlideTransition(
-          position: Tween<Offset>(
-            begin: offset,
-            end: Offset.zero,
-          ).animate(CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-          )),
+          position: Tween<Offset>(begin: offset, end: Offset.zero)
+              .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
           child: FadeTransition(opacity: animation, child: child),
         );
       },
@@ -92,7 +114,7 @@ class _DashboardPageState extends State<DashboardPage> {
         key: const ValueKey('project-selector'),
         projects: state.projects,
         onProjectSelected: (project) {
-          context.read<ProjectBloc>().add(SelectProject(project: project));
+          context.read<ProjectBloc>().add(StartSessionAndSelectProject(project: project));
         },
         onCreateProject: (name) {
           context.read<ProjectBloc>().add(CreateProject(projectName: name));

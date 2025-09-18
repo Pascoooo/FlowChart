@@ -50,11 +50,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
     super.initState();
     _initAnimations();
     _slideInController.forward();
-
-    // Aggiunge un listener per il salvataggio prima di chiudere la pagina
-    html.window.onBeforeUnload.listen((event) async {
-      await _saveCurrentFileToFirestore();
-    });
   }
 
   void _initAnimations() {
@@ -103,33 +98,14 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
     ));
   }
 
-  // MODIFICATO: Metodo di salvataggio più robusto
-  Future<void> _saveCurrentFileToFirestore() async {
-    _debounce?.cancel(); // Annulla qualsiasi salvataggio RTDB in attesa
-    if (!mounted || _currentFileId == null) return;
-
-    final flowchartState = context.read<FlowchartBloc>().state;
-    if (flowchartState is FlowchartLoaded) {
-      final content = flowchartState.toJson();
-      // Chiamata al nuovo metodo del repository che gestisce tutto
-      await context.read<ProjectBloc>().projectRepository.finalizeFileContent(
-        widget.selectedProject.projectId,
-        _currentFileId!,
-        content,
-      );
-    }
-  }
-
   @override
   void dispose() {
     _debounce?.cancel();
     _rtdbSubscription?.cancel();
-    _saveCurrentFileToFirestore(); // Salva un'ultima volta
     _slideInController.dispose();
     super.dispose();
   }
 
-  // ... (metodi _getCurrentFileName, _onEdit, _handleExport, _toggleGrid invariati) ...
   String _getCurrentFileName(FileSystemLoaded state) {
     if (state.activeFileId != null && state.files.isNotEmpty) {
       final matchingFile = state.files.firstWhere(
@@ -147,8 +123,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
 
     html.WindowBase popup =
     html.window.open(url.toString(), 'editor', 'width=1200,height=800');
-    if (popup.closed!) {
-      throw ('Popup bloccati');
+    if (popup.closed ?? true) {
+      BannerService.showError(context, 'Popup bloccati. Abilita i popup per continuare.');
     }
   }
 
@@ -236,7 +212,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
         ],
         child: MultiBlocListener(
           listeners: [
-            // ... (listener per AuthenticationBloc invariato) ...
             BlocListener<AuthenticationBloc, AuthenticationState>(
               listenWhen: (previous, current) {
                 return previous.driveExportStatus != current.driveExportStatus;
@@ -254,8 +229,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
                 }
               },
             ),
-
-            // MODIFICATO: Listener per il FlowchartBloc, ora scrive solo su RTDB
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (previous, current) => previous != current && current is FlowchartLoaded,
               listener: (context, state) {
@@ -266,7 +239,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
 
                   _debounce?.cancel();
                   _debounce = Timer(const Duration(milliseconds: 400), () {
-                    if (mounted) { // Controlla se il widget è ancora montato
+                    if (mounted) {
                       _lastRtdbContent = jsonContent;
                       context.read<ProjectBloc>().projectRepository.updateLiveFileContent(
                         widget.selectedProject.projectId,
@@ -278,16 +251,9 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
                 }
               },
             ),
-
-            // MODIFICATO: Listener per FileSystemBloc, orchestra salvataggio e caricamento
             BlocListener<FileSystemBloc, FileSystemState>(
               listener: (context, state) async {
                 if (state is FileSystemLoaded) {
-                  // Salva il file precedente PRIMA di gestire quello nuovo
-                  if (_currentFileId != null && _currentFileId != state.activeFileId) {
-                    await _saveCurrentFileToFirestore();
-                  }
-
                   _currentFileId = state.activeFileId;
                   await _rtdbSubscription?.cancel();
 
@@ -312,11 +278,9 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
                         .listen((liveContent) {
                       if (!mounted) return;
 
-                      // Se RTDB ha contenuto, è la versione più aggiornata. Altrimenti, usa Firestore.
                       final contentToLoad = liveContent ?? activeFile.content;
 
                       final flowchartBloc = context.read<FlowchartBloc>();
-                      // Evita di ricaricare se il contenuto è identico a quello già presente nel BLoC
                       if (flowchartBloc.state is FlowchartLoaded && (flowchartBloc.state as FlowchartLoaded).toJson() == contentToLoad) {
                         return;
                       }
@@ -355,7 +319,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
   }
 }
 
-// _WorkspaceLayout e _WorkspaceContent rimangono invariati
 class _WorkspaceLayout extends StatelessWidget {
   final Animation<Offset> sidebarSlideAnimation;
   final Animation<Offset> topbarSlideAnimation;

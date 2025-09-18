@@ -10,6 +10,26 @@ class UserActionException(Exception):
         super().__init__(message)
         self.status_code = status_code
 
+def _delete_collection_recursively(coll_ref, batch_size):
+    """
+    Elimina ricorsivamente tutti i documenti in una collezione e le loro sottocollezioni.
+    """
+    docs = coll_ref.limit(batch_size).stream()
+    deleted = 0
+
+    for doc in docs:
+        # Elimina ricorsivamente le sottocollezioni del documento corrente
+        for sub_coll in doc.reference.collections():
+            _delete_collection_recursively(sub_coll, batch_size)
+
+        # Elimina il documento stesso
+        doc.reference.delete()
+        deleted += 1
+
+    if deleted >= batch_size:
+        _delete_collection_recursively(coll_ref, batch_size)
+
+
 def delete_firebase_user(uid: str) -> None:
     """
     Esegue un'eliminazione a cascata di tutti i dati di un utente
@@ -25,15 +45,23 @@ def delete_firebase_user(uid: str) -> None:
             profile_pic_blob.delete()
             print(f"Foto profilo per l'utente {uid} eliminata.")
 
-        # 2. Eliminazione dati da Firestore (ricorsiva)
+        # 2. CORREZIONE: Eliminazione dati da Firestore (ricorsiva)
         firestore_client = firestore.client()
         user_doc_ref = firestore_client.collection('users').document(uid)
-        firestore_client.recursive_delete(user_doc_ref)
+
+        # Itera ed elimina tutte le sottocollezioni (es. 'projects')
+        for coll_ref in user_doc_ref.collections():
+            _delete_collection_recursively(coll_ref, 50)
+
+        # Infine, elimina il documento utente principale
+        user_doc_ref.delete()
         print(f"Dati Firestore per l'utente {uid} eliminati.")
 
         # 3. Eliminazione dati da Realtime Database
-        db.reference(f'users/{uid}').delete()
         db.reference(f'sessions/{uid}').delete()
+        # Nota: 'users/{uid}' in RTDB non sembra essere usato dalla tua app,
+        # ma lo lascio per sicurezza se hai dati legacy.
+        db.reference(f'users/{uid}').delete()
         print(f"Dati Realtime Database per l'utente {uid} eliminati.")
 
         # 4. Eliminazione account da Firebase Authentication (ultimo passo)

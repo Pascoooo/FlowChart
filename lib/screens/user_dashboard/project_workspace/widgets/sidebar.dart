@@ -150,7 +150,7 @@ class _SidebarHeaderState extends State<_SidebarHeader>
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
               onTap: () {
-                context.read<ProjectBloc>().add(const DeselectProject());
+                context.read<ProjectBloc>().add(const LeaveProject());
               },
               child: Container(
                 padding: const EdgeInsets.all(8),

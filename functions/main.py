@@ -13,15 +13,17 @@ def deleteUserAuthHttp(req: https_fn.Request) -> https_fn.Response:
 
     try:
         user_uid = security.verify_request(req)
-
         user_actions.delete_firebase_user(user_uid)
-
-        return responses.create_json_response(
-            message="User account deleted successfully.",
-            status_code=200
+        success_payload = {"message": "User account deleted successfully."}
+        return https_fn.Response(
+            json.dumps({"data": success_payload}),
+            status=200,
+            headers=responses.CORS_HEADERS
         )
+        # --- FINE CORREZIONE ---
 
     except security.SecurityException as e:
+        # Le risposte di errore non necessitano del campo "data"
         return responses.create_json_response(
             message=str(e),
             status_code=e.status_code

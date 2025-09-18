@@ -78,9 +78,9 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1000),
-                  child: Column(
+                  child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: const [
+                    children: [
                       Header(),
                       SizedBox(height: 20),
                       ProfileSettings(),
@@ -246,6 +246,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
                 child: Row(
                   children: [
                     Stack(
+                      clipBehavior: Clip.none, // Permette al pulsante di "sporgere"
                       children: [
                         CircleAvatar(
                           radius: 40,
@@ -258,31 +259,33 @@ class _ProfileSettingsState extends State<ProfileSettings> {
                         Positioned(
                           right: -4,
                           bottom: -4,
-                          child: Material(
-                            color: cs.primary,
-                            shape: const CircleBorder(),
-                            elevation: 2,
-                            child: InkWell(
-                              onTap: isLoading ? null : _pickAndUpdatePhoto,
-                              customBorder: const CircleBorder(),
-                              child: const Padding(
-                                padding: EdgeInsets.all(8),
-                                child: Icon(Icons.edit, color: Colors.white, size: 18),
+                          // --- INIZIO DELLA CORREZIONE ---
+                          child: ClipOval( // 1. Usiamo ClipOval per forzare la forma circolare
+                            child: Material(
+                              color: cs.primary,
+                              child: InkWell(
+                                onTap: isLoading ? null : _pickAndUpdatePhoto,
+                                child: const SizedBox(
+                                  width: 40, // Diamo una dimensione definita
+                                  height: 40,
+                                  child: Icon(Icons.edit, color: Colors.white, size: 18),
+                                ),
                               ),
                             ),
                           ),
+                          // --- FINE DELLA CORREZIONE ---
                         ),
                       ],
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 20), // Aumentato lo spazio per evitare sovrapposizioni
                     Expanded(
                       child: TextField(
                         controller: _nameController,
                         enabled: !isLoading,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Nome visualizzato',
                           hintText: 'Inserisci il tuo nome',
-                          border: const OutlineInputBorder(),
+                          border: OutlineInputBorder(),
                           isDense: true,
                         ),
                       ),
@@ -306,6 +309,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
     );
   }
 }
+
 
 class SystemSettings extends StatelessWidget {
   const SystemSettings({super.key});

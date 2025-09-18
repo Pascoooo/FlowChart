@@ -1,35 +1,46 @@
 import 'package:equatable/equatable.dart';
-import 'package:flutter/material.dart';
 import 'package:project_repository/project_repository.dart';
+import 'package:flutter/material.dart';
+
 
 @immutable
 abstract class ProjectState extends Equatable {
   const ProjectState();
-
   @override
   List<Object?> get props => [];
 }
 
-/// Stato iniziale del progetto
+/// Stato iniziale del BLoC.
 class ProjectInitial extends ProjectState {
   const ProjectInitial();
 }
 
-/// Stato che indica che un'operazione è in corso
+/// Stato che indica un'operazione in corso, con un messaggio opzionale per la UI.
 class ProjectLoading extends ProjectState {
-  const ProjectLoading();
+  final String? message;
+  const ProjectLoading({this.message});
+  @override
+  List<Object?> get props => [message];
 }
 
-/// Stato che rappresenta un errore durante un'operazione
+/// Stato che indica un errore bloccante.
 class ProjectError extends ProjectState {
   final String message;
-
   const ProjectError({required this.message});
-
   @override
   List<Object> get props => [message];
 }
 
+/// Stato che indica la presenza di una sessione non salvata, per attivare il dialogo.
+class UnsavedChangesFound extends ProjectState {
+  final String projectId;
+  final String projectName;
+  const UnsavedChangesFound({required this.projectId, required this.projectName});
+  @override
+  List<Object> get props => [projectId, projectName];
+}
+
+/// Stato principale con i dati dei progetti caricati.
 class ProjectsLoaded extends ProjectState {
   final List<MyProject> projects;
   final MyProject? selectedProject;
@@ -40,7 +51,6 @@ class ProjectsLoaded extends ProjectState {
     this.selectedProject,
     this.error,
   });
-
 
   ProjectsLoaded copyWith({
     List<MyProject>? projects,
