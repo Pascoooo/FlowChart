@@ -5,26 +5,32 @@ import 'package:flutter/material.dart';
 @immutable
 abstract class FileSystemState extends Equatable {
   const FileSystemState();
+
   @override
   List<Object?> get props => [];
 }
 
+/// Stato iniziale del filesystem
 class FileSystemInitial extends FileSystemState {
   const FileSystemInitial();
 }
 
+/// Stato che rappresenta un errore del filesystem
 class FileSystemError extends FileSystemState {
   final String message;
+
   const FileSystemError({required this.message});
+
   @override
   List<Object> get props => [message];
 }
 
+/// Stato di caricamento
 class FileSystemLoading extends FileSystemState {
   const FileSystemLoading();
 }
 
-/// Stato che rappresenta il filesystem caricato.
+/// Stato che rappresenta il filesystem caricato con la lista dei file
 class FileSystemLoaded extends FileSystemState {
   final List<MyFile> files;
   final String? activeFileId;
@@ -39,18 +45,20 @@ class FileSystemLoaded extends FileSystemState {
   FileSystemLoaded copyWith({
     List<MyFile>? files,
     String? activeFileId,
-    bool clearActiveFile = false,
     String? error,
-    bool clearError = false,
-    bool? isLoading,
+    String? successMessage,
   }) {
     return FileSystemLoaded(
       files: files ?? this.files,
-      activeFileId: clearActiveFile ? null : (activeFileId ?? this.activeFileId),
-      error: clearError ? null : error,
+      activeFileId: activeFileId ?? this.activeFileId,
+      error: error,
     );
   }
 
   @override
-  List<Object?> get props => [files, activeFileId, error];
+  List<Object?> get props => [
+    files,
+    activeFileId,
+    error,
+  ];
 }
