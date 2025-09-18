@@ -52,17 +52,21 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
                 children: [
                   const _SidebarHeader(),
                   _buildDivider(theme),
+                  // La lista dei file si espande per riempire lo spazio
                   Expanded(
                     child: _FileSystemView(
                       projectId: widget.selectedProject.projectId,
                     ),
                   ),
+                  // MODIFICA: Il pulsante "Nuovo File" è ora qui,
+                  // sempre in fondo alla sezione dei file.
                   CreateFileButton(projectId: widget.selectedProject.projectId),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
+          // Le azioni in basso rimangono separate
           const BottomActions(),
         ],
       ),
@@ -86,7 +90,7 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
   }
 }
 
-/// Header della Sidebar che contiene il pulsante per tornare alla dashboard.
+/// Header della Sidebar.
 class _SidebarHeader extends StatefulWidget {
   const _SidebarHeader();
 
@@ -113,6 +117,17 @@ class _SidebarHeaderState extends State<_SidebarHeader>
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    if (_floatingController.isAnimating) {
+      _floatingController.stop();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _floatingController.repeat(reverse: true);
+    });
+  }
+
+  @override
   void dispose() {
     _floatingController.dispose();
     super.dispose();
@@ -123,7 +138,10 @@ class _SidebarHeaderState extends State<_SidebarHeader>
     final theme = Theme.of(context);
     return Container(
       height: 100,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 24,
+        vertical: 20,
+      ),
       child: Row(
         children: [
           Material(
@@ -131,8 +149,9 @@ class _SidebarHeaderState extends State<_SidebarHeader>
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               borderRadius: BorderRadius.circular(8),
-              /// CORREZIONE: Invia l'evento LeaveProject per un'uscita sicura.
-              onTap: () => context.read<ProjectBloc>().add(const LeaveProject()),
+              onTap: () {
+                context.read<ProjectBloc>().add(const DeselectProject());
+              },
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -150,20 +169,36 @@ class _SidebarHeaderState extends State<_SidebarHeader>
           const SizedBox(width: 16),
           AnimatedBuilder(
             animation: _floatingAnimation,
-            builder: (context, child) => Transform.translate(
-              offset: Offset(0, _floatingAnimation.value),
-              child: child,
-            ),
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(0, _floatingAnimation.value),
+                child: child,
+              );
+            },
             child: Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
+                  colors: [
+                    theme.colorScheme.primary,
+                    theme.colorScheme.secondary,
+                  ],
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: Colors.white,
+                size: 24,
+              ),
             ),
           ),
           const SizedBox(width: 16),
@@ -187,6 +222,7 @@ class _SidebarHeaderState extends State<_SidebarHeader>
     );
   }
 }
+
 class _FileSystemView extends StatelessWidget {
   final String projectId;
   const _FileSystemView({required this.projectId});
