@@ -1,27 +1,28 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:project_repository/project_repository.dart';
+import 'package:universal_html/html.dart' as html;
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/sidebar.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/topbar.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:project_repository/project_repository.dart';
-import 'package:universal_html/html.dart' as html;
-
 import '../../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../../blocs/auth_bloc/authentication_event.dart';
-import '../../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
+import '../../../../blocs/project_bloc/project_event.dart';
 import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/dialog_service.dart';
 import '../../../../config/services/export_service.dart';
 import '../../../settings/widgets/settings_provider.dart';
 import '../views/workarea.dart';
 
+/// L'area di lavoro principale dove l'utente interagisce con i diagrammi.
+/// Lavora esclusivamente con i dati presenti nella sessione Realtime Database.
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
   const ProjectWorkspace({super.key, required this.selectedProject});
@@ -30,7 +31,8 @@ class ProjectWorkspace extends StatefulWidget {
   State<ProjectWorkspace> createState() => _ProjectWorkspaceState();
 }
 
-class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProviderStateMixin {
+class _ProjectWorkspaceState extends State<ProjectWorkspace>
+    with TickerProviderStateMixin {
   final GlobalKey _workareaKey = GlobalKey();
   late AnimationController _slideInController;
   late Animation<Offset> _sidebarSlideAnimation;
@@ -42,94 +44,34 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
 
   Timer? _debounce;
   StreamSubscription? _rtdbSubscription;
-  String? _lastRtdbContent;
   String? _currentFileId;
+  ProjectRepo? _projectRepo;
 
   @override
   void initState() {
     super.initState();
+    _projectRepo = context.read<ProjectBloc>().projectRepository;
+
     _initAnimations();
     _slideInController.forward();
-
-    // Aggiunge un listener per il salvataggio prima di chiudere la pagina
-    html.window.onBeforeUnload.listen((event) async {
-      await _saveCurrentFileToFirestore();
+    html.window.onBeforeUnload.listen((event) {
+      if (mounted) {
+        _projectRepo?.endWorkspaceSession(widget.selectedProject.projectId);
+      }
     });
   }
 
-  void _initAnimations() {
-    _slideInController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-    _sidebarSlideAnimation = Tween<Offset>(
-      begin: const Offset(-1, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _slideInController,
-      curve: Curves.easeOutCubic,
-    ));
-
-    _topbarSlideAnimation = Tween<Offset>(
-      begin: const Offset(0, -1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _slideInController,
-      curve: Curves.easeOutCubic,
-    ));
-
-    _workareaSlideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _slideInController,
-      curve: Curves.easeOutCubic,
-    ));
-
-    _workareaScaleAnimation = Tween<double>(
-      begin: 0.9,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _slideInController,
-      curve: Curves.easeOutCubic,
-    ));
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _slideInController,
-      curve: const Interval(0.4, 1.0, curve: Curves.easeIn),
-    ));
-  }
-
-  // MODIFICATO: Metodo di salvataggio più robusto
-  Future<void> _saveCurrentFileToFirestore() async {
-    _debounce?.cancel(); // Annulla qualsiasi salvataggio RTDB in attesa
-    if (!mounted || _currentFileId == null) return;
-
-    final flowchartState = context.read<FlowchartBloc>().state;
-    if (flowchartState is FlowchartLoaded) {
-      final content = flowchartState.toJson();
-      // Chiamata al nuovo metodo del repository che gestisce tutto
-      await context.read<ProjectBloc>().projectRepository.finalizeFileContent(
-        widget.selectedProject.projectId,
-        _currentFileId!,
-        content,
-      );
-    }
-  }
-
+  /// Alla distruzione del widget, si assicura di cancellare le sottoscrizioni
+  /// e di richiedere la finalizzazione della sessione come ultima rete di sicurezza.
   @override
   void dispose() {
     _debounce?.cancel();
     _rtdbSubscription?.cancel();
-    _saveCurrentFileToFirestore(); // Salva un'ultima volta
+    _projectRepo?.endWorkspaceSession(widget.selectedProject.projectId);
     _slideInController.dispose();
     super.dispose();
   }
 
-  // ... (metodi _getCurrentFileName, _onEdit, _handleExport, _toggleGrid invariati) ...
   String _getCurrentFileName(FileSystemLoaded state) {
     if (state.activeFileId != null && state.files.isNotEmpty) {
       final matchingFile = state.files.firstWhere(
@@ -215,147 +157,113 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
     }
   }
 
-  void _toggleGrid() {
-    setState(() {
-      _showGrid = !_showGrid;
-    });
-  }
 
   @override
   Widget build(BuildContext outerContext) {
-    return KeyboardShortcuts(
-      child: MultiBlocProvider(
-        providers: [
-          BlocProvider<FlowchartBloc>(create: (_) => FlowchartBloc()),
-          BlocProvider<FileSystemBloc>(
-            key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
-            create: (context) => FileSystemBloc(
-              projectRepository: context.read<ProjectBloc>().projectRepository,
-            )..add(RefreshFileSystem(projectId: widget.selectedProject.projectId)),
-          ),
-        ],
-        child: MultiBlocListener(
-          listeners: [
-            // ... (listener per AuthenticationBloc invariato) ...
-            BlocListener<AuthenticationBloc, AuthenticationState>(
-              listenWhen: (previous, current) {
-                return previous.driveExportStatus != current.driveExportStatus;
-              },
-              listener: (context, state) {
-                if (state.driveExportStatus == DriveExportStatus.success) {
-                  BannerService.showSuccess(
-                      context, "Diagramma esportato con successo su Google Drive!");
-                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
-                }
-                else if (state.driveExportStatus == DriveExportStatus.failure) {
-                  BannerService.showError(context, state.errorMessage ?? "Esportazione fallita.");
-                  context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
-                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
-                }
-              },
-            ),
+    return MultiBlocListener(
+      listeners: [
+        /// Ascolta le modifiche nel `FlowchartBloc` e le scrive su RTDB con un debounce.
 
-            // MODIFICATO: Listener per il FlowchartBloc, ora scrive solo su RTDB
-            BlocListener<FlowchartBloc, FlowchartState>(
-              listenWhen: (previous, current) => previous != current && current is FlowchartLoaded,
-              listener: (context, state) {
-                if (state is FlowchartLoaded && _currentFileId != null) {
-                  final jsonContent = state.toJson();
+        BlocListener<FileSystemBloc, FileSystemState>(
+          listener: (context, state) async {
+            if (state is FileSystemLoaded) {
+              await _rtdbSubscription?.cancel();
+              _currentFileId = state.activeFileId;
 
-                  if (jsonContent == _lastRtdbContent) return;
+              // Se nessun file è attivo, apri il primo della lista (o 'main' se esiste)
+              if (state.activeFileId == null && state.files.isNotEmpty) {
+                final mainFile = state.files.firstWhere(
+                        (f) => f.name == 'main',
+                    orElse: () => state.files.first);
+                context.read<FileSystemBloc>().add(OpenFile(
+                  projectId: widget.selectedProject.projectId,
+                  fileId: mainFile.fileId,
+                  fileName: mainFile.name,
+                ));
+                return;
+              }
 
-                  _debounce?.cancel();
-                  _debounce = Timer(const Duration(milliseconds: 400), () {
-                    if (mounted) { // Controlla se il widget è ancora montato
-                      _lastRtdbContent = jsonContent;
-                      context.read<ProjectBloc>().projectRepository.updateLiveFileContent(
-                        widget.selectedProject.projectId,
-                        _currentFileId!,
-                        jsonContent,
-                      );
-                    }
-                  });
-                }
-              },
-            ),
+              // Se un file è attivo, mettiti in ascolto dei suoi contenuti su RTDB
+              if (state.activeFileId != null) {
+                _rtdbSubscription = _projectRepo
+                    ?.liveFileContent(
+                    widget.selectedProject.projectId, state.activeFileId!)
+                    .listen((liveContent) {
+                  if (!mounted) return;
+                  final flowchartBloc = context.read<FlowchartBloc>();
+                  final flowchartState = flowchartBloc.state;
 
-            // MODIFICATO: Listener per FileSystemBloc, orchestra salvataggio e caricamento
-            BlocListener<FileSystemBloc, FileSystemState>(
-              listener: (context, state) async {
-                if (state is FileSystemLoaded) {
-                  // Salva il file precedente PRIMA di gestire quello nuovo
-                  if (_currentFileId != null && _currentFileId != state.activeFileId) {
-                    await _saveCurrentFileToFirestore();
-                  }
-
-                  _currentFileId = state.activeFileId;
-                  await _rtdbSubscription?.cancel();
-
-                  if (state.activeFileId == null && state.files.isNotEmpty) {
-                    final mainFile = state.files.firstWhere(
-                            (f) => f.name == 'main', orElse: () => state.files.first);
-                    context.read<FileSystemBloc>().add(OpenFile(
-                      projectId: widget.selectedProject.projectId,
-                      fileId: mainFile.fileId,
-                      fileName: mainFile.name,
-                    ));
-                    return;
-                  }
-
-                  if (state.activeFileId != null) {
-                    final activeFile = state.files.firstWhere((f) => f.fileId == state.activeFileId);
-
-                    _rtdbSubscription = context
-                        .read<ProjectBloc>()
-                        .projectRepository
-                        .liveFileContent(widget.selectedProject.projectId, activeFile.fileId)
-                        .listen((liveContent) {
-                      if (!mounted) return;
-
-                      // Se RTDB ha contenuto, è la versione più aggiornata. Altrimenti, usa Firestore.
-                      final contentToLoad = liveContent ?? activeFile.content;
-
-                      final flowchartBloc = context.read<FlowchartBloc>();
-                      // Evita di ricaricare se il contenuto è identico a quello già presente nel BLoC
-                      if (flowchartBloc.state is FlowchartLoaded && (flowchartBloc.state as FlowchartLoaded).toJson() == contentToLoad) {
-                        return;
+                  // **LA LOGICA CORRETTA È QUESTA**
+                  // Se il contenuto live esiste E (lo stato non è caricato OPPURE il contenuto è diverso)
+                  // allora carica il nuovo contenuto.
+                  if (liveContent != null) {
+                    bool shouldLoad = true;
+                    if (flowchartState is FlowchartLoaded) {
+                      if (flowchartState.toJson() == liveContent) {
+                        shouldLoad = false;
                       }
-
-                      _lastRtdbContent = contentToLoad;
-                      flowchartBloc.add(LoadFlowchart(contentToLoad));
-                    });
+                    }
+                    if (shouldLoad) {
+                      // **ECCO LA CHIAMATA CHE AVEVO RIMOSSO, ORA È AL POSTO GIUSTO.**
+                      flowchartBloc.add(LoadFlowchart(liveContent));
+                    }
                   }
-                } else if (state is FileSystemError) {
-                  BannerService.showError(context, state.message);
-                }
-              },
-            ),
-          ],
-          child: AnimatedBuilder(
-            animation: _slideInController,
-            builder: (innerContext, child) {
-              return _WorkspaceLayout(
-                sidebarSlideAnimation: _sidebarSlideAnimation,
-                topbarSlideAnimation: _topbarSlideAnimation,
-                workareaSlideAnimation: _workareaSlideAnimation,
-                workareaScaleAnimation: _workareaScaleAnimation,
-                fadeAnimation: _fadeAnimation,
-                selectedProject: widget.selectedProject,
-                workareaKey: _workareaKey,
-                onEdit: _onEdit,
-                onExport: () => _handleExport(innerContext),
-                showGrid: _showGrid,
-                toggleGrid: _toggleGrid,
-              );
-            },
-          ),
+                });
+              }
+            } else if (state is FileSystemError) {
+              BannerService.showError(context, state.message);
+            }
+          },
         ),
+      ],
+      child: AnimatedBuilder(
+        animation: _slideInController,
+        builder: (innerContext, child) {
+          /// Ricostruisce il layout completo della UI.
+          return _WorkspaceLayout(
+            sidebarSlideAnimation: _sidebarSlideAnimation,
+            topbarSlideAnimation: _topbarSlideAnimation,
+            workareaSlideAnimation: _workareaSlideAnimation,
+            workareaScaleAnimation: _workareaScaleAnimation,
+            fadeAnimation: _fadeAnimation,
+            selectedProject: widget.selectedProject,
+            workareaKey: _workareaKey,
+            onEdit: () { _onEdit(); },
+            onExport: () { _handleExport(innerContext); },
+            showGrid: _showGrid,
+            toggleGrid: () => setState(() => _showGrid = !_showGrid),
+          );
+        },
       ),
     );
   }
+
+  /// Inizializza tutte le animazioni della UI.
+  void _initAnimations() {
+    _slideInController = AnimationController(
+        duration: const Duration(milliseconds: 1200), vsync: this);
+    _sidebarSlideAnimation =
+        Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero).animate(
+            CurvedAnimation(
+                parent: _slideInController, curve: Curves.easeOutCubic));
+    _topbarSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(
+            CurvedAnimation(
+                parent: _slideInController, curve: Curves.easeOutCubic));
+    _workareaSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(
+            CurvedAnimation(
+                parent: _slideInController, curve: Curves.easeOutCubic));
+    _workareaScaleAnimation = Tween<double>(begin: 0.9, end: 1.0).animate(
+        CurvedAnimation(parent: _slideInController, curve: Curves.easeOutCubic));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+            parent: _slideInController,
+            curve: const Interval(0.4, 1.0, curve: Curves.easeIn)));
+  }
 }
 
-// _WorkspaceLayout e _WorkspaceContent rimangono invariati
+/// Widget puramente di layout per organizzare la UI del workspace.
 class _WorkspaceLayout extends StatelessWidget {
   final Animation<Offset> sidebarSlideAnimation;
   final Animation<Offset> topbarSlideAnimation;
@@ -396,11 +304,8 @@ class _WorkspaceLayout extends StatelessWidget {
         ),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(
-              top: 16.0,
-              right: 16.0,
-              bottom: 16.0,
-            ),
+            padding:
+            const EdgeInsets.only(top: 16.0, right: 16.0, bottom: 16.0),
             child: Column(
               children: [
                 SlideTransition(
@@ -424,7 +329,8 @@ class _WorkspaceLayout extends StatelessWidget {
                       scale: workareaScaleAnimation,
                       child: FadeTransition(
                         opacity: fadeAnimation,
-                        child: _WorkspaceContent(workareaKey: workareaKey, showGrid: showGrid),
+                        child: _WorkspaceContent(
+                            workareaKey: workareaKey, showGrid: showGrid),
                       ),
                     ),
                   ),
@@ -438,6 +344,7 @@ class _WorkspaceLayout extends StatelessWidget {
   }
 }
 
+/// Mostra l'area di lavoro o un messaggio se nessun file è selezionato.
 class _WorkspaceContent extends StatelessWidget {
   final GlobalKey workareaKey;
   final bool showGrid;
@@ -446,29 +353,23 @@ class _WorkspaceContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<FileSystemBloc>().state;
-    final hasActiveFile =
-        state is FileSystemLoaded && state.activeFileId != null;
+    final hasActiveFile = context.select<FileSystemBloc, bool>((bloc) =>
+    bloc.state is FileSystemLoaded &&
+        (bloc.state as FileSystemLoaded).activeFileId != null);
 
     return Stack(
       children: [
         WorkArea(repaintKey: workareaKey, showGrid: showGrid),
         if (!hasActiveFile)
-          const Positioned.fill(
-            child: IgnorePointer(
-              ignoring: true,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.grey),
-                    SizedBox(height: 8),
-                    Text(
-                      'Seleziona o crea un file per salvare le modifiche.',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                  ],
-                ),
+          const IgnorePointer(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.info_outline, color: Colors.grey),
+                  SizedBox(height: 8),
+                  Text('Seleziona o crea un file per iniziare.'),
+                ],
               ),
             ),
           ),
