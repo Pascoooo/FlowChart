@@ -1,4 +1,3 @@
-import 'package:flowchart_thesis/config/constants/themes.dart'; // Potrebbe servirti per AppConstants
 import 'package:flowchart_thesis/config/services/validation_service.dart';
 import 'package:flutter/material.dart';
 import 'package:project_repository/project_repository.dart';
@@ -39,7 +38,6 @@ class ProjectSelector extends StatelessWidget {
         onCreateProject(projectName);
       }
     }
-
     return Stack(
       children: [
         Center(
@@ -51,27 +49,16 @@ class ProjectSelector extends StatelessWidget {
               children: [
                 const WelcomeHeader(),
                 const SizedBox(height: 48),
-                SizedBox(
-                  width: AppConstants.projectContainerWidth,
-                  child: Column(
-                    children: [
-                      ProjectContainer(
-                        projects: projects,
-                        onProjectSelected: onProjectSelected,
-                        onProjectDeleted: (projectId) {
-                          context
-                              .read<ProjectBloc>()
-                              .add(DeleteProject(projectId: projectId));
-                        },
-                        onProjectRenamed: (projectId, newName) {
-                          context.read<ProjectBloc>().add(
-                              RenameProject(projectId: projectId, newName: newName));
-                        },
-                      ),
-                    ],
-                  ),
+                ProjectContainer(
+                  projects: projects,
+                  onProjectSelected: onProjectSelected,
+                  onProjectDeleted: (projectId) {
+                    context.read<ProjectBloc>().add(DeleteProject(projectId: projectId));
+                  },
+                  onProjectRenamed: (projectId, newName) {
+                    context.read<ProjectBloc>().add(RenameProject(projectId: projectId, newName: newName));
+                  },
                 ),
-
                 const SizedBox(height: 32),
                 CreateProjectButton(
                   projectCount: projects.length,
@@ -81,9 +68,18 @@ class ProjectSelector extends StatelessWidget {
             ),
           ),
         ),
-        const Positioned(top: 24, right: 24, child: ProfileMenu()),
-        const Positioned(bottom: 24, right: 24, child: ThemeToggleButton()),
+        const Positioned(
+          top: 24,
+          right: 24,
+          child: ProfileMenu(),
+        ),
+        const Positioned(
+          bottom: 24,
+          right: 24,
+          child: ThemeToggleButton(),
+        ),
       ],
     );
   }
 }
+
