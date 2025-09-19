@@ -143,11 +143,9 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<void> endWorkspaceSession(String projectId) async {
-    // L'uscita controllata equivale a un recupero della sessione
     await recoverSession(projectId);
   }
 
-  // --- Manipolazione Sessione RTDB in tempo reale ---
 
   @override
   Future<void> addFileToSession(String projectId, MyFile file) {
@@ -176,24 +174,19 @@ class FirebaseProjectRepo implements ProjectRepo {
         .update({'name': newName});
   }
 
-  // --- Gestione Recupero Manuale ---
 
   @override
   Future<void> recoverSingleFile({required String projectId, required String fileId, required String rtdbContent}) async {
-    // Aggiorna il file in Firestore
     await projectCollection
         .doc(projectId)
         .collection('files')
         .doc(fileId)
         .update({'content': rtdbContent});
-
-    // Rimuove il file dalla sessione RTDB per non mostrarlo di nuovo
     await _rtdbSessionRef.child(projectId).child('files').child(fileId).remove();
   }
 
   @override
   Future<void> discardSingleFileChange({required String projectId, required String fileId}) async {
-    // Rimuove semplicemente il file dalla sessione RTDB
     await _rtdbSessionRef.child(projectId).child('files').child(fileId).remove();
   }
 
@@ -218,15 +211,12 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<void> deleteProject({required String projectId}) async {
-    // Prima di eliminare il progetto, assicurati che non ci siano sessioni pendenti
     await _rtdbSessionRef.child(projectId).remove();
-
     final filesSnapshot =
     await projectCollection.doc(projectId).collection('files').get();
     for (var doc in filesSnapshot.docs) {
       await doc.reference.delete();
     }
-
     await projectCollection.doc(projectId).delete();
   }
 
@@ -320,11 +310,9 @@ class FirebaseProjectRepo implements ProjectRepo {
       if (fileData is Map<dynamic, dynamic> &&
           fileData.containsKey('content')) {
         final docRef = filesRef.doc(fileId);
-        // Usiamo `update` perché il file dovrebbe già esistere in Firestore
         batch.update(docRef, {'content': fileData['content']});
       }
     }
-    // Aggiorniamo il timestamp del progetto per riflettere il salvataggio
     batch.update(
         projectCollection.doc(projectId), {'updatedAt': DateTime.now()});
     await batch.commit();

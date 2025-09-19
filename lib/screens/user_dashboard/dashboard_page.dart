@@ -5,12 +5,11 @@ import '../../blocs/project_bloc/project_event.dart';
 import '../../blocs/project_bloc/project_state.dart';
 import '../../config/error/error_page.dart';
 import '../../config/services/banner_service.dart';
+import '../../config/services/dialog_service.dart';
 import 'animations/background_animation.dart';
 import 'animations/project_loading_indicator.dart';
 import 'project_selection/views/project_selector.dart';
 import 'project_workspace/widgets/project_workspace.dart';
-import 'project_selection/widgets/initial_recovery_dialog.dart';
-import 'project_selection/widgets/manual_recovery_dialog.dart';
 
 const Duration _kTransitionDuration = Duration(milliseconds: 300);
 
@@ -28,45 +27,54 @@ class _DashboardPageState extends State<DashboardPage> {
     context.read<ProjectBloc>().add(const CheckForUnsavedSessions());
   }
 
+  /// **CORRETTO**: Gestisce la logica di recupero in modo asincrono.
   void _showRecoveryDialog(BuildContext context, UnsavedChangesFound state) {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await showDialog(
+    WidgetsBinding.instance.addPostFrameCallback((_) async { // Aggiunto async
+      // Attendiamo che l'utente faccia una scelta nel dialogo.
+      final action = await DialogService.showInitialRecoveryDialog(
         context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          return InitialRecoveryDialog(
-            projectName: state.projectName,
-            onRecoverAll: () {
-              Navigator.of(dialogContext).pop();
-              context.read<ProjectBloc>().add(RecoverSession(projectId: state.projectId));
-            },
-            onDiscardAll: () {
-              Navigator.of(dialogContext).pop();
-              context.read<ProjectBloc>().add(DiscardSession(projectId: state.projectId));
-            },
-            onManualSelect: () {
-              Navigator.of(dialogContext).pop();
-              _showManualRecoveryDialog(context, state);
-            },
-          );
-        },
+        projectName: state.projectName,
       );
+
+      // Eseguiamo la logica DOPO che il dialogo è stato chiuso.
+      // Questo previene i crash di navigazione.
+      // Assicuriamoci che il widget sia ancora montato prima di accedere al context.
+      if (!mounted) return;
+
+      switch (action) {
+        case RecoveryAction.recoverAll:
+          context.read<ProjectBloc>().add(RecoverSession(projectId: state.projectId));
+          break;
+        case RecoveryAction.discardAll:
+          context.read<ProjectBloc>().add(DiscardSession(projectId: state.projectId));
+          break;
+        case RecoveryAction.manualSelect:
+        // Anche la chiamata al dialogo manuale è ora asincrona.
+          await _showManualRecoveryDialog(context, state);
+          break;
+        default:
+        // L'utente potrebbe aver chiuso il dialogo in modo imprevisto.
+        // Ricarichiamo i progetti per sicurezza.
+          context.read<ProjectBloc>().add(const LoadProjects());
+          break;
+      }
     });
   }
 
-  void _showManualRecoveryDialog(BuildContext context, UnsavedChangesFound state) {
-    // --- MODIFICA CHIAVE ---
-    // Poiché showDialog crea un nuovo contesto che non conosce il ProjectBloc,
-    // dobbiamo fornirglielo esplicitamente usando BlocProvider.value.
-    showDialog(
+  /// **CORRETTO**: Attende il completamento del recupero manuale prima di procedere.
+  Future<void> _showManualRecoveryDialog(
+      BuildContext context, UnsavedChangesFound state) async {
+    // Attendiamo che il dialogo manuale venga completato.
+    final didComplete = await DialogService.showManualRecoveryDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => BlocProvider.value(
-        // Forniamo l'istanza del BLoC già esistente al sotto-albero del dialogo.
-        value: context.read<ProjectBloc>(),
-        child: ManualRecoveryDialog(state: state),
-      ),
+      state: state,
     );
+
+    // Se il dialogo è stato completato, ricarichiamo i progetti.
+    // L'evento viene inviato solo ora, in modo sicuro.
+    if (didComplete == true && mounted) {
+      context.read<ProjectBloc>().add(const LoadProjects());
+    }
   }
 
   @override
@@ -85,7 +93,9 @@ class _DashboardPageState extends State<DashboardPage> {
             },
             child: BlocBuilder<ProjectBloc, ProjectState>(
               builder: (context, state) {
-                if (state is ProjectInitial || state is ProjectLoading || state is UnsavedChangesFound) {
+                if (state is ProjectInitial ||
+                    state is ProjectLoading ||
+                    state is UnsavedChangesFound) {
                   return const ModernLoadingIndicator();
                 }
                 if (state is ProjectError) {
@@ -114,8 +124,12 @@ class _DashboardPageState extends State<DashboardPage> {
           : ProjectSelector(
         key: const ValueKey('project-selector'),
         projects: state.projects,
-        onProjectSelected: (project) => context.read<ProjectBloc>().add(StartSessionAndSelectProject(project: project)),
-        onCreateProject: (name) => context.read<ProjectBloc>().add(CreateProject(projectName: name)),
+        onProjectSelected: (project) => context
+            .read<ProjectBloc>()
+            .add(StartSessionAndSelectProject(project: project)),
+        onCreateProject: (name) => context
+            .read<ProjectBloc>()
+            .add(CreateProject(projectName: name)),
       ),
     );
   }

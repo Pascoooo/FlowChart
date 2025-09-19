@@ -52,7 +52,6 @@ abstract class ProjectRepo {
   Future<void> deleteFile({required String projectId, required String fileId});
   Future<void> renameFile({required String projectId, required String fileId, required String newName});
 
-  // --- Gestione Realtime (Lavoro sul "banco di lavoro") ---
 
   /// Ascolta le modifiche al contenuto di un file nella sessione RTDB.
   Stream<String?> liveFileContent(String projectId, String fileId);
