@@ -4,15 +4,35 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:uuid/uuid.dart';
 import '../project_repository.dart';
 
-/// Classe helper per restituire le informazioni sulla sessione pendente.
+
+/// Contiene le informazioni su un singolo file con modifiche non salvate.
+class UnsavedFileChange {
+  final String fileId;
+  final String fileName;
+  final String firestoreContent;
+  final String rtdbContent;
+
+  UnsavedFileChange({
+    required this.fileId,
+    required this.fileName,
+    required this.firestoreContent,
+    required this.rtdbContent,
+  });
+}
+
+/// Classe helper che contiene l'elenco di tutti i file con modifiche.
 class PendingSessionInfo {
   final String projectId;
   final String projectName;
-  PendingSessionInfo({required this.projectId, required this.projectName});
+  final List<UnsavedFileChange> changedFiles;
+
+  PendingSessionInfo({
+    required this.projectId,
+    required this.projectName,
+    required this.changedFiles,
+  });
 }
 
-/// Implementazione concreta di `ProjectRepo` che utilizza Firebase.
-/// Gestisce la persistenza dei dati e le sessioni di lavoro temporanee.
 class FirebaseProjectRepo implements ProjectRepo {
   final String uid;
   final CollectionReference<Map<String, dynamic>> projectCollection;
@@ -25,41 +45,63 @@ class FirebaseProjectRepo implements ProjectRepo {
       .collection('projects'),
         _rtdbSessionRef = FirebaseDatabase.instance.ref('sessions/$uid');
 
-  // --- Gestione Sessione Workspace (Nuova Architettura) ---
-
   @override
   Future<PendingSessionInfo?> checkForPendingSessions() async {
     final sessionSnapshot = await _rtdbSessionRef.get();
-    if (!sessionSnapshot.exists || sessionSnapshot.value == null) {
-      return null;
-    }
+    if (!sessionSnapshot.exists || sessionSnapshot.value == null) return null;
 
     final sessionData = sessionSnapshot.value as Map<dynamic, dynamic>;
     if (sessionData.keys.isEmpty) {
-      await _rtdbSessionRef.remove(); // Pulisce sessioni vuote
+      await _rtdbSessionRef.remove();
       return null;
     }
 
-    // Assumiamo una sola sessione per utente
-    final projectId = sessionData.keys.first;
+    final projectId = sessionData.keys.first as String;
     final projectSession = sessionData[projectId] as Map<dynamic, dynamic>;
+    final rtdbFiles = projectSession['files'] as Map<dynamic, dynamic>? ?? {};
 
     final firestoreDoc = await projectCollection.doc(projectId).get();
     if (!firestoreDoc.exists) {
-      await _rtdbSessionRef.child(projectId).remove(); // Pulisce sessione orfana
+      await _rtdbSessionRef.child(projectId).remove();
       return null;
     }
 
     final firestoreTimestamp = (firestoreDoc.data()!['updatedAt'] as Timestamp).toDate();
     final sessionTimestamp = DateTime.parse(projectSession['sessionTimestamp']);
 
-    // Se la sessione sul "banco di lavoro" (RTDB) è più recente, proponi il recupero
     if (sessionTimestamp.isAfter(firestoreTimestamp)) {
-      return PendingSessionInfo(
-          projectId: projectId, projectName: firestoreDoc.data()!['name']);
+      final List<UnsavedFileChange> changedFiles = [];
+      final firestoreFilesSnapshot = await projectCollection.doc(projectId).collection('files').get();
+      final firestoreFiles = {for (var doc in firestoreFilesSnapshot.docs) doc.id: doc.data()};
+
+      for (var fileId in rtdbFiles.keys) {
+        final rtdbFile = rtdbFiles[fileId] as Map<dynamic, dynamic>;
+        final firestoreFile = firestoreFiles[fileId];
+
+        if (firestoreFile != null) {
+          final rtdbContent = rtdbFile['content'] as String;
+          final firestoreContent = firestoreFile['content'] as String;
+
+          if (rtdbContent != firestoreContent) {
+            changedFiles.add(UnsavedFileChange(
+              fileId: fileId,
+              fileName: rtdbFile['name'] as String,
+              firestoreContent: firestoreContent,
+              rtdbContent: rtdbContent,
+            ));
+          }
+        }
+      }
+
+      if (changedFiles.isNotEmpty) {
+        return PendingSessionInfo(
+          projectId: projectId,
+          projectName: firestoreDoc.data()!['name'],
+          changedFiles: changedFiles,
+        );
+      }
     }
 
-    // Altrimenti, la sessione è obsoleta e va scartata
     await _rtdbSessionRef.child(projectId).remove();
     return null;
   }
@@ -132,6 +174,27 @@ class FirebaseProjectRepo implements ProjectRepo {
         .child('files')
         .child(fileId)
         .update({'name': newName});
+  }
+
+  // --- Gestione Recupero Manuale ---
+
+  @override
+  Future<void> recoverSingleFile({required String projectId, required String fileId, required String rtdbContent}) async {
+    // Aggiorna il file in Firestore
+    await projectCollection
+        .doc(projectId)
+        .collection('files')
+        .doc(fileId)
+        .update({'content': rtdbContent});
+
+    // Rimuove il file dalla sessione RTDB per non mostrarlo di nuovo
+    await _rtdbSessionRef.child(projectId).child('files').child(fileId).remove();
+  }
+
+  @override
+  Future<void> discardSingleFileChange({required String projectId, required String fileId}) async {
+    // Rimuove semplicemente il file dalla sessione RTDB
+    await _rtdbSessionRef.child(projectId).child('files').child(fileId).remove();
   }
 
   // --- Gestione Progetti (CRUD su Firestore) ---

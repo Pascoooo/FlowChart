@@ -31,6 +31,13 @@ abstract class ProjectRepo {
   /// Rinomina un file nel "banco di lavoro" (sessione RTDB).
   Future<void> renameFileInSession(String projectId, String fileId, String newName);
 
+  // --- Gestione Recupero Manuale ---
+  /// Sovrascrive un singolo file in Firestore con il contenuto da RTDB.
+  Future<void> recoverSingleFile({required String projectId, required String fileId, required String rtdbContent});
+
+  /// Rimuove un singolo file dalla sessione RTDB, scartando le modifiche.
+  Future<void> discardSingleFileChange({required String projectId, required String fileId});
+
   // --- Gestione Progetti (CRUD su Firestore) ---
 
   Stream<List<MyProject>> projects();
