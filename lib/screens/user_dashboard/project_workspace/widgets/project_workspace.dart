@@ -230,7 +230,13 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
               },
             ),
             BlocListener<FlowchartBloc, FlowchartState>(
-              listenWhen: (previous, current) => previous != current && current is FlowchartLoaded,
+              listenWhen: (previous, current) {
+                // SOLO SE CAMBIANO LE SHAPES, NON LA SELEZIONE
+                if (previous is FlowchartLoaded && current is FlowchartLoaded) {
+                  return previous.shapes != current.shapes;
+                }
+                return previous != current;
+              },
               listener: (context, state) {
                 if (state is FlowchartLoaded && _currentFileId != null) {
                   final jsonContent = state.toJson();
