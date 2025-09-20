@@ -46,7 +46,9 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         'type': 'circle',
         'x': 120.0,
         'y': 120.0,
-        'properties': {'width': 90.0, 'height': 90.0, 'text': 'Start'},
+        'width': 90.0,
+        'height': 90.0,
+        'text': 'Start',
       };
       final Map<String, dynamic> initialContentData = {
         'shapes': [defaultShapeData],

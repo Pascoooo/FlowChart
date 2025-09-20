@@ -1,4 +1,8 @@
+import 'dart:ui';
+import 'package:flowchart_thesis/blocs/flowchart_bloc/placement_engine.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
+import '../../screens/user_dashboard/project_workspace/views/rules/flowchart_rule.dart';
 import 'commands/command_history.dart';
 import 'flowchart_event.dart';
 import 'flowchart_state.dart';
@@ -28,40 +32,57 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     emit(FlowchartLoaded.fromJson(event.jsonContent));
   }
 
-// in flowchart_bloc.dart
   void _onAddShape(AddShape event, Emitter<FlowchartState> emit) {
-    final currentState = state;
-    if (currentState is! FlowchartLoaded) return;
+    if (state is! FlowchartLoaded) return;
+    final currentState = state as FlowchartLoaded;
 
-    print("BLOC: Ricevuto evento AddShape da ${event.fromShapeId}"); // <-- LOG 1
+    final validator = FlowchartValidator();
 
-    final List<FlowchartCommand> commands = [AddShapeCommand(event.shape)];
-    String description = 'Aggiungi forma';
-
-    if (event.fromShapeId != null) {
-      final connection = FlowchartConnection(
-        id: 'conn_${DateTime.now().microsecondsSinceEpoch}',
-        fromShapeId: event.fromShapeId!,
-        toShapeId: event.shape.id,
-      );
-      commands.add(AddConnectionCommand(connection));
-      description = 'Aggiungi forma e connessione';
+    final shapeValidationResult = validator.validate(currentState, event.shape);
+    if (!shapeValidationResult.isValid) {
+      print("VALIDATION FAILED (Shape): ${shapeValidationResult.errorMessage}");
+      return;
     }
 
-    final command = CompositeCommand(commands, description);
-    _history.executeCommand(command);
+    final fromShape = currentState.shapes.firstWhere(
+          (s) => s.id == event.fromShapeId,
+      // --- CORREZIONE QUI ---
+      // Ho sostituito .empty() con il costruttore completo di una forma vuota.
+      orElse: () => const FlowchartShape(id: '', type: '', text: '', x: 0, y: 0, width: 0, height: 0),
+    );
+    if (fromShape.id.isEmpty) return;
 
-    // -- SEZIONE DI DEBUG --
-    print("BLOC: Stato PRIMA dell'esecuzione: ${currentState.shapes.length} forme, ${currentState.connections.length} connessioni."); // <-- LOG 2
+    const newShapeSize = Size(120, 60);
+    final optimalPosition = PlacementEngine.findOptimalPosition(
+      fromShape: fromShape,
+      newShapeSize: newShapeSize,
+      existingShapes: currentState.shapes,
+    );
+    if (optimalPosition == null) {
+      print("PLACEMENT ERROR: Spazio insufficiente.");
+      return;
+    }
 
-    final newState = command.execute(currentState).copyWith(
-      selectedShapeId: event.shape.id,
+    final newShape = event.shape.copyWith(
+      x: optimalPosition.dx, y: optimalPosition.dy,
+      width: newShapeSize.width, height: newShapeSize.height,
+    );
+    final newConnection = FlowchartConnection(
+      fromShapeId: fromShape.id, toShapeId: newShape.id, id: const Uuid().v4(),
     );
 
-    print("BLOC: Stato DOPO l'esecuzione: ${newState.shapes.length} forme, ${newState.connections.length} connessioni."); // <-- LOG 3
-    // -- FINE SEZIONE DI DEBUG --
+    final connectionValidationResult = validator.validate(currentState, newConnection);
+    if (!connectionValidationResult.isValid) {
+      print("VALIDATION FAILED (Connection): ${connectionValidationResult.errorMessage}");
+      return;
+    }
 
-    emit(newState);
+    final command = CompositeCommand(
+      [ AddShapeCommand(newShape), AddConnectionCommand(newConnection) ],
+      'Aggiungi forma',
+    );
+    _history.executeCommand(command);
+    emit(command.execute(currentState));
   }
 
   void _onRemoveShape(RemoveShape event, Emitter<FlowchartState> emit) {
@@ -82,7 +103,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       commands.add(RemoveConnectionCommand(conn));
     }
 
-    final command = CompositeCommand(commands, 'Rimuovi forma e connessioni');
+    final command = CompositeCommand(commands, 'Rimuovi forma');
     _history.executeCommand(command);
 
     emit(command.execute(currentState).deselect());

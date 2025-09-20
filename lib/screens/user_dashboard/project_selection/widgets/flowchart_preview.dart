@@ -102,8 +102,8 @@ class _StaticFlowchartCanvas extends StatelessWidget {
               final Rect? contentBounds = state.shapes.fold<Rect?>(
                 null,
                     (previousValue, shape) {
-                  final width = (shape.properties['width'] as num?)?.toDouble() ?? 100;
-                  final height = (shape.properties['height'] as num?)?.toDouble() ?? 60;
+                  final width = (shape.width <= 0) ? 100.0 : shape.width;
+                  final height = (shape.height <= 0) ? 60.0 : shape.height;
                   final shapeRect = Rect.fromLTWH(shape.x, shape.y, width, height);
 
                   if (previousValue == null) return shapeRect;
@@ -187,9 +187,9 @@ class _ShapeRenderer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = (shape.properties['width'] as num?)?.toDouble() ?? 100;
-    final height = (shape.properties['height'] as num?)?.toDouble() ?? 60;
-    final text = (shape.properties['text'] as String?) ?? '';
+    final text = shape.text;
+    final width = shape.width;
+    final height = shape.height;
 
     const textStyle = TextStyle(
       fontSize: 12,

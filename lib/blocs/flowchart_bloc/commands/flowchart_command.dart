@@ -1,13 +1,11 @@
 import '../flowchart_state.dart';
 
-/// Interfaccia base per tutti i comandi che possono essere annullati
 abstract class FlowchartCommand {
   FlowchartLoaded execute(FlowchartLoaded currentState);
   FlowchartLoaded undo(FlowchartLoaded currentState);
   String get description;
 }
 
-/// Comando per aggiungere una forma
 class AddShapeCommand implements FlowchartCommand {
   final FlowchartShape shape;
 
@@ -29,11 +27,9 @@ class AddShapeCommand implements FlowchartCommand {
   String get description => 'Aggiungi ${shape.type}';
 }
 
-/// Comando per rimuovere una forma
 class RemoveShapeCommand implements FlowchartCommand {
   final FlowchartShape removedShape;
 
-  // CORREZIONE: Rimosso il parametro non necessario 'previousSelectedId'
   RemoveShapeCommand(this.removedShape);
 
   @override
@@ -52,12 +48,17 @@ class RemoveShapeCommand implements FlowchartCommand {
   String get description => 'Rimuovi ${removedShape.type}';
 }
 
-/// Comando per spostare una forma
 class MoveShapeCommand implements FlowchartCommand {
   final String shapeId;
   final double newX, newY, oldX, oldY;
 
-  MoveShapeCommand({ required this.shapeId, required this.newX, required this.newY, required this.oldX, required this.oldY });
+  MoveShapeCommand({
+    required this.shapeId,
+    required this.newX,
+    required this.newY,
+    required this.oldX,
+    required this.oldY
+  });
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
@@ -79,13 +80,77 @@ class MoveShapeCommand implements FlowchartCommand {
   String get description => 'Sposta forma';
 }
 
-// NUOVI COMANDI PER LE CONNESSIONI
+// NUOVO: Comando per aggiornare proprietà delle forme
+class UpdateShapePropertiesCommand implements FlowchartCommand {
+  final String shapeId;
+  final double? newWidth;
+  final double? newHeight;
+  final String? newText;
+  final double? oldWidth;
+  final double? oldHeight;
+  final String? oldText;
+
+  UpdateShapePropertiesCommand({
+    required this.shapeId,
+    this.newWidth,
+    this.newHeight,
+    this.newText,
+    this.oldWidth,
+    this.oldHeight,
+    this.oldText,
+  });
+
+  @override
+  FlowchartLoaded execute(FlowchartLoaded currentState) {
+    final updatedShapes = currentState.shapes.map((s) {
+      return s.id == shapeId
+          ? s.copyWith(
+        width: newWidth,
+        height: newHeight,
+        text: newText,
+      )
+          : s;
+    }).toList();
+    return currentState.copyWith(shapes: updatedShapes);
+  }
+
+  @override
+  FlowchartLoaded undo(FlowchartLoaded currentState) {
+    final updatedShapes = currentState.shapes.map((s) {
+      return s.id == shapeId
+          ? s.copyWith(
+        width: oldWidth,
+        height: oldHeight,
+        text: oldText,
+      )
+          : s;
+    }).toList();
+    return currentState.copyWith(shapes: updatedShapes);
+  }
+
+  @override
+  String get description => 'Aggiorna proprietà forma';
+}
+
 class AddConnectionCommand implements FlowchartCommand {
   final FlowchartConnection connection;
   AddConnectionCommand(this.connection);
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
+    // Validazione: evita connessioni duplicate
+    if (currentState.connections.any((c) =>
+    c.fromShapeId == connection.fromShapeId &&
+        c.toShapeId == connection.toShapeId)) {
+      return currentState; // Connessione già esistente
+    }
+
+    // Validazione: verifica che le forme esistano
+    if (!currentState.shapes.any((s) => s.id == connection.fromShapeId) ||
+        !currentState.shapes.any((s) => s.id == connection.toShapeId)) {
+      return currentState; // Una o entrambe le forme non esistono
+    }
+
     final updatedConnections = List<FlowchartConnection>.from(currentState.connections)..add(connection);
     return currentState.copyWith(connections: updatedConnections);
   }
@@ -120,8 +185,6 @@ class RemoveConnectionCommand implements FlowchartCommand {
   String get description => 'Rimuovi connessione';
 }
 
-
-/// Comando composito per operazioni multiple
 class CompositeCommand implements FlowchartCommand {
   final List<FlowchartCommand> commands;
   final String _description;

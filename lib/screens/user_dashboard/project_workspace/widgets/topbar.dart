@@ -188,7 +188,9 @@ class _AdvancedTopBar extends StatelessWidget {
           type: type,
           x: 120,
           y: 120,
-          properties: {'width': w, 'height': h, 'text': text},
+          width: w,
+          height: h,
+          text: text,
         ),
       ),
     );

@@ -15,7 +15,6 @@ class LoadFlowchart extends FlowchartEvent {
   List<Object?> get props => [jsonContent];
 }
 
-// CORREZIONE: L'evento ora accetta l'ID della forma di partenza per la connessione.
 class AddShape extends FlowchartEvent {
   final FlowchartShape shape;
   final String? fromShapeId;
@@ -49,6 +48,24 @@ class UpdateShape extends FlowchartEvent {
   });
   @override
   List<Object?> get props => [shapeId, newX, newY, oldX, oldY];
+}
+
+// NUOVO: Evento per aggiornare proprietà delle forme
+class UpdateShapeProperties extends FlowchartEvent {
+  final String shapeId;
+  final double? width;
+  final double? height;
+  final String? text;
+
+  const UpdateShapeProperties({
+    required this.shapeId,
+    this.width,
+    this.height,
+    this.text,
+  });
+
+  @override
+  List<Object?> get props => [shapeId, width, height, text];
 }
 
 class SelectShape extends FlowchartEvent {
