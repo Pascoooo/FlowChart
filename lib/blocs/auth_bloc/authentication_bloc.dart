@@ -15,7 +15,6 @@ class AuthenticationBloc
     _userSubscription = _userRepository.user.listen((user) {
       add(AuthenticationUserChanged(user));
     });
-
     on<AuthenticationUserChanged>(_onUserChanged);
     on<AuthenticationGoogleSignInRequested>(_onGoogleSignInRequested);
     on<AuthenticationLogoutRequested>(_onLogoutRequested);
@@ -63,7 +62,6 @@ class AuthenticationBloc
     try {
       await _userRepository.signOut();
     } catch (e) {
-      // Miglioramento: Propaga il messaggio di errore specifico
       final errorMessage = e is AuthenticationException ? e.message : 'Errore durante il logout.';
       emit(state.copyWith(
           isLoading: false, errorMessage: errorMessage));
@@ -77,7 +75,6 @@ class AuthenticationBloc
     try {
       await _userRepository.deleteAccount();
     } catch (e) {
-      // Miglioramento: Propaga il messaggio di errore specifico
       final errorMessage = e is AuthenticationException ? e.message : 'Errore durante l\'eliminazione dell\'account.';
       emit(state.copyWith(
           isLoading: false,
@@ -157,7 +154,6 @@ class AuthenticationBloc
     emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
       await _userRepository.revokeGoogleDrivePermission();
-      // Anche qui, il listener dello stream `user` aggiornerà la UI.
       emit(state.copyWith(isLoading: false));
     } catch (e) {
       emit(state.copyWith(

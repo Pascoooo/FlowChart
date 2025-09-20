@@ -1,4 +1,3 @@
-// pascoooo/flowchart/FlowChart-rework/lib/blocs/flowchart_bloc/flowchart_state.dart
 import 'package:equatable/equatable.dart';
 import 'dart:convert';
 
@@ -55,6 +54,38 @@ class FlowchartShape extends Equatable {
   List<Object?> get props => [id, type, x, y, properties];
 }
 
+// NUOVA CLASSE PER RAPPRESENTARE UNA CONNESSIONE NELLO STATO DELLA UI
+class FlowchartConnection extends Equatable {
+  final String id;
+  final String fromShapeId;
+  final String toShapeId;
+
+  const FlowchartConnection({
+    required this.id,
+    required this.fromShapeId,
+    required this.toShapeId,
+  });
+
+  factory FlowchartConnection.fromJson(Map<String, dynamic> json) {
+    return FlowchartConnection(
+      id: json['id'],
+      fromShapeId: json['fromShapeId'],
+      toShapeId: json['toShapeId'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'fromShapeId': fromShapeId,
+      'toShapeId': toShapeId,
+    };
+  }
+
+  @override
+  List<Object?> get props => [id, fromShapeId, toShapeId];
+}
+
 abstract class FlowchartState extends Equatable {
   const FlowchartState();
 
@@ -66,85 +97,73 @@ class FlowchartInitial extends FlowchartState {}
 
 class FlowchartLoaded extends FlowchartState {
   final List<FlowchartShape> shapes;
+  final List<FlowchartConnection> connections; // STATO ARRICCHITO
   final String? selectedShapeId;
 
   const FlowchartLoaded({
     this.shapes = const [],
+    this.connections = const [], // VALORE DI DEFAULT
     this.selectedShapeId,
   });
 
-  // CORREZIONE: Uso di parametri con nome opzionali per gestire null espliciti
   FlowchartLoaded copyWith({
     List<FlowchartShape>? shapes,
+    List<FlowchartConnection>? connections,
     String? selectedShapeId,
     bool clearSelection = false,
   }) {
     return FlowchartLoaded(
       shapes: shapes ?? this.shapes,
+      connections: connections ?? this.connections,
       selectedShapeId: clearSelection ? null : (selectedShapeId ?? this.selectedShapeId),
     );
   }
 
-  // Metodi helper per semplificare l'uso
-  FlowchartLoaded withShapes(List<FlowchartShape> shapes) =>
-      copyWith(shapes: shapes);
-
-  FlowchartLoaded withSelection(String? shapeId) =>
-      copyWith(selectedShapeId: shapeId);
-
-  FlowchartLoaded clearSelection() =>
-      copyWith(clearSelection: true);
-
-  // AGGIUNTO: Metodo specifico per deselezionare
   FlowchartLoaded deselect() {
-    return FlowchartLoaded(
-      shapes: shapes,
-      selectedShapeId: null,
-    );
+    return copyWith(clearSelection: true);
   }
 
+  // AGGIORNATO PER RISPECCHIARE LA STRUTTURA DEL BACKEND
   String toJson() {
-    final List<Map<String, dynamic>> shapesJson =
-    shapes.map((shape) => shape.toJson()).toList();
-    return jsonEncode(shapesJson);
+    final Map<String, dynamic> jsonMap = {
+      'shapes': shapes.map((shape) => shape.toJson()).toList(),
+      'connections': connections.map((conn) => conn.toJson()).toList(),
+    };
+    return jsonEncode(jsonMap);
   }
 
+  // AGGIORNATO PER LEGGERE LA NUOVA STRUTTURA
   factory FlowchartLoaded.fromJson(String jsonString) {
-    List<FlowchartShape> parsed = const [];
     if (jsonString.isEmpty) {
-      final start = _defaultStartShape();
-      return FlowchartLoaded(shapes: [start], selectedShapeId: start.id);
+      return FlowchartLoaded(shapes: [_defaultStartShape()]);
     }
     try {
-      final List<dynamic> shapesJson = jsonDecode(jsonString);
-      parsed = shapesJson.map((json) => FlowchartShape.fromJson(json)).toList();
-    } catch (e) {
-      final start = _defaultStartShape();
-      return FlowchartLoaded(shapes: [start], selectedShapeId: start.id);
-    }
+      final Map<String, dynamic> jsonMap = jsonDecode(jsonString);
+      final shapes = (jsonMap['shapes'] as List<dynamic>?)
+          ?.map((json) => FlowchartShape.fromJson(json))
+          .toList() ?? [];
+      final connections = (jsonMap['connections'] as List<dynamic>?)
+          ?.map((json) => FlowchartConnection.fromJson(json))
+          .toList() ?? [];
 
-    if (parsed.isEmpty) {
-      final start = _defaultStartShape();
-      return FlowchartLoaded(shapes: [start], selectedShapeId: start.id);
+      if (shapes.isEmpty) {
+        return FlowchartLoaded(shapes: [_defaultStartShape()]);
+      }
+      return FlowchartLoaded(shapes: shapes, connections: connections);
+
+    } catch (e) {
+      return FlowchartLoaded(shapes: [_defaultStartShape()]);
     }
-    return FlowchartLoaded(shapes: parsed);
   }
 
   static FlowchartShape _defaultStartShape() {
     final id = 'start_${DateTime.now().microsecondsSinceEpoch}';
     return FlowchartShape(
-      id: id,
-      type: 'circle',
-      x: 120,
-      y: 120,
-      properties: const {
-        'width': 90.0,
-        'height': 90.0,
-        'text': 'Start',
-      },
+      id: id, type: 'circle', x: 120, y: 120,
+      properties: const {'width': 90.0, 'height': 90.0, 'text': 'Start'},
     );
   }
 
   @override
-  List<Object?> get props => [shapes, selectedShapeId];
+  List<Object?> get props => [shapes, connections, selectedShapeId];
 }
