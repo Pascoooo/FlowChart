@@ -8,7 +8,6 @@ abstract class FlowchartCommand {
 
 class AddShapeCommand implements FlowchartCommand {
   final FlowchartShape shape;
-
   AddShapeCommand(this.shape);
 
   @override
@@ -29,7 +28,6 @@ class AddShapeCommand implements FlowchartCommand {
 
 class RemoveShapeCommand implements FlowchartCommand {
   final FlowchartShape removedShape;
-
   RemoveShapeCommand(this.removedShape);
 
   @override
@@ -80,36 +78,40 @@ class MoveShapeCommand implements FlowchartCommand {
   String get description => 'Sposta forma';
 }
 
-// NUOVO: Comando per aggiornare proprietà delle forme
+/// Comando potenziato per aggiornare le proprietà di una forma,
+/// incluso testo E le liste di connessioni per mantenere la consistenza dei dati.
 class UpdateShapePropertiesCommand implements FlowchartCommand {
   final String shapeId;
-  final double? newWidth;
-  final double? newHeight;
-  final String? newText;
-  final double? oldWidth;
-  final double? oldHeight;
-  final String? oldText;
+  final String? newText, oldText;
+  final List<String>? newIncoming, oldIncoming;
+  final List<String>? newOutgoing, oldOutgoing;
 
+  // Costruttore principale per il testo
   UpdateShapePropertiesCommand({
     required this.shapeId,
-    this.newWidth,
-    this.newHeight,
     this.newText,
-    this.oldWidth,
-    this.oldHeight,
     this.oldText,
-  });
+  }) : newIncoming = null, oldIncoming = null, newOutgoing = null, oldOutgoing = null;
+
+  // Costruttore nominato per aggiornare solo le connessioni
+  UpdateShapePropertiesCommand.connections({
+    required this.shapeId,
+    this.newIncoming, this.oldIncoming,
+    this.newOutgoing, this.oldOutgoing,
+  }) : newText = null, oldText = null;
+
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
     final updatedShapes = currentState.shapes.map((s) {
-      return s.id == shapeId
-          ? s.copyWith(
-        width: newWidth,
-        height: newHeight,
-        text: newText,
-      )
-          : s;
+      if (s.id == shapeId) {
+        return s.copyWith(
+          text: newText ?? s.text,
+          incomingConnectionIds: newIncoming ?? s.incomingConnectionIds,
+          outgoingConnectionIds: newOutgoing ?? s.outgoingConnectionIds,
+        );
+      }
+      return s;
     }).toList();
     return currentState.copyWith(shapes: updatedShapes);
   }
@@ -117,13 +119,14 @@ class UpdateShapePropertiesCommand implements FlowchartCommand {
   @override
   FlowchartLoaded undo(FlowchartLoaded currentState) {
     final updatedShapes = currentState.shapes.map((s) {
-      return s.id == shapeId
-          ? s.copyWith(
-        width: oldWidth,
-        height: oldHeight,
-        text: oldText,
-      )
-          : s;
+      if (s.id == shapeId) {
+        return s.copyWith(
+          text: oldText ?? s.text,
+          incomingConnectionIds: oldIncoming ?? s.incomingConnectionIds,
+          outgoingConnectionIds: oldOutgoing ?? s.outgoingConnectionIds,
+        );
+      }
+      return s;
     }).toList();
     return currentState.copyWith(shapes: updatedShapes);
   }
@@ -138,27 +141,36 @@ class AddConnectionCommand implements FlowchartCommand {
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
-    // Validazione: evita connessioni duplicate
-    if (currentState.connections.any((c) =>
-    c.fromShapeId == connection.fromShapeId &&
-        c.toShapeId == connection.toShapeId)) {
-      return currentState; // Connessione già esistente
-    }
-
-    // Validazione: verifica che le forme esistano
-    if (!currentState.shapes.any((s) => s.id == connection.fromShapeId) ||
-        !currentState.shapes.any((s) => s.id == connection.toShapeId)) {
-      return currentState; // Una o entrambe le forme non esistono
-    }
-
     final updatedConnections = List<FlowchartConnection>.from(currentState.connections)..add(connection);
-    return currentState.copyWith(connections: updatedConnections);
+    final updatedShapes = currentState.shapes.map((shape) {
+      if (shape.id == connection.fromShapeId) {
+        final newOutgoing = List<String>.from(shape.outgoingConnectionIds)..add(connection.id);
+        return shape.copyWith(outgoingConnectionIds: newOutgoing);
+      }
+      if (shape.id == connection.toShapeId) {
+        final newIncoming = List<String>.from(shape.incomingConnectionIds)..add(connection.id);
+        return shape.copyWith(incomingConnectionIds: newIncoming);
+      }
+      return shape;
+    }).toList();
+    return currentState.copyWith(shapes: updatedShapes, connections: updatedConnections);
   }
 
   @override
   FlowchartLoaded undo(FlowchartLoaded currentState) {
     final updatedConnections = currentState.connections.where((c) => c.id != connection.id).toList();
-    return currentState.copyWith(connections: updatedConnections);
+    final updatedShapes = currentState.shapes.map((shape) {
+      if (shape.id == connection.fromShapeId) {
+        final newOutgoing = List<String>.from(shape.outgoingConnectionIds)..remove(connection.id);
+        return shape.copyWith(outgoingConnectionIds: newOutgoing);
+      }
+      if (shape.id == connection.toShapeId) {
+        final newIncoming = List<String>.from(shape.incomingConnectionIds)..remove(connection.id);
+        return shape.copyWith(incomingConnectionIds: newIncoming);
+      }
+      return shape;
+    }).toList();
+    return currentState.copyWith(shapes: updatedShapes, connections: updatedConnections);
   }
 
   @override
@@ -171,14 +183,12 @@ class RemoveConnectionCommand implements FlowchartCommand {
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
-    final updatedConnections = currentState.connections.where((c) => c.id != connection.id).toList();
-    return currentState.copyWith(connections: updatedConnections);
+    return AddConnectionCommand(connection).undo(currentState);
   }
 
   @override
   FlowchartLoaded undo(FlowchartLoaded currentState) {
-    final updatedConnections = List<FlowchartConnection>.from(currentState.connections)..add(connection);
-    return currentState.copyWith(connections: updatedConnections);
+    return AddConnectionCommand(connection).execute(currentState);
   }
 
   @override

@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:bloc/bloc.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:project_repository/project_repository.dart';
+import '../flowchart_bloc/FlowchartShapeFactory.dart';
 import 'file_system_event.dart';
 import 'file_system_state.dart';
 
@@ -40,21 +42,21 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     emit(currentState.copyWith(isLoading: true));
     try {
-      final String startShapeId = 'start_${DateTime.now().microsecondsSinceEpoch}';
-      final Map<String, dynamic> defaultShapeData = {
-        'id': startShapeId,
-        'type': 'circle',
-        'x': 120.0,
-        'y': 120.0,
-        'width': 90.0,
-        'height': 90.0,
-        'text': 'Start',
-      };
+      // 1. Usa la Factory per creare la forma di default in modo pulito e centralizzato
+      final defaultShape = FlowchartShapeFactory.createShape(
+        ShapeType.start,
+        const Offset(120.0, 120.0),
+      );
+
+      // 2. Prepara il contenuto JSON
+      // (Assicurati che il tuo modello FlowchartShape abbia un metodo toJson())
       final Map<String, dynamic> initialContentData = {
-        'shapes': [defaultShapeData],
+        'shapes': [defaultShape.toJson()],
+        'connections': [],
       };
       final String initialContent = jsonEncode(initialContentData);
 
+      // 3. Salva il file come prima
       final newFile = await projectRepository.addFileToProject(
         projectId: event.projectId,
         fileName: event.fileName.trim(),

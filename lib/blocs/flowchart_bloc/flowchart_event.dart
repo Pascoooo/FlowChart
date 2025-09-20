@@ -1,4 +1,6 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
+import 'FlowchartShapeFactory.dart';
 import 'flowchart_state.dart';
 import 'commands/flowchart_command.dart';
 
@@ -8,6 +10,17 @@ abstract class FlowchartEvent extends Equatable {
   List<Object?> get props => [];
 }
 
+class FlowchartActionFailure extends FlowchartState {
+  final String title;
+  final String message;
+
+  const FlowchartActionFailure({required this.title, required this.message});
+
+  @override
+  List<Object?> get props => [title, message];
+}
+
+
 class LoadFlowchart extends FlowchartEvent {
   final String jsonContent;
   const LoadFlowchart(this.jsonContent);
@@ -16,13 +29,15 @@ class LoadFlowchart extends FlowchartEvent {
 }
 
 class AddShape extends FlowchartEvent {
-  final FlowchartShape shape;
+  final ShapeType shapeType;
   final String? fromShapeId;
+  final BoxConstraints canvasConstraints;
 
-  const AddShape(this.shape, {this.fromShapeId});
+  const AddShape(
+      {required this.shapeType, this.fromShapeId, required this.canvasConstraints});
 
   @override
-  List<Object?> get props => [shape, fromShapeId];
+  List<Object?> get props => [shapeType, fromShapeId];
 }
 
 class RemoveShape extends FlowchartEvent {

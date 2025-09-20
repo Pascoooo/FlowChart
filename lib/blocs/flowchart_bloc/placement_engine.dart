@@ -2,53 +2,66 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../blocs/flowchart_bloc/flowchart_state.dart';
 
-/// Un motore per trovare la posizione ottimale per una nuova forma, evitando collisioni.
+/// Un motore per trovare la posizione ottimale per una nuova forma,
+/// evitando collisioni e rimanendo dentro i confini della workarea.
 class PlacementEngine {
-  // Padding extra per evitare che le forme si tocchino
   static const double _padding = 20.0;
 
   /// Metodo principale per trovare una posizione valida.
-  /// Ritorna un Offset con le coordinate (x, y) o null se non trova spazio.
   static Offset? findOptimalPosition({
     required FlowchartShape fromShape,
     required Size newShapeSize,
     required List<FlowchartShape> existingShapes,
+    required BoxConstraints canvasConstraints, // <-- NUOVO PARAMETRO
   }) {
+    // Definiamo il rettangolo che rappresenta l'intera area di lavoro
+    final canvasRect = Rect.fromLTWH(
+      0, 0,
+      canvasConstraints.maxWidth,
+      canvasConstraints.maxHeight,
+    ).deflate(_padding); // Riduciamo leggermente per non stare attaccati ai bordi
 
-    // --- Strategia di Ricerca Semplice: Sotto -> Destra -> Sinistra ---
+    // Lista di posizioni candidate da provare in ordine di preferenza
+    final List<Offset> candidatePositions = [
+      // Sotto
+      Offset(
+        fromShape.x + (fromShape.width / 2) - (newShapeSize.width / 2),
+        fromShape.y + fromShape.height + (_padding * 2),
+      ),
+      // Destra
+      Offset(
+        fromShape.x + fromShape.width + (_padding * 2),
+        fromShape.y + (fromShape.height / 2) - (newShapeSize.height / 2),
+      ),
+      // Sinistra
+      Offset(
+        fromShape.x - newShapeSize.width - (_padding * 2),
+        fromShape.y + (fromShape.height / 2) - (newShapeSize.height / 2),
+      ),
+    ];
 
-    // 1. Prova la posizione SOTTO (quella predefinita)
-    Offset candidatePosition = Offset(
-      fromShape.x + (fromShape.width / 2) - (newShapeSize.width / 2), // Centrata orizzontalmente
-      fromShape.y + fromShape.height + (_padding * 2),
-    );
-    Rect candidateRect = Rect.fromLTWH(candidatePosition.dx, candidatePosition.dy, newShapeSize.width, newShapeSize.height);
-    if (_isPositionFree(candidateRect, existingShapes)) {
-      return candidatePosition;
+    // Prova ogni posizione candidata
+    for (final position in candidatePositions) {
+      final candidateRect = Rect.fromLTWH(
+        position.dx,
+        position.dy,
+        newShapeSize.width,
+        newShapeSize.height,
+      );
+
+      // --- DOPPIO CONTROLLO PERFETTO ---
+      // 1. La forma è COMPLETAMENTE dentro la workarea?
+      final bool isInside = canvasRect.contains(candidateRect.topLeft) &&
+          canvasRect.contains(candidateRect.bottomRight);
+
+      // 2. La posizione è libera da altre forme?
+      if (isInside && _isPositionFree(candidateRect, existingShapes)) {
+        // Se entrambi i controlli passano, abbiamo trovato la posizione perfetta!
+        return position;
+      }
     }
 
-    // 2. Se sotto è occupato, prova a DESTRA
-    candidatePosition = Offset(
-      fromShape.x + fromShape.width + (_padding * 2),
-      fromShape.y + (fromShape.height / 2) - (newShapeSize.height / 2), // Centrata verticalmente
-    );
-    candidateRect = Rect.fromLTWH(candidatePosition.dx, candidatePosition.dy, newShapeSize.width, newShapeSize.height);
-    if (_isPositionFree(candidateRect, existingShapes)) {
-      return candidatePosition;
-    }
-
-    // 3. Se anche a destra è occupato, prova a SINISTRA
-    candidatePosition = Offset(
-      fromShape.x - newShapeSize.width - (_padding * 2),
-      fromShape.y + (fromShape.height / 2) - (newShapeSize.height / 2), // Centrata verticalmente
-    );
-    candidateRect = Rect.fromLTWH(candidatePosition.dx, candidatePosition.dy, newShapeSize.width, newShapeSize.height);
-    if (_isPositionFree(candidateRect, existingShapes)) {
-      return candidatePosition;
-    }
-
-    // Caso limite: non è stato trovato spazio con la strategia semplice.
-    print("PlacementEngine: Nessuno spazio libero trovato nelle vicinanze.");
+    print("PlacementEngine: Nessuno spazio valido trovato.");
     return null;
   }
 
@@ -56,12 +69,12 @@ class PlacementEngine {
   static bool _isPositionFree(Rect targetRect, List<FlowchartShape> shapes) {
     for (final shape in shapes) {
       final existingShapeRect = Rect.fromLTWH(shape.x, shape.y, shape.width, shape.height)
-          .inflate(_padding); // Aggiungiamo padding per sicurezza
+          .inflate(_padding);
 
       if (targetRect.overlaps(existingShapeRect)) {
-        return false; // Collisione trovata! La posizione non è libera.
+        return false;
       }
     }
-    return true; // Nessuna collisione, la posizione è libera.
+    return true;
   }
 }

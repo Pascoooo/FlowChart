@@ -1,9 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:uuid/uuid.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../blocs/flowchart_bloc/FlowchartShapeFactory.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
@@ -76,7 +76,7 @@ class _CreationHandleState extends State<CreationHandle>
             if (_showPanel)
               Positioned.fill(
                 child: Align(
-                  alignment: _getPanelAlignment(), // La logica di posizionamento è qui
+                  alignment: _getPanelAlignment(),
                   child: FadeTransition(
                     opacity: _panelAnimation,
                     child: ScaleTransition(
@@ -85,7 +85,7 @@ class _CreationHandleState extends State<CreationHandle>
                       child: ShapeCreationPanel(
                         onShapeCreated: _closePanel,
                         sourceShapeId: widget.sourceShape.id,
-                        direction: widget.direction,
+                        canvasConstraints: widget.canvasConstraints,
                       ),
                     ),
                   ),
@@ -148,15 +148,20 @@ class _CreationHandleState extends State<CreationHandle>
 
   Offset _getHandleCenter() {
     final shape = widget.sourceShape;
+    // La logica è semplificata perché abbiamo solo il pulsante inferiore
     return Offset(shape.x + shape.width / 2, shape.y + shape.height + 5 + (handleSize / 2));
   }
 
-  /// Calcola l'allineamento del pannello, controllando i bordi
   Alignment _getPanelAlignment() {
     final handleCenter = _getHandleCenter();
+    // Calcola dove finirebbe il bordo inferiore del pannello
     final panelBottomEdge = handleCenter.dy + (handleSize / 2) + 18 + panelHeight;
+    // Controlla se sfora l'altezza massima della canvas
     final bool goesBeyondCanvas = panelBottomEdge > widget.canvasConstraints.maxHeight;
+
     const double spacing = 1.3;
+
+    // Se sfora, apri verso l'alto (spacing negativo), altrimenti verso il basso (spacing positivo)
     return Alignment(0, goesBeyondCanvas ? -spacing : spacing);
   }
 }
@@ -164,49 +169,29 @@ class _CreationHandleState extends State<CreationHandle>
 class ShapeCreationPanel extends StatelessWidget {
   final String sourceShapeId;
   final VoidCallback onShapeCreated;
-  final HandleDirection direction;
+  final BoxConstraints canvasConstraints;
 
   const ShapeCreationPanel({
     super.key,
     required this.sourceShapeId,
     required this.onShapeCreated,
-    required this.direction,
+    required this.canvasConstraints,
   });
 
-  void _createShape(BuildContext context, String shapeType, String text) {
+  /// Invia l'evento semplificato al BLoC.
+  /// Non crea più la forma, ma dice al BLoC QUALE TIPO di forma creare.
+  void _createShape(BuildContext context, ShapeType shapeType) {
     final bloc = context.read<FlowchartBloc>();
-    final currentState = bloc.state;
 
-    if (currentState is! FlowchartLoaded) return;
+    // CORREZIONE: Passa correttamente il parametro shapeType all'evento AddShape
+    bloc.add(AddShape(
+      shapeType: shapeType,
+      fromShapeId: sourceShapeId,
+      canvasConstraints: canvasConstraints,
+    ));
 
-    final sourceShape = currentState.shapes.firstWhere(
-          (s) => s.id == sourceShapeId,
-      orElse: () => const FlowchartShape(id: '', type: '', x: 0, y: 0, width: 0, height: 0, text: '')
-    );
-
-    if (sourceShape.id.isEmpty) return;
-
-    double offsetX = 0, offsetY = 0;
-    const spacing = 160.0;
-
-    // Ora la nuova forma viene creata sempre sotto
-    offsetY = spacing;
-
-    final newShapeId = const Uuid().v4();
-    final newShape = FlowchartShape(
-      id: newShapeId,
-      type: shapeType,
-      x: sourceShape.x, // Si centra orizzontalmente con la forma di partenza
-      y: sourceShape.y + offsetY,
-      width: 120,
-      height: 60,
-      text: text,
-    );
-
-    bloc.add(AddShape(newShape, fromShapeId: sourceShapeId));
     onShapeCreated();
   }
-
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
@@ -228,20 +213,20 @@ class ShapeCreationPanel extends StatelessWidget {
               ShapeButton(
                 icon: CupertinoIcons.square_on_square,
                 label: 'Processo',
-                onPressed: () => _createShape(context, 'rectangle', 'Processo'),
+                onPressed: () => _createShape(context, ShapeType.process),
               ),
               const _Divider(),
               ShapeButton(
                 icon: FontAwesomeIcons.font,
                 label: 'Decisione',
-                onPressed: () => _createShape(context, 'diamond', 'Decisione'),
+                onPressed: () => _createShape(context, ShapeType.decision),
               ),
               const _Divider(),
               ShapeButton(
                 icon: CupertinoIcons.circle,
-                label: 'Inizio/Fine',
+                label: 'Fine',
                 isLast: true,
-                onPressed: () => _createShape(context, 'circle', 'Inizio/Fine'),
+                onPressed: () => _createShape(context, ShapeType.end),
               ),
             ],
           ),

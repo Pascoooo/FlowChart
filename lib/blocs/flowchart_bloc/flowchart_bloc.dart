@@ -1,12 +1,15 @@
 import 'dart:ui';
-import 'package:flowchart_thesis/blocs/flowchart_bloc/placement_engine.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
-import '../../screens/user_dashboard/project_workspace/views/rules/flowchart_rule.dart';
+
+import 'FlowchartShapeFactory.dart';
+import 'placement_engine.dart';
 import 'commands/command_history.dart';
 import 'flowchart_event.dart';
 import 'flowchart_state.dart';
 import 'commands/flowchart_command.dart';
+import '../../screens/user_dashboard/project_workspace/views/rules/flowchart_rule.dart';
 
 class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   final CommandHistory _history = CommandHistory();
@@ -15,7 +18,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<LoadFlowchart>(_onLoadFlowchart);
     on<AddShape>(_onAddShape);
     on<RemoveShape>(_onRemoveShape);
-    on<UpdateShape>(_onUpdateShape);
+    on<UpdateShape>(_onUpdateShape); // CORREZIONE: Registrazione handler
+    on<UpdateShapeProperties>(_onUpdateShapeProperties);
     on<SelectShape>(_onSelectShape);
     on<DeselectShape>(_onDeselectShape);
     on<UndoCommand>(_onUndo);
@@ -32,55 +36,79 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     emit(FlowchartLoaded.fromJson(event.jsonContent));
   }
 
+// all'interno della classe FlowchartBloc in flowchart_bloc.dart
+
   void _onAddShape(AddShape event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
-
     final validator = FlowchartValidator();
 
-    final shapeValidationResult = validator.validate(currentState, event.shape);
+    // 1. Usa la Factory per creare una forma "potenziale" (la posizione è temporanea)
+    final potentialShape = FlowchartShapeFactory.createShape(event.shapeType, Offset.zero);
+
+    // 2. Valida il TIPO di forma che si sta per aggiungere
+    final shapeValidationResult = validator.validate(currentState, potentialShape);
     if (!shapeValidationResult.isValid) {
-      print("VALIDATION FAILED (Shape): ${shapeValidationResult.errorMessage}");
+      emit(FlowchartActionFailure(
+        title: "Azione non permessa",
+        message: shapeValidationResult.errorMessage ?? "Non puoi aggiungere questo tipo di forma.",
+      ));
+      emit(currentState); // Ripristina lo stato precedente
       return;
     }
 
-    final fromShape = currentState.shapes.firstWhere(
-          (s) => s.id == event.fromShapeId,
-      // --- CORREZIONE QUI ---
-      // Ho sostituito .empty() con il costruttore completo di una forma vuota.
-      orElse: () => const FlowchartShape(id: '', type: '', text: '', x: 0, y: 0, width: 0, height: 0),
-    );
-    if (fromShape.id.isEmpty) return;
+    // 3. Cerca la forma di partenza in modo sicuro
+    FlowchartShape fromShape;
+    try {
+      fromShape = currentState.shapes.firstWhere((s) => s.id == event.fromShapeId);
+    } catch (e) {
+      print("ERRORE CRITICO: Forma di partenza non trovata con ID ${event.fromShapeId}");
+      return; // Interrompe l'operazione se la forma di partenza non esiste
+    }
 
-    const newShapeSize = Size(120, 60);
+    // 4. Usa il PlacementEngine per trovare la posizione ottimale
     final optimalPosition = PlacementEngine.findOptimalPosition(
       fromShape: fromShape,
-      newShapeSize: newShapeSize,
+      newShapeSize: Size(potentialShape.width, potentialShape.height),
       existingShapes: currentState.shapes,
+      canvasConstraints: event.canvasConstraints,
     );
+
+    // 5. Se non trova spazio, emetti lo stato di errore per la UI
     if (optimalPosition == null) {
-      print("PLACEMENT ERROR: Spazio insufficiente.");
+      emit(const FlowchartActionFailure(
+        title: "Posizione non disponibile",
+        message: "Non c'è spazio sufficiente per aggiungere una nuova forma qui.",
+      ));
+      emit(currentState); // Ripristina lo stato precedente
       return;
     }
 
-    final newShape = event.shape.copyWith(
-      x: optimalPosition.dx, y: optimalPosition.dy,
-      width: newShapeSize.width, height: newShapeSize.height,
-    );
+    // 6. Crea la forma e la connessione finali
+    final newShape = potentialShape.copyWith(x: optimalPosition.dx, y: optimalPosition.dy);
     final newConnection = FlowchartConnection(
-      fromShapeId: fromShape.id, toShapeId: newShape.id, id: const Uuid().v4(),
+      id: const Uuid().v4(),
+      fromShapeId: fromShape.id,
+      toShapeId: newShape.id,
     );
 
+    // 7. Valida la nuova connessione che si sta per creare
     final connectionValidationResult = validator.validate(currentState, newConnection);
     if (!connectionValidationResult.isValid) {
-      print("VALIDATION FAILED (Connection): ${connectionValidationResult.errorMessage}");
+      emit(FlowchartActionFailure(
+        title: "Connessione non permessa",
+        message: connectionValidationResult.errorMessage ?? "Questa connessione viola le regole del diagramma.",
+      ));
+      emit(currentState); // Ripristina lo stato precedente
       return;
     }
 
+    // 8. Se tutto è valido, esegui il comando per aggiornare lo stato
     final command = CompositeCommand(
-      [ AddShapeCommand(newShape), AddConnectionCommand(newConnection) ],
+      [AddShapeCommand(newShape), AddConnectionCommand(newConnection)],
       'Aggiungi forma',
     );
+
     _history.executeCommand(command);
     emit(command.execute(currentState));
   }
@@ -88,31 +116,40 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   void _onRemoveShape(RemoveShape event, Emitter<FlowchartState> emit) {
     final currentState = state;
     if (currentState is! FlowchartLoaded) return;
-    if (event.shapeId.startsWith('start_')) return;
 
-    final shapeToRemove = currentState.shapes.firstWhere((s) => s.id == event.shapeId);
+    FlowchartShape shapeToRemove;
+    try {
+      shapeToRemove = currentState.shapes.firstWhere((s) => s.id == event.shapeId);
+    } catch (e) {
+      return; // La forma non esiste, non fare nulla
+    }
 
-    final connectionsToRemove = currentState.connections
-        .where((c) => c.fromShapeId == event.shapeId || c.toShapeId == event.shapeId)
-        .toList();
-
-    final List<FlowchartCommand> commands = [
+    final commands = <FlowchartCommand>[
       RemoveShapeCommand(shapeToRemove)
     ];
+
+    final connectionsToRemove = currentState.connections.where(
+            (c) => c.fromShapeId == event.shapeId || c.toShapeId == event.shapeId
+    ).toList();
+
     for (final conn in connectionsToRemove) {
       commands.add(RemoveConnectionCommand(conn));
     }
 
     final command = CompositeCommand(commands, 'Rimuovi forma');
     _history.executeCommand(command);
-
     emit(command.execute(currentState).deselect());
   }
 
+  // CORREZIONE: Implementazione completa del gestore
   void _onUpdateShape(UpdateShape event, Emitter<FlowchartState> emit) {
     final currentState = state;
     if (currentState is FlowchartLoaded) {
-      final oldShape = currentState.shapes.firstWhere((s) => s.id == event.shapeId);
+      FlowchartShape oldShape;
+      try {
+        oldShape = currentState.shapes.firstWhere((s) => s.id == event.shapeId);
+      } catch (e) { return; }
+
       final command = MoveShapeCommand(
         shapeId: event.shapeId,
         newX: event.newX, newY: event.newY,
@@ -125,6 +162,23 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     }
   }
 
+  void _onUpdateShapeProperties(UpdateShapeProperties event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final currentState = state as FlowchartLoaded;
+
+    FlowchartShape oldShape;
+    try {
+      oldShape = currentState.shapes.firstWhere((s) => s.id == event.shapeId);
+    } catch (e) { return; }
+
+    final command = UpdateShapePropertiesCommand(
+      shapeId: event.shapeId,
+      newText: event.text,
+      oldText: oldShape.text,
+    );
+    _history.executeCommand(command);
+    emit(command.execute(currentState));
+  }
   void _onSelectShape(SelectShape event, Emitter<FlowchartState> emit) {
     if (state is FlowchartLoaded) {
       emit((state as FlowchartLoaded).copyWith(selectedShapeId: event.shapeId));

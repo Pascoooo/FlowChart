@@ -175,26 +175,6 @@ class _AdvancedTopBar extends StatelessWidget {
     required this.animation,
   });
 
-  void _addShape(BuildContext context,
-      {required String type,
-        required double w,
-        required double h,
-        String text = ''}) {
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
-    context.read<FlowchartBloc>().add(
-      AddShape(
-        FlowchartShape(
-          id: id,
-          type: type,
-          x: 120,
-          y: 120,
-          width: w,
-          height: h,
-          text: text,
-        ),
-      ),
-    );
-  }
 
   Future<void> _resetFlowchart(BuildContext context) async {
     final bool? confirmed = await DialogService.showConfirmationDialog(
@@ -291,7 +271,6 @@ class _AdvancedTopBar extends StatelessWidget {
                         selectedShapeId?.startsWith('start_') ?? false;
                     return _AnimatedFlowchartActions(
                       animation: animation,
-                      onAddShape: _addShape,
                       onReset: _resetFlowchart,
                       selectedShapeId: selectedShapeId,
                       isDeletionEnabled:
@@ -311,11 +290,6 @@ class _AdvancedTopBar extends StatelessWidget {
 class _AnimatedFlowchartActions extends StatelessWidget {
   final bool isDeletionEnabled;
   final Animation<double> animation;
-  final void Function(BuildContext,
-      {required String type,
-      required double w,
-      required double h,
-      String text}) onAddShape;
   final void Function(BuildContext) onReset;
   final String? selectedShapeId;
   final void Function(BuildContext, String shapeId) onDeleteSelected;
@@ -323,7 +297,6 @@ class _AnimatedFlowchartActions extends StatelessWidget {
   const _AnimatedFlowchartActions({
     required this.isDeletionEnabled,
     required this.animation,
-    required this.onAddShape,
     required this.onReset,
     this.selectedShapeId,
     required this.onDeleteSelected,
@@ -388,9 +361,6 @@ class _AnimatedFlowchartActions extends StatelessWidget {
   }
 }
 
-// --- (TUTTI GLI ALTRI WIDGET RESTANO INVARIATI) ---
-// ... _Breadcrumb, UndoRedoControls, _UndoRedoButton, KeyboardShortcuts ...
-// (Li ometto per brevità ma sono inclusi nel file completo)
 class _Breadcrumb extends StatelessWidget {
   final FileSystemLoaded state;
   final String selectedProjectName;
