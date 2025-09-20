@@ -195,8 +195,37 @@ class FlowchartLoaded extends FlowchartState {
       return const FlowchartLoaded();
     }
     try {
-      final Map<String, dynamic> jsonMap = jsonDecode(jsonString);
+      final dynamic decoded = jsonDecode(jsonString);
 
+      // BACKWARD COMPAT: vecchio formato = lista semplice di forme [{id,type,x,y,properties:{width,height,text}}]
+      if (decoded is List) {
+        final legacyShapes = <FlowchartShape>[];
+        bool startPresent = false;
+        for (final raw in decoded) {
+          if (raw is Map<String, dynamic>) {
+            final props = raw['properties'] as Map<String, dynamic>?;
+            final typeRaw = (raw['type'] as String?) ?? 'process';
+            final mappedType = (typeRaw == 'circle') ? 'start' : (typeRaw == 'diamond' ? 'decision' : typeRaw);
+            if (mappedType == 'start') startPresent = true;
+            legacyShapes.add(
+              FlowchartShape(
+                id: raw['id'] as String? ?? 'legacy_${DateTime.now().microsecondsSinceEpoch}',
+                type: mappedType,
+                x: (raw['x'] as num?)?.toDouble() ?? 120.0,
+                y: (raw['y'] as num?)?.toDouble() ?? 120.0,
+                width: (raw['width'] as num?)?.toDouble() ?? (props != null ? (props['width'] as num?)?.toDouble() ?? 100.0 : 100.0),
+                height: (raw['height'] as num?)?.toDouble() ?? (props != null ? (props['height'] as num?)?.toDouble() ?? 60.0 : 60.0),
+                text: (raw['text'] as String?) ?? (props != null ? props['text'] as String? ?? '' : ''),
+              ),
+            );
+          }
+        }
+        // Se non esiste un nodo start, non forziamo l'aggiunta (evitiamo duplicati). Ritorno stato base.
+        return FlowchartLoaded(shapes: legacyShapes, connections: const []);
+      }
+
+      // Formato nuovo atteso: { shapes: [...], connections: [...] }
+      final Map<String, dynamic> jsonMap = decoded as Map<String, dynamic>;
       // 1. Carica le liste "piatte" di forme e connessioni
       final baseShapes = (jsonMap['shapes'] as List<dynamic>?)
           ?.map((json) => FlowchartShape.fromJson(json))
@@ -214,32 +243,24 @@ class FlowchartLoaded extends FlowchartState {
 
       // 3. Itera sulle connessioni UNA SOLA VOLTA per popolare le liste di ogni forma
       for (final connection in connections) {
-        // Aggiorna la forma di partenza (from)
         if (shapeMap.containsKey(connection.fromShapeId)) {
           final fromShape = shapeMap[connection.fromShapeId]!;
-          final updatedOutgoing = List<String>.from(fromShape.outgoingConnectionIds)
-            ..add(connection.id);
-          shapeMap[connection.fromShapeId] =
-              fromShape.copyWith(outgoingConnectionIds: updatedOutgoing);
+          final updatedOutgoing = List<String>.from(fromShape.outgoingConnectionIds)..add(connection.id);
+          shapeMap[connection.fromShapeId] = fromShape.copyWith(outgoingConnectionIds: updatedOutgoing);
         }
-        // Aggiorna la forma di destinazione (to)
         if (shapeMap.containsKey(connection.toShapeId)) {
           final toShape = shapeMap[connection.toShapeId]!;
-          final updatedIncoming = List<String>.from(toShape.incomingConnectionIds)
-            ..add(connection.id);
-          shapeMap[connection.toShapeId] =
-              toShape.copyWith(incomingConnectionIds: updatedIncoming);
+          final updatedIncoming = List<String>.from(toShape.incomingConnectionIds)..add(connection.id);
+            shapeMap[connection.toShapeId] = toShape.copyWith(incomingConnectionIds: updatedIncoming);
         }
       }
 
-      // 4. Costruisce lo stato finale con la lista di forme "arricchite"
       return FlowchartLoaded(
         shapes: shapeMap.values.toList(),
         connections: connections,
       );
     } catch (e, stackTrace) {
       log("Errore critico nel parsing del JSON del flowchart: $e", stackTrace: stackTrace);
-      // In caso di errore, ritorna uno stato vuoto per evitare crash.
       return const FlowchartLoaded();
     }
   }

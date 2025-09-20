@@ -19,9 +19,6 @@ class ShapeWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<ShapeWidget> waveState() => _ShapeWidgetState();
-
-  @override
   State<StatefulWidget> createState() {
     return _ShapeWidgetState();
   }
@@ -143,6 +140,7 @@ class ShapeRenderer extends StatelessWidget {
 
     switch (shape.type) {
       case 'diamond':
+      case 'decision': // supporta il tipo logico usato nel modello
         shapeContent = CustomPaint(
           painter: DiamondPainter(
             color: Colors.white,
@@ -164,8 +162,9 @@ class ShapeRenderer extends StatelessWidget {
           height: height,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius:
-            BorderRadius.circular(shape.type == 'circle' ? 999 : 8),
+            borderRadius: BorderRadius.circular(
+              (shape.type == 'circle' || shape.type == 'start' || shape.type == 'end') ? 999 : 8,
+            ),
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: [
               BoxShadow(

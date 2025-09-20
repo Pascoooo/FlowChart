@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui'; // AGGIUNTO per Offset usato nella factory
 import 'package:bloc/bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'project_event.dart';
 import 'project_state.dart';
+import '../flowchart_bloc/FlowchartShapeFactory.dart'; // AGGIUNTO per usare la factory
 
 class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   final ProjectRepo projectRepository;
@@ -88,8 +90,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
-  // ... resto della classe invariato ...
-
   Future<void> _onLoadProjects(LoadProjects event, Emitter<ProjectState> emit) async {
     emit(const ProjectLoading(message: 'Caricamento progetti...'));
     await _projectsSubscription?.cancel();
@@ -136,16 +136,16 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   Future<void> _onCreateProject(CreateProject event, Emitter<ProjectState> emit) async {
     try {
       final newProject = await projectRepository.createProject(name: event.projectName.trim());
-      final String startShapeId = 'start_${DateTime.now().microsecondsSinceEpoch}';
-      final Map<String, dynamic> defaultShapeData = {
-        'id': startShapeId, 'type': 'circle', 'x': 120.0, 'y': 120.0,
-        'properties': {'width': 90.0, 'height': 90.0, 'text': 'Start'},
-      };
-      final String initialContent = jsonEncode([defaultShapeData]);
+      // CREAZIONE UNIFICATA CONTENUTO INIZIALE (schema nuovo)
+      final startShape = FlowchartShapeFactory.createShape(ShapeType.start, const Offset(120.0, 120.0));
+      final initialContent = jsonEncode({
+        'shapes': [startShape.toJson()],
+        'connections': [],
+      });
       await projectRepository.addFileToProject(
-          projectId: newProject.projectId,
-          fileName: 'main',
-          content: initialContent
+        projectId: newProject.projectId,
+        fileName: 'main',
+        content: initialContent,
       );
       add(StartSessionAndSelectProject(project: newProject));
     } catch (e) {

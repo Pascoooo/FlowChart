@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -140,19 +139,21 @@ class _StaticFlowchartCanvas extends StatelessWidget {
                 clipBehavior: Clip.hardEdge,
                 children: [
                   grid,
-                  Transform(
-                    transform: Matrix4.identity()
-                      ..translate(offsetX, offsetY)
-                      ..scale(scale),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: state.shapes.map((shape) {
-                        return Positioned(
-                          left: shape.x,
-                          top: shape.y,
-                          child: _ShapeRenderer(shape: shape, isSelected: false),
-                        );
-                      }).toList(),
+                  Transform.translate(
+                    offset: Offset(offsetX, offsetY),
+                    child: Transform.scale(
+                      scale: scale,
+                      alignment: Alignment.topLeft,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: state.shapes.map((shape) {
+                          return Positioned(
+                            left: shape.x,
+                            top: shape.y,
+                            child: _ShapeRenderer(shape: shape, isSelected: false),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ],
@@ -204,6 +205,7 @@ class _ShapeRenderer extends StatelessWidget {
 
     switch (shape.type) {
       case 'diamond':
+      case 'decision':
         shapeContent = CustomPaint(
           painter: _DiamondPainter(
             color: Colors.white,
@@ -228,8 +230,9 @@ class _ShapeRenderer extends StatelessWidget {
           ),
         );
         break;
-
       case 'circle':
+      case 'start':
+      case 'end':
         shapeContent = Container(
           width: width,
           height: height,
@@ -256,33 +259,32 @@ class _ShapeRenderer extends StatelessWidget {
           ),
         );
         break;
-
-      default: // rectangle
+      default:
         shapeContent = Container(
           width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: borderColor, width: borderWidth),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.all(8),
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: textStyle,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-        );
+            height: height,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor, width: borderWidth),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: textStyle,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
     }
 
     return shapeContent;

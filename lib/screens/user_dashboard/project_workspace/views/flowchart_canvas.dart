@@ -62,12 +62,18 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
           return LayoutBuilder(
             builder: (context, constraints) {
               return GestureDetector(
-                onTap: _activeHandleDirection == null
-                    ? () {
-                  _setActiveHandle(null);
-                  context.read<FlowchartBloc>().add(DeselectShape());
-                }
-                    : null,
+                onTapDown: (details) {
+                  // Deseleziona solo se il tap NON è su alcuna forma
+                  final tapPos = details.localPosition;
+                  final tappedShape = state.shapes.any((s) =>
+                    tapPos.dx >= s.x && tapPos.dx <= s.x + s.width &&
+                    tapPos.dy >= s.y && tapPos.dy <= s.y + s.height);
+                  if (!tappedShape) {
+                    _setActiveHandle(null);
+                    context.read<FlowchartBloc>().add(DeselectShape());
+                  }
+                },
+                // Rimosso il vecchio onTap che causava deselezione immediata
                 behavior: HitTestBehavior.translucent,
                 child: Stack(
                   clipBehavior: Clip.none,

@@ -24,6 +24,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<DeselectShape>(_onDeselectShape);
     on<UndoCommand>(_onUndo);
     on<RedoCommand>(_onRedo);
+    on<ResetFlowchart>(_onResetFlowchart); // NUOVO
   }
 
   bool get canUndo => _history.canUndo;
@@ -207,5 +208,32 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         emit(command.execute(state as FlowchartLoaded));
       }
     }
+  }
+
+  void _onResetFlowchart(ResetFlowchart event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final current = state as FlowchartLoaded;
+
+    // Trova uno start esistente oppure creane uno nuovo
+    FlowchartShape? startShape;
+    try {
+      startShape = current.shapes.firstWhere((s) => s.type == 'start');
+      // Pulisce le liste delle connessioni mantenendo dimensioni e posizione
+      startShape = startShape.copyWith(
+        incomingConnectionIds: const [],
+        outgoingConnectionIds: const [],
+      );
+    } catch (_) {
+      startShape = FlowchartShapeFactory.createShape(ShapeType.start, const Offset(120, 120));
+    }
+
+    // Svuota history (non deve essere possibile fare undo e riapparire tutto)
+    _history.clear();
+
+    emit(FlowchartLoaded(
+      shapes: [startShape],
+      connections: const [],
+      selectedShapeId: startShape.id,
+    ));
   }
 }

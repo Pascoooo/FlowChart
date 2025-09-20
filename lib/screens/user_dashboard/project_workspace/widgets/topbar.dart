@@ -197,6 +197,26 @@ class _AdvancedTopBar extends StatelessWidget {
       return;
     }
 
+    final flowState = context.read<FlowchartBloc>().state;
+    if (flowState is FlowchartLoaded) {
+      final shape = flowState.shapes.firstWhere(
+          (s) => s.id == shapeId,
+          orElse: () => const FlowchartShape(
+            id: 'missing', type: 'process', x: 0, y: 0, width: 0, height: 0, text: '',
+          ));
+      if (shape.id == 'missing') {
+        BannerService.showError(context, 'Forma non trovata.');
+        return;
+      }
+      if (shape.outgoingConnectionIds.isNotEmpty) {
+        DialogService.showInfoDialog(context,
+            title: 'Eliminazione non consentita',
+            message: 'La forma selezionata ha connessioni in uscita. '
+                'Elimina prima tutte le connessioni associate.');
+        return;
+      }
+    }
+
     bool? confirmed = await DialogService.showConfirmationDialog(
       context,
       title: 'Conferma eliminazione',
@@ -269,12 +289,21 @@ class _AdvancedTopBar extends StatelessWidget {
                         : null;
                     final bool isStartShapeSelected =
                         selectedShapeId?.startsWith('start_') ?? false;
+                    bool isLeaf = false;
+                    if (flowchartState is FlowchartLoaded && selectedShapeId != null) {
+                      final shape = flowchartState.shapes.firstWhere(
+                          (s) => s.id == selectedShapeId,
+                          orElse: () => const FlowchartShape(id: 'missing', type: 'process', x: 0, y: 0, width: 0, height: 0, text: ''));
+                      if (shape.id != 'missing') {
+                        isLeaf = shape.outgoingConnectionIds.isEmpty;
+                      }
+                    }
                     return _AnimatedFlowchartActions(
                       animation: animation,
                       onReset: _resetFlowchart,
                       selectedShapeId: selectedShapeId,
                       isDeletionEnabled:
-                      selectedShapeId != null && !isStartShapeSelected,
+                      selectedShapeId != null && !isStartShapeSelected && isLeaf,
                       onDeleteSelected: _deleteSelected,
                     );
                   },
@@ -544,3 +573,4 @@ class UndoIntent extends Intent {
 class RedoIntent extends Intent {
   const RedoIntent();
 }
+
