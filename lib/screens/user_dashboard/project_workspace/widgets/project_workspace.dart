@@ -380,8 +380,6 @@ class _WorkspaceLayout extends StatelessWidget {
                       selectedProject: selectedProject,
                       onEdit: onEdit,
                       onExport: onExport,
-                      showGrid: showGrid,
-                      onToggleGrid: toggleGrid,
                     ),
                   ),
                 ),
@@ -421,7 +419,10 @@ class _WorkspaceContent extends StatelessWidget {
 
     return Stack(
       children: [
-        WorkArea(repaintKey: workareaKey, showGrid: showGrid),
+        WorkArea(repaintKey: workareaKey, showGrid: showGrid, onToggleGrid: () {
+          final parent = context.findAncestorStateOfType<_ProjectWorkspaceState>();
+          parent?._toggleGrid();
+        }),
         if (!hasActiveFile)
           const Positioned.fill(
             child: IgnorePointer(

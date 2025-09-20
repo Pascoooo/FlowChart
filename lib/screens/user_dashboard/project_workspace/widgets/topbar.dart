@@ -16,16 +16,12 @@ class TopBar extends StatefulWidget {
   final MyProject selectedProject;
   final VoidCallback onEdit;
   final VoidCallback onExport;
-  final bool showGrid;
-  final VoidCallback onToggleGrid;
 
   const TopBar({
     super.key,
     required this.selectedProject,
     required this.onEdit,
     required this.onExport,
-    required this.showGrid,
-    required this.onToggleGrid,
   });
 
   @override
@@ -82,8 +78,6 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
                 selectedProjectName: widget.selectedProject.name,
                 onEdit: widget.onEdit,
                 onExport: widget.onExport,
-                showGrid: widget.showGrid,
-                onToggleGrid: widget.onToggleGrid,
                 animation: _opacityAnimation,
               );
             } else {
@@ -166,16 +160,11 @@ class _SimpleTopBar extends StatelessWidget {
   }
 }
 
-// --- (Widget _SimpleTopBar e _AnimatedFlowchartActions come nella versione precedente corretta)
-// ... Li ometto qui per brevità, ma sono inclusi nel file completo sotto
-
 class _AdvancedTopBar extends StatelessWidget {
   final FileSystemLoaded state;
   final String selectedProjectName;
   final VoidCallback onEdit;
   final VoidCallback onExport;
-  final bool showGrid;
-  final VoidCallback onToggleGrid;
   final Animation<double> animation;
 
   const _AdvancedTopBar({
@@ -183,29 +172,26 @@ class _AdvancedTopBar extends StatelessWidget {
     required this.selectedProjectName,
     required this.onEdit,
     required this.onExport,
-    required this.showGrid,
-    required this.onToggleGrid,
     required this.animation,
   });
 
-  // ... (helper methods _addShape, _resetFlowchart, _deleteSelected come prima)
   void _addShape(BuildContext context,
       {required String type,
-      required double w,
-      required double h,
-      String text = ''}) {
+        required double w,
+        required double h,
+        String text = ''}) {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     context.read<FlowchartBloc>().add(
-          AddShape(
-            FlowchartShape(
-              id: id,
-              type: type,
-              x: 120,
-              y: 120,
-              properties: {'width': w, 'height': h, 'text': text},
-            ),
-          ),
-        );
+      AddShape(
+        FlowchartShape(
+          id: id,
+          type: type,
+          x: 120,
+          y: 120,
+          properties: {'width': w, 'height': h, 'text': text},
+        ),
+      ),
+    );
   }
 
   Future<void> _resetFlowchart(BuildContext context) async {
@@ -213,7 +199,7 @@ class _AdvancedTopBar extends StatelessWidget {
       context,
       title: 'Conferma reset',
       message:
-          'Sei sicuro di voler resettare il flowchart? Tutte le forme tranne "Start" verranno eliminate.',
+      'Sei sicuro di voler resettare il flowchart? Tutte le forme tranne "Start" verranno eliminate.',
       confirmText: 'Resetta',
       cancelText: 'Annulla',
     );
@@ -223,7 +209,6 @@ class _AdvancedTopBar extends StatelessWidget {
   }
 
   Future<void> _deleteSelected(BuildContext context, String shapeId) async {
-    // Aggiungiamo un controllo per sicurezza, anche se la UI dovrebbe già bloccarlo
     if (shapeId.startsWith('start_')) {
       BannerService.showInfo(
           context, 'La forma "Start" non può essere eliminata.');
@@ -245,13 +230,11 @@ class _AdvancedTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasSelectedFile = state.activeFileId != null;
-
     return LayoutBuilder(
       builder: (context, constraints) {
         const double minWidthForCenterActions = 750.0;
         final bool showCenterActions =
-            hasSelectedFile && constraints.maxWidth >= minWidthForCenterActions;
+              constraints.maxWidth >= minWidthForCenterActions;
 
         return Container(
           height: 80,
@@ -260,7 +243,7 @@ class _AdvancedTopBar extends StatelessWidget {
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(20),
             border:
-                Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+            Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
             boxShadow: [
               BoxShadow(
                 color: theme.colorScheme.shadow.withOpacity(0.1),
@@ -284,7 +267,6 @@ class _AdvancedTopBar extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const UndoRedoControls(),
                       IconButton(
                           icon: const Icon(Icons.edit, size: 20),
                           onPressed: onEdit),
@@ -300,24 +282,18 @@ class _AdvancedTopBar extends StatelessWidget {
                 BlocBuilder<FlowchartBloc, FlowchartState>(
                   builder: (context, flowchartState) {
                     final String? selectedShapeId =
-                        flowchartState is FlowchartLoaded
-                            ? flowchartState.selectedShapeId
-                            : null;
-
-                    // NUOVO CONTROLLO: La forma "Start" non può essere eliminata
+                    flowchartState is FlowchartLoaded
+                        ? flowchartState.selectedShapeId
+                        : null;
                     final bool isStartShapeSelected =
                         selectedShapeId?.startsWith('start_') ?? false;
-
                     return _AnimatedFlowchartActions(
                       animation: animation,
-                      showGrid: showGrid,
-                      onToggleGrid: onToggleGrid,
                       onAddShape: _addShape,
                       onReset: _resetFlowchart,
                       selectedShapeId: selectedShapeId,
-                      // Passiamo l'informazione per disabilitare il pulsante
                       isDeletionEnabled:
-                          selectedShapeId != null && !isStartShapeSelected,
+                      selectedShapeId != null && !isStartShapeSelected,
                       onDeleteSelected: _deleteSelected,
                     );
                   },
@@ -330,104 +306,9 @@ class _AdvancedTopBar extends StatelessWidget {
   }
 }
 
-// --- (Widget _Breadcrumb come prima, nessun errore)
-
-// --- FIX: Riattivato e migliorato UndoRedoControls ---
-class UndoRedoControls extends StatelessWidget {
-  const UndoRedoControls({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // Usiamo watch per far sì che i pulsanti si ricostruiscano quando canUndo/canRedo cambiano.
-    final bloc = context.watch<FlowchartBloc>();
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _UndoRedoButton(
-          icon: Icons.undo_rounded,
-          tooltip:
-              bloc.canUndo ? 'Annulla: ${bloc.nextUndoDescription}' : 'Annulla',
-          enabled: bloc.canUndo,
-          onPressed: bloc.canUndo ? () => bloc.add(const UndoCommand()) : null,
-        ),
-        const SizedBox(width: 4),
-        _UndoRedoButton(
-          icon: Icons.redo_rounded,
-          tooltip:
-              bloc.canRedo ? 'Ripeti: ${bloc.nextRedoDescription}' : 'Ripeti',
-          enabled: bloc.canRedo,
-          onPressed: bloc.canRedo ? () => bloc.add(const RedoCommand()) : null,
-        ),
-      ],
-    );
-  }
-}
-
-// --- (Widget _UndoRedoButton come prima, nessun errore)
-
-// --- FIX: Riattivato KeyboardShortcuts ---
-class KeyboardShortcuts extends StatelessWidget {
-  final Widget child;
-
-  const KeyboardShortcuts({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ):
-            const UndoIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY):
-            const RedoIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift,
-            LogicalKeyboardKey.keyZ): const RedoIntent(),
-      },
-      child: Actions(
-        actions: {
-          UndoIntent: CallbackAction<UndoIntent>(
-            onInvoke: (UndoIntent intent) {
-              final bloc = context.read<FlowchartBloc>();
-              if (bloc.canUndo) {
-                bloc.add(const UndoCommand());
-              }
-              return null;
-            },
-          ),
-          RedoIntent: CallbackAction<RedoIntent>(
-            onInvoke: (RedoIntent intent) {
-              final bloc = context.read<FlowchartBloc>();
-              if (bloc.canRedo) {
-                bloc.add(const RedoCommand());
-              }
-              return null;
-            },
-          ),
-        },
-        child: Focus(
-          autofocus: true,
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-class UndoIntent extends Intent {
-  const UndoIntent();
-}
-
-class RedoIntent extends Intent {
-  const RedoIntent();
-}
-
-// Ho rimesso anche gli altri widget che avevo omesso prima per completezza
-
 class _AnimatedFlowchartActions extends StatelessWidget {
   final bool isDeletionEnabled;
   final Animation<double> animation;
-  final bool showGrid;
-  final VoidCallback onToggleGrid;
   final void Function(BuildContext,
       {required String type,
       required double w,
@@ -440,8 +321,6 @@ class _AnimatedFlowchartActions extends StatelessWidget {
   const _AnimatedFlowchartActions({
     required this.isDeletionEnabled,
     required this.animation,
-    required this.showGrid,
-    required this.onToggleGrid,
     required this.onAddShape,
     required this.onReset,
     this.selectedShapeId,
@@ -450,38 +329,8 @@ class _AnimatedFlowchartActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // MODIFICA: Il pulsante della griglia è stato rimosso da questa lista
     final buttons = <Widget>[
-      _buildAnimatedButton(
-        context: context,
-        tooltip: showGrid ? 'Nascondi griglia' : 'Mostra griglia',
-        icon: showGrid ? Icons.grid_off_rounded : Icons.grid_on_rounded,
-        onPressed: onToggleGrid,
-        interval: const Interval(0.2, 0.6),
-      ),
-      _buildAnimatedButton(
-        context: context,
-        tooltip: 'Nuovo rettangolo',
-        icon: Icons.crop_square_rounded,
-        onPressed: () => onAddShape(context,
-            type: 'rectangle', w: 140, h: 80, text: 'Rettangolo'),
-        interval: const Interval(0.3, 0.7),
-      ),
-      _buildAnimatedButton(
-        context: context,
-        tooltip: 'Nuovo diamante',
-        icon: Icons.diamond_outlined,
-        onPressed: () => onAddShape(context,
-            type: 'diamond', w: 120, h: 120, text: 'Decisione'),
-        interval: const Interval(0.4, 0.8),
-      ),
-      _buildAnimatedButton(
-        context: context,
-        tooltip: 'Nuovo cerchio',
-        icon: Icons.circle_outlined,
-        onPressed: () =>
-            onAddShape(context, type: 'circle', w: 90, h: 90, text: 'End'),
-        interval: const Interval(0.5, 0.9),
-      ),
       _buildAnimatedButton(
         context: context,
         tooltip: 'Elimina forma selezionata',
@@ -491,6 +340,7 @@ class _AnimatedFlowchartActions extends StatelessWidget {
             : null,
         interval: const Interval(0.6, 1.0),
       ),
+      const UndoRedoControls(),
       _buildAnimatedButton(
         context: context,
         tooltip: 'Reset flowchart',
@@ -536,6 +386,9 @@ class _AnimatedFlowchartActions extends StatelessWidget {
   }
 }
 
+// --- (TUTTI GLI ALTRI WIDGET RESTANO INVARIATI) ---
+// ... _Breadcrumb, UndoRedoControls, _UndoRedoButton, KeyboardShortcuts ...
+// (Li ometto per brevità ma sono inclusi nel file completo)
 class _Breadcrumb extends StatelessWidget {
   final FileSystemLoaded state;
   final String selectedProjectName;
@@ -545,18 +398,17 @@ class _Breadcrumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasSelectedFile = state.activeFileId != null;
     String currentFileName = "";
 
-    if (hasSelectedFile && state.files.isNotEmpty) {
+    if (state.files.isNotEmpty) {
       final matchingFile = state.files.firstWhere(
-          (file) => file.fileId == state.activeFileId,
+              (file) => file.fileId == state.activeFileId,
           orElse: () => const MyFile(fileId: '', name: 'Unknown', content: ''));
       currentFileName = matchingFile.name;
     }
 
     final textStyle =
-        theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500);
+    theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500);
     final separator = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Icon(
@@ -580,7 +432,6 @@ class _Breadcrumb extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (hasSelectedFile) ...[
           separator,
           Flexible(
             child: Container(
@@ -600,22 +451,35 @@ class _Breadcrumb extends StatelessWidget {
             ),
           ),
         ],
-        if (!hasSelectedFile && state.files.isNotEmpty) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              "${state.files.length} file${state.files.length != 1 ? 's' : ''}",
-              style: textStyle?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  fontSize: 11),
-            ),
-          ),
-        ],
+    );
+  }
+}
+
+class UndoRedoControls extends StatelessWidget {
+  const UndoRedoControls({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final bloc = context.watch<FlowchartBloc>();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _UndoRedoButton(
+          icon: Icons.undo_rounded,
+          tooltip:
+          bloc.canUndo ? 'Annulla: ${bloc.nextUndoDescription}' : 'Annulla',
+          enabled: bloc.canUndo,
+          onPressed: bloc.canUndo ? () => bloc.add(const UndoCommand()) : null,
+        ),
+        const SizedBox(width: 4),
+        _UndoRedoButton(
+          icon: Icons.redo_rounded,
+          tooltip:
+          bloc.canRedo ? 'Ripeti: ${bloc.nextRedoDescription}' : 'Ripeti',
+          enabled: bloc.canRedo,
+          onPressed: bloc.canRedo ? () => bloc.add(const RedoCommand()) : null,
+        ),
       ],
     );
   }
@@ -653,4 +517,58 @@ class _UndoRedoButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class KeyboardShortcuts extends StatelessWidget {
+  final Widget child;
+
+  const KeyboardShortcuts({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ):
+        const UndoIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY):
+        const RedoIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift,
+            LogicalKeyboardKey.keyZ): const RedoIntent(),
+      },
+      child: Actions(
+        actions: {
+          UndoIntent: CallbackAction<UndoIntent>(
+            onInvoke: (UndoIntent intent) {
+              final bloc = context.read<FlowchartBloc>();
+              if (bloc.canUndo) {
+                bloc.add(const UndoCommand());
+              }
+              return null;
+            },
+          ),
+          RedoIntent: CallbackAction<RedoIntent>(
+            onInvoke: (RedoIntent intent) {
+              final bloc = context.read<FlowchartBloc>();
+              if (bloc.canRedo) {
+                bloc.add(const RedoCommand());
+              }
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class UndoIntent extends Intent {
+  const UndoIntent();
+}
+
+class RedoIntent extends Intent {
+  const RedoIntent();
 }

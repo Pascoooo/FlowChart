@@ -2,7 +2,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Dialog, Colors, Theme, Divider, VerticalDivider, BoxConstraints, RoundedRectangleBorder, IntrinsicHeight, StateSetter, showDialog; // Import selettivi
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
@@ -138,7 +138,7 @@ class DialogService {
     );
   }
 
-  /// **RIFATTO**: Dialogo con campo di input, ora in puro stile Cupertino.
+  /// Dialogo con campo di input (invariato).
   static Future<String?> showInputDialog(
       BuildContext context, {
         required String title,
@@ -148,65 +148,105 @@ class DialogService {
         String confirmText = 'Conferma',
         String cancelText = 'Annulla',
         String? Function(String?)? validator,
-      }) {
+      }) async {
     final controller = TextEditingController(text: initialValue);
-    String? errorText;
-
-    // Funzione per validare il testo e determinare se il pulsante di conferma è attivo
-    bool isConfirmEnabled(String text) {
-      if (validator != null) {
-        errorText = validator(text);
-        return errorText == null;
-      }
-      return text.trim().isNotEmpty;
-    }
-
-    return showCupertinoDialog<String>(
+    final theme = Theme.of(context);
+    return showDialog<String>(
       context: context,
-      builder: (dialogContext) {
+      barrierColor: Colors.black.withOpacity(0.4),
+      builder: (context) {
+        var isInitialCheck = true;
         return StatefulBuilder(
           builder: (context, setState) {
-            return CupertinoAlertDialog(
-              title: Text(title),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (message != null) ...[
-                    Text(message, style: const TextStyle(fontSize: 13)),
-                    const SizedBox(height: 8),
-                  ],
-                  CupertinoTextField(
-                    controller: controller,
-                    placeholder: hintText,
-                    autofocus: true,
-                    onChanged: (value) => setState(() {}), // Ricostruisce per aggiornare lo stato del pulsante
-                  ),
-                  if (validator != null && validator(controller.text) != null)
+            String? errorText;
+            bool isButtonEnabled = false;
+            void validate(String value) {
+              if (validator != null) {
+                errorText = validator(value);
+                isButtonEnabled = errorText == null;
+              } else {
+                isButtonEnabled = value.trim().isNotEmpty;
+              }
+            }
+            validate(controller.text);
+            final bool isDuplicateNameError = errorText == 'Nome già in uso';
+            return Dialog(
+              elevation: 0,
+              backgroundColor: theme.cardColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.0)),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        validator(controller.text)!,
-                        style: TextStyle(
-                          color: CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context),
-                          fontSize: 12,
-                        ),
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                      child: Column(
+                        children: [
+                          Text(
+                            title,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          if (message != null) ...[
+                            const SizedBox(height: 4),
+                            Text(message, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+                          ],
+                          const SizedBox(height: 16),
+                          CupertinoTextField(
+                            controller: controller,
+                            autofocus: true,
+                            placeholder: hintText,
+                            style: theme.textTheme.bodyMedium,
+                            onChanged: (value) {
+                              if (isInitialCheck) isInitialCheck = false;
+                              setState(() => validate(value));
+                            },
+                          ),
+                          Container(
+                            height: 24,
+                            padding: const EdgeInsets.only(top: 8.0),
+                            alignment: Alignment.center,
+                            child: (errorText != null && !(isInitialCheck && isDuplicateNameError))
+                                ? Text(
+                              errorText!,
+                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                              textAlign: TextAlign.center,
+                            )
+                                : null,
+                          ),
+                        ],
                       ),
                     ),
-                ],
+                    Divider(height: 1, color: theme.dividerColor),
+                    IntrinsicHeight(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: CupertinoButton(
+                              onPressed: () => Navigator.of(context).pop(null),
+                              child: Text(cancelText, style: TextStyle(color: theme.colorScheme.primary)),
+                            ),
+                          ),
+                          VerticalDivider(width: 1, color: theme.dividerColor),
+                          Expanded(
+                            child: CupertinoButton(
+                              onPressed: isButtonEnabled ? () => Navigator.of(context).pop(controller.text.trim()) : null,
+                              child: Text(
+                                confirmText,
+                                style: TextStyle(
+                                  color: isButtonEnabled ? theme.colorScheme.primary : theme.disabledColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              actions: <CupertinoDialogAction>[
-                CupertinoDialogAction(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text(cancelText),
-                ),
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  onPressed: isConfirmEnabled(controller.text)
-                      ? () => Navigator.of(dialogContext).pop(controller.text.trim())
-                      : null, // Disabilita il pulsante se non valido
-                  child: Text(confirmText),
-                ),
-              ],
             );
           },
         );

@@ -5,15 +5,95 @@ import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 
-// --- WIDGET PRINCIPALE DI AREA DI LAVORO ---
+// --- NUOVO WIDGET PRINCIPALE CON STACK ---
 
-/// [WorkArea] è un contenitore stilizzato che ospita la tela del diagramma di flusso.
-/// Gestisce l'aspetto esteriore come colore, ombra e bordi arrotondati.
-class WorkArea extends StatelessWidget {
+/// [WorkArea] è il nuovo contenitore principale.
+/// Utilizza uno [Stack] per posizionare il pulsante della griglia
+/// SOPRA l'area di lavoro, escludendolo così dal RepaintBoundary
+/// e quindi dagli screenshot.
+class WorkArea extends StatefulWidget {
+  final GlobalKey repaintKey;
+  final bool showGrid;
+  final VoidCallback onToggleGrid; // La callback ora è gestita qui
+
+  const WorkArea({
+    super.key,
+    required this.repaintKey,
+    required this.showGrid,
+    required this.onToggleGrid,
+  });
+
+  @override
+  State<WorkArea> createState() => _WorkAreaState();
+}
+
+class _WorkAreaState extends State<WorkArea>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _buttonAnimationController;
+  late Animation<double> _buttonAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _buttonAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _buttonAnimation = CurvedAnimation(
+      parent: _buttonAnimationController,
+      curve: Curves.easeOutBack,
+    );
+    // Mostra il pulsante dopo un breve ritardo per un effetto più gradevole
+    Future.delayed(
+        const Duration(milliseconds: 500), () => _buttonAnimationController.forward());
+  }
+
+  @override
+  void dispose() {
+    _buttonAnimationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Layer 0: L'area di lavoro effettiva che verrà catturata
+        _WorkAreaContent(
+          repaintKey: widget.repaintKey,
+          showGrid: widget.showGrid,
+        ),
+
+        // Layer 1: Il pulsante della griglia, posizionato sopra tutto
+        Positioned(
+          bottom: 24,
+          right: 24,
+          child: ScaleTransition(
+            scale: _buttonAnimation,
+            child: FadeTransition(
+              opacity: _buttonAnimation,
+              child: _GridToggleButton(
+                showGrid: widget.showGrid,
+                onToggle: widget.onToggleGrid,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// --- CONTENUTO DELL'AREA DI LAVORO (DENTRO REPAINTBOUNDARY) ---
+
+/// [_WorkAreaContent] contiene la tela e le forme.
+/// Questo è il widget che viene effettivamente catturato dallo screenshot
+/// grazie al [RepaintBoundary].
+class _WorkAreaContent extends StatelessWidget {
   final GlobalKey repaintKey;
   final bool showGrid;
 
-  const WorkArea({super.key, required this.repaintKey, required this.showGrid});
+  const _WorkAreaContent({required this.repaintKey, required this.showGrid});
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +105,7 @@ class WorkArea extends StatelessWidget {
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: Theme.of(context).colorScheme.shadow.withAlpha(25), // Alpha 0.1
+              color: Theme.of(context).colorScheme.shadow.withAlpha(25),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -38,7 +118,56 @@ class WorkArea extends StatelessWidget {
   }
 }
 
-// --- TELA DEL DIAGRAMMA DI FLUSSO ---
+// --- NUOVO PULSANTE PER LA GRIGLIA ---
+
+/// [_GridToggleButton] è un pulsante flottante stilizzato per attivare/disattivare la griglia.
+class _GridToggleButton extends StatelessWidget {
+  final bool showGrid;
+  final VoidCallback onToggle;
+
+  const _GridToggleButton({required this.showGrid, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: showGrid ? 'Nascondi griglia' : 'Mostra griglia',
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.shadow.withOpacity(0.15),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+        ),
+        child: IconButton(
+          onPressed: onToggle,
+          icon: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, animation) {
+              return ScaleTransition(scale: animation, child: child);
+            },
+            child: Icon(
+              showGrid ? Icons.grid_off_rounded : Icons.grid_on_rounded,
+              key: ValueKey<bool>(showGrid), // Chiave per l'animazione
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+// --- (TUTTI GLI ALTRI WIDGET RESTANO INVARIATI) ---
+// ... _FlowchartCanvas, _ShapeWidget, _ShapeRenderer, etc. ...
+// (Li ometto per brevità ma sono inclusi nel file completo)
 
 class _FlowchartCanvas extends StatelessWidget {
   final bool showGrid;
@@ -58,16 +187,12 @@ class _FlowchartCanvas extends StatelessWidget {
                 behavior: HitTestBehavior.translucent,
                 child: Stack(
                   children: [
-                    // Disegna la griglia di sfondo se abilitata
                     if (showGrid)
                       Positioned.fill(
-                        child: CustomPaint(painter: _GridPainter.fromTheme(context)),
+                        child:
+                        CustomPaint(painter: _GridPainter.fromTheme(context)),
                       ),
-
-                    // Mostra un placeholder se non ci sono forme
                     if (state.shapes.isEmpty) const _EmptyCanvasPlaceholder(),
-
-                    // Disegna tutte le forme presenti nello stato
                     for (final shape in state.shapes)
                       _ShapeWidget(
                         key: ValueKey(shape.id),
@@ -81,19 +206,12 @@ class _FlowchartCanvas extends StatelessWidget {
             },
           );
         }
-        // Mostra un indicatore di caricamento durante lo stato iniziale
         return const Center(child: CircularProgressIndicator());
       },
     );
   }
 }
 
-
-// --- WIDGET PER LA GESTIONE DELLA SINGOLA FORMA (POSIZIONE E GESTURE) ---
-
-/// [_ShapeWidget] è uno StatefulWidget che gestisce la posizione, la selezione
-/// e il trascinamento di una singola forma sulla tela.
-/// Delega la renderizzazione effettiva della forma a [_ShapeRenderer].
 class _ShapeWidget extends StatefulWidget {
   final FlowchartShape shape;
   final BoxConstraints canvasConstraints;
@@ -102,7 +220,8 @@ class _ShapeWidget extends StatefulWidget {
   const _ShapeWidget({
     required this.shape,
     required this.canvasConstraints,
-    required this.isSelected, required ValueKey<String> key,
+    required this.isSelected,
+    required ValueKey<String> key,
   });
 
   @override
@@ -110,7 +229,6 @@ class _ShapeWidget extends StatefulWidget {
 }
 
 class _ShapeWidgetState extends State<_ShapeWidget> {
-  // Usiamo un Offset per gestire la posizione durante il trascinamento
   late Offset _dragPosition;
   bool _isDragging = false;
 
@@ -120,17 +238,16 @@ class _ShapeWidgetState extends State<_ShapeWidget> {
     _dragPosition = Offset(widget.shape.x, widget.shape.y);
   }
 
-  // Sincronizza la posizione se la forma viene spostata da un'altra parte (es. undo/redo)
-  // senza interferire con un trascinamento in corso.
   @override
   void didUpdateWidget(covariant _ShapeWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_isDragging && (oldWidget.shape.x != widget.shape.x || oldWidget.shape.y != widget.shape.y)) {
+    if (!_isDragging &&
+        (oldWidget.shape.x != widget.shape.x ||
+            oldWidget.shape.y != widget.shape.y)) {
       _dragPosition = Offset(widget.shape.x, widget.shape.y);
     }
   }
 
-  // Funzioni di utility per mantenere la forma entro i limiti della tela
   double _clampX(double x, double width) {
     const padding = 10.0;
     return x.clamp(padding, widget.canvasConstraints.maxWidth - width - padding);
@@ -144,7 +261,8 @@ class _ShapeWidgetState extends State<_ShapeWidget> {
   @override
   Widget build(BuildContext context) {
     final width = (widget.shape.properties['width'] as num?)?.toDouble() ?? 100;
-    final height = (widget.shape.properties['height'] as num?)?.toDouble() ?? 60;
+    final height =
+        (widget.shape.properties['height'] as num?)?.toDouble() ?? 60;
 
     return Positioned(
       left: _dragPosition.dx,
@@ -156,7 +274,8 @@ class _ShapeWidgetState extends State<_ShapeWidget> {
           }
         },
         behavior: HitTestBehavior.opaque,
-        onPanStart: widget.isSelected ? (details) => setState(() => _isDragging = true) : null,
+        onPanStart:
+        widget.isSelected ? (details) => setState(() => _isDragging = true) : null,
         onPanUpdate: widget.isSelected
             ? (details) {
           setState(() {
@@ -176,14 +295,16 @@ class _ShapeWidgetState extends State<_ShapeWidget> {
               shapeId: widget.shape.id,
               newX: _dragPosition.dx,
               newY: _dragPosition.dy,
-              oldX: oldPosition.dx,  // Aggiungi questo
-              oldY: oldPosition.dy,  // Aggiungi questo
+              oldX: oldPosition.dx,
+              oldY: oldPosition.dy,
             ),
           );
         }
             : null,
         child: MouseRegion(
-          cursor: widget.isSelected ? SystemMouseCursors.move : SystemMouseCursors.click,
+          cursor: widget.isSelected
+              ? SystemMouseCursors.move
+              : SystemMouseCursors.click,
           child: _ShapeRenderer(
             shape: widget.shape,
             isSelected: widget.isSelected,
@@ -194,10 +315,6 @@ class _ShapeWidgetState extends State<_ShapeWidget> {
   }
 }
 
-// --- WIDGET PER LA RENDERIZZAZIONE DELLA FORMA (ASPETTO GRAFICO) ---
-
-/// [_ShapeRenderer] è un widget stateless che si occupa solo dell'aspetto
-/// visivo della forma. Decide quale forma disegnare in base al `shape.type`.
 class _ShapeRenderer extends StatelessWidget {
   final FlowchartShape shape;
   final bool isSelected;
@@ -217,9 +334,9 @@ class _ShapeRenderer extends StatelessWidget {
       color: Colors.black87,
     );
 
-    final borderColor = isSelected ? theme.colorScheme.primary : Colors.blueGrey.shade300;
+    final borderColor =
+    isSelected ? theme.colorScheme.primary : Colors.blueGrey.shade300;
     final borderWidth = isSelected ? 2.5 : 1.5;
-
 
     Widget shapeContent;
 
@@ -234,21 +351,26 @@ class _ShapeRenderer extends StatelessWidget {
           child: SizedBox(
             width: width,
             height: height,
-            child: Center(child: Text(text, textAlign: TextAlign.center, style: textStyle)),
+            child: Center(
+                child:
+                Text(text, textAlign: TextAlign.center, style: textStyle)),
           ),
         );
         break;
-      default: // Rettangolo, cerchio, etc.
+      default:
         shapeContent = Container(
           width: width,
           height: height,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(shape.type == 'circle' ? 999 : 8),
+            borderRadius:
+            BorderRadius.circular(shape.type == 'circle' ? 999 : 8),
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: [
               BoxShadow(
-                color: isSelected ? theme.colorScheme.primary.withAlpha(76) : Colors.black12,
+                color: isSelected
+                    ? theme.colorScheme.primary.withAlpha(76)
+                    : Colors.black12,
                 blurRadius: isSelected ? 10 : 5,
                 offset: Offset(0, isSelected ? 5 : 3),
               ),
@@ -266,7 +388,6 @@ class _ShapeRenderer extends StatelessWidget {
         );
     }
 
-    // L'AnimatedContainer fornisce una transizione fluida quando cambiano le proprietà (es. selezione)
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       child: shapeContent,
@@ -274,9 +395,6 @@ class _ShapeRenderer extends StatelessWidget {
   }
 }
 
-// --- COMPONENTI DI SUPPORTO E PAINTER ---
-
-/// [_EmptyCanvasPlaceholder] mostrato quando la tela è vuota.
 class _EmptyCanvasPlaceholder extends StatelessWidget {
   const _EmptyCanvasPlaceholder();
 
@@ -298,8 +416,6 @@ class _EmptyCanvasPlaceholder extends StatelessWidget {
   }
 }
 
-
-/// [_GridPainter] disegna una griglia con linee maggiori e minori.
 class _GridPainter extends CustomPainter {
   final Color minorColor;
   final Color majorColor;
@@ -317,16 +433,16 @@ class _GridPainter extends CustomPainter {
     this.majorEvery = 4,
   });
 
-  // Factory constructor per creare il painter direttamente dal tema
   factory _GridPainter.fromTheme(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     return _GridPainter(
-      minorColor: (isDark ? Colors.white : Colors.black).withOpacity(isDark ? 0.14 : 0.10),
-      majorColor: (isDark ? Colors.white : Colors.black).withOpacity(isDark ? 0.30 : 0.18),
+      minorColor: (isDark ? Colors.white : Colors.black)
+          .withOpacity(isDark ? 0.14 : 0.10),
+      majorColor: (isDark ? Colors.white : Colors.black)
+          .withOpacity(isDark ? 0.30 : 0.18),
     );
   }
-
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -339,11 +455,13 @@ class _GridPainter extends CustomPainter {
 
     int i = 0;
     for (double x = 0; x <= size.width + 0.5; x += spacing, i++) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), (i % majorEvery == 0) ? major : minor);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height),
+          (i % majorEvery == 0) ? major : minor);
     }
     i = 0;
     for (double y = 0; y <= size.height + 0.5; y += spacing, i++) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), (i % majorEvery == 0) ? major : minor);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y),
+          (i % majorEvery == 0) ? major : minor);
     }
   }
 
@@ -358,13 +476,15 @@ class _GridPainter extends CustomPainter {
   }
 }
 
-/// [_DiamondPainter] disegna una forma a rombo.
 class _DiamondPainter extends CustomPainter {
   final Color color;
   final Color borderColor;
   final double strokeWidth;
 
-  _DiamondPainter({required this.color, required this.borderColor, required this.strokeWidth});
+  _DiamondPainter(
+      {required this.color,
+        required this.borderColor,
+        required this.strokeWidth});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -376,10 +496,12 @@ class _DiamondPainter extends CustomPainter {
       ..close();
 
     canvas.drawPath(path, Paint()..color = color);
-    canvas.drawPath(path, Paint()
-      ..color = borderColor
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke);
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = borderColor
+          ..strokeWidth = strokeWidth
+          ..style = PaintingStyle.stroke);
   }
 
   @override
@@ -390,8 +512,6 @@ class _DiamondPainter extends CustomPainter {
   }
 }
 
-// Invece di usare withOpacity, ho usato withAlpha per compatibilità con la tua versione
-// ma ti suggerisco di rimuovere la seguente estensione e usare .withOpacity() che è standard.
 extension ColorAlpha on Color {
   Color withValues({int? alpha}) {
     return withAlpha(alpha ?? this.alpha);
