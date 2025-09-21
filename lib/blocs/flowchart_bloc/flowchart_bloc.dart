@@ -25,6 +25,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<UndoCommand>(_onUndo);
     on<RedoCommand>(_onRedo);
     on<ResetFlowchart>(_onResetFlowchart); // NUOVO
+    on<LinkToExistingEnd>(_onLinkToExistingEnd); // NUOVO
   }
 
   bool get canUndo => _history.canUndo;
@@ -33,8 +34,80 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   String? get nextRedoDescription => _history.nextRedoCommand?.description;
 
   void _onLoadFlowchart(LoadFlowchart event, Emitter<FlowchartState> emit) {
-    _history.clear();
-    emit(FlowchartLoaded.fromJson(event.jsonContent));
+    final previous = state is FlowchartLoaded ? state as FlowchartLoaded : null;
+    final loaded = FlowchartLoaded.fromJson(event.jsonContent);
+
+    String? preservedSelection;
+    if (previous != null && previous.selectedShapeId != null) {
+      if (loaded.shapes.any((s) => s.id == previous.selectedShapeId)) {
+        preservedSelection = previous.selectedShapeId;
+      }
+    }
+
+    // Funzione locale per migrare connessioni senza fromPort da decision
+    List<FlowchartConnection> _migrateMissingPorts(FlowchartLoaded base, List<FlowchartConnection> conns) {
+      final shapeMap = {for (final s in base.shapes) s.id: s};
+      bool changed = false;
+      final migrated = conns.map((c) {
+        if (c.fromPort == null) {
+          final fromShape = shapeMap[c.fromShapeId];
+            final toShape = shapeMap[c.toShapeId];
+          if (fromShape != null && toShape != null && fromShape.type == 'condizione') {
+            final fromCenterX = fromShape.x + fromShape.width / 2;
+            final toCenterX = toShape.x + toShape.width / 2;
+            final inferred = toCenterX >= fromCenterX ? 'true' : 'false';
+            changed = true;
+            return FlowchartConnection(
+              id: c.id,
+              fromShapeId: c.fromShapeId,
+              toShapeId: c.toShapeId,
+              fromPort: inferred,
+            );
+          }
+        }
+        return c;
+      }).toList();
+      return changed ? migrated : conns;
+    }
+
+    if (previous != null) {
+      // Merge: preserva fromPort esistenti
+      List<FlowchartConnection> mergedConnections = loaded.connections.map((c) {
+        if (c.fromPort == null) {
+          try {
+            final old = previous.connections.firstWhere((oc) => oc.id == c.id);
+            if (old.fromPort != null) {
+              return FlowchartConnection(
+                id: c.id,
+                fromShapeId: c.fromShapeId,
+                toShapeId: c.toShapeId,
+                fromPort: old.fromPort,
+              );
+            }
+          } catch (_) {}
+        }
+        return c;
+      }).toList();
+
+      // Migrazione per connessioni legacy da decision senza fromPort
+      mergedConnections = _migrateMissingPorts(loaded, mergedConnections);
+
+      FlowchartLoaded mergedState = loaded;
+      if (mergedConnections != loaded.connections) {
+        mergedState = loaded.copyWith(connections: mergedConnections);
+      }
+      if (preservedSelection != null) {
+        mergedState = mergedState.copyWith(selectedShapeId: preservedSelection);
+      }
+      emit(mergedState);
+    } else {
+      // Prima apertura: migrazione se necessario
+      final migrated = _migrateMissingPorts(loaded, loaded.connections);
+      final base = (migrated != loaded.connections)
+          ? loaded.copyWith(connections: migrated)
+          : loaded;
+      emit(base.copyWith(selectedShapeId: preservedSelection));
+    }
   }
 
 // all'interno della classe FlowchartBloc in flowchart_bloc.dart
@@ -63,17 +136,37 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     try {
       fromShape = currentState.shapes.firstWhere((s) => s.id == event.fromShapeId);
     } catch (e) {
-      print("ERRORE CRITICO: Forma di partenza non trovata con ID ${event.fromShapeId}");
-      return; // Interrompe l'operazione se la forma di partenza non esiste
+      return;
     }
 
-    // 4. Usa il PlacementEngine per trovare la posizione ottimale
-    final optimalPosition = PlacementEngine.findOptimalPosition(
-      fromShape: fromShape,
-      newShapeSize: Size(potentialShape.width, potentialShape.height),
-      existingShapes: currentState.shapes,
-      canvasConstraints: event.canvasConstraints,
-    );
+    // 4. Calcolo posizione: caso speciale per decision + porti true/false
+    Offset? optimalPosition;
+    if (fromShape.type == 'condizione' && event.fromPort != null) {
+      final newW = potentialShape.width;
+      final newH = potentialShape.height;
+      double newX;
+      double newY = fromShape.y + (fromShape.height - newH) / 2;
+      if (event.fromPort == 'true') {
+        newX = fromShape.x + fromShape.width + 40; // leggera distanza dal vertice destro
+      } else { // 'false'
+        newX = fromShape.x - newW - 40; // a sinistra del vertice sinistro
+      }
+      optimalPosition = Offset(newX, newY);
+      // Controllo collisioni semplice: se overlap forte con un'altra shape, fallback al placement engine standard (sotto)
+      final overlaps = currentState.shapes.any((s) =>
+        !(newX + newW < s.x || newX > s.x + s.width || newY + newH < s.y || newY > s.y + s.height)
+      );
+      if (overlaps) {
+        optimalPosition = null; // forziamo fallback
+      }
+    }
+
+    optimalPosition ??= PlacementEngine.findOptimalPosition(
+        fromShape: fromShape,
+        newShapeSize: Size(potentialShape.width, potentialShape.height),
+        existingShapes: currentState.shapes,
+        canvasConstraints: event.canvasConstraints,
+      );
 
     // 5. Se non trova spazio, emetti lo stato di errore per la UI
     if (optimalPosition == null) {
@@ -91,6 +184,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       id: const Uuid().v4(),
       fromShapeId: fromShape.id,
       toShapeId: newShape.id,
+      fromPort: event.fromPort,
     );
 
     // 7. Valida la nuova connessione che si sta per creare
@@ -125,13 +219,20 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       return; // La forma non esiste, non fare nulla
     }
 
-    final commands = <FlowchartCommand>[
-      RemoveShapeCommand(shapeToRemove)
-    ];
+    // Identifica eventuale padre (connessione in ingresso) PRIMA di rimuovere le connessioni
+    final incomingConns = currentState.connections
+        .where((c) => c.toShapeId == shapeToRemove.id)
+        .toList();
+    String? parentId;
+    if (incomingConns.length == 1) {
+      parentId = incomingConns.first.fromShapeId;
+    }
 
-    final connectionsToRemove = currentState.connections.where(
-            (c) => c.fromShapeId == event.shapeId || c.toShapeId == event.shapeId
-    ).toList();
+    final commands = <FlowchartCommand>[RemoveShapeCommand(shapeToRemove)];
+
+    final connectionsToRemove = currentState.connections
+        .where((c) => c.fromShapeId == event.shapeId || c.toShapeId == event.shapeId)
+        .toList();
 
     for (final conn in connectionsToRemove) {
       commands.add(RemoveConnectionCommand(conn));
@@ -139,7 +240,14 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
     final command = CompositeCommand(commands, 'Rimuovi forma');
     _history.executeCommand(command);
-    emit(command.execute(currentState).deselect());
+    final newState = command.execute(currentState);
+
+    // Se possibile seleziona il padre (che ora ha liberato lo slot in uscita)
+    if (parentId != null && newState.shapes.any((s) => s.id == parentId)) {
+      emit(newState.copyWith(selectedShapeId: parentId));
+    } else {
+      emit(newState.deselect());
+    }
   }
 
   // CORREZIONE: Implementazione completa del gestore
@@ -235,5 +343,39 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       connections: const [],
       selectedShapeId: startShape.id,
     ));
+  }
+
+  void _onLinkToExistingEnd(LinkToExistingEnd event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final current = state as FlowchartLoaded;
+
+    FlowchartShape fromShape;
+    FlowchartShape endShape;
+    try { fromShape = current.shapes.firstWhere((s) => s.id == event.fromShapeId); } catch (_) { return; }
+    // Cerca nodo fine canonico; fallback legacy solo se mai presente
+    try { endShape = current.shapes.firstWhere((s) => s.type == 'fine' || s.type == 'end'); } catch (_) { return; }
+
+    // Evita collegamenti duplicati identici
+    final already = current.connections.any((c) => c.fromShapeId == fromShape.id && c.toShapeId == endShape.id && c.fromPort == event.fromPort);
+    if (already) return;
+
+    final newConn = FlowchartConnection(
+      id: const Uuid().v4(),
+      fromShapeId: fromShape.id,
+      toShapeId: endShape.id,
+      fromPort: event.fromPort,
+    );
+
+    final validator = FlowchartValidator();
+    final validation = validator.validate(current, newConn);
+    if (!validation.isValid) {
+      emit(FlowchartActionFailure(title: 'Connessione non permessa', message: validation.errorMessage ?? 'Impossibile collegare alla forma Fine.'));
+      emit(current); // ripristina
+      return;
+    }
+
+    final command = AddConnectionCommand(newConn);
+    _history.executeCommand(command);
+    emit(command.execute(current));
   }
 }

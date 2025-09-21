@@ -32,15 +32,15 @@ class SingleStartNodeRule extends FlowchartRule {
   }
 }
 
-/// REGOLA: Può esistere un solo nodo di tipo 'end'.
+/// REGOLA: Può esistere un solo nodo di tipo 'fine'.
 class SingleEndNodeRule extends FlowchartRule {
   @override
   ValidationResult validate(FlowchartLoaded state, {Object? actionContext}) {
     if (actionContext is! FlowchartShape) return ValidationResult.success();
     final newShape = actionContext;
 
-    if (newShape.type == 'end') {
-      final hasExistingEndNode = state.shapes.any((s) => s.type == 'end');
+    if (newShape.type == 'fine') {
+      final hasExistingEndNode = state.shapes.any((s) => s.type == 'fine');
       if (hasExistingEndNode) {
         return ValidationResult.failure("Un nodo 'Fine' esiste già.");
       }
@@ -58,16 +58,16 @@ class IncomingConnectionRule extends FlowchartRule {
 
     FlowchartShape toShape;
     try {
-      // Cerca la forma di destinazione. Se non esiste, è la forma che stiamo per aggiungere,
-      // quindi la regola non si applica ancora a lei.
       toShape = state.shapes.firstWhere((s) => s.id == newConnection.toShapeId);
     } catch (e) {
-      // La forma non è stata trovata, significa che è la nuova forma.
-      // Per definizione ha 0 connessioni in entrata, quindi la regola è valida.
       return ValidationResult.success();
     }
 
-    // Logica efficiente: controlla direttamente le proprietà della forma.
+    // Un nodo 'fine' può ricevere connessioni illimitate
+    if (toShape.type == 'fine') {
+      return ValidationResult.success();
+    }
+
     if (toShape.incomingConnectionIds.length >= toShape.maxIncomingConnections) {
       if (toShape.type == 'start') {
         return ValidationResult.failure("Il nodo 'Inizio' non può avere connessioni in entrata.");
@@ -95,11 +95,11 @@ class OutgoingConnectionRule extends FlowchartRule {
 
     // Logica efficiente: controlla direttamente le proprietà della forma.
     if (fromShape.outgoingConnectionIds.length >= fromShape.maxOutgoingConnections) {
-      if (fromShape.type == 'end') {
+      if (fromShape.type == 'fine') {
         return ValidationResult.failure("Il nodo 'Fine' non può avere connessioni in uscita.");
       }
-      if (fromShape.type == 'decision') {
-        return ValidationResult.failure("Un nodo 'Decisione' non può avere più di due uscite.");
+      if (fromShape.type == 'condizione') {
+        return ValidationResult.failure("Un nodo 'Condizione' non può avere più di due uscite.");
       }
       return ValidationResult.failure("Questa forma ha già raggiunto il numero massimo di connessioni in uscita.");
     }
@@ -108,6 +108,24 @@ class OutgoingConnectionRule extends FlowchartRule {
   }
 }
 
+/// REGOLA: Impedisce doppie connessioni sullo stesso ramo (true/false) di un nodo condizione.
+class DecisionPortUniquenessRule extends FlowchartRule {
+  @override
+  ValidationResult validate(FlowchartLoaded state, {Object? actionContext}) {
+    if (actionContext is! FlowchartConnection) return ValidationResult.success();
+    final newConn = actionContext;
+    if (newConn.fromPort == null) return ValidationResult.success();
+    FlowchartShape? fromShape;
+    try { fromShape = state.shapes.firstWhere((s) => s.id == newConn.fromShapeId); } catch (_) {}
+    if (fromShape == null || fromShape.type != 'condizione') return ValidationResult.success();
+
+    final duplicate = state.connections.any((c) => c.fromShapeId == newConn.fromShapeId && c.fromPort == newConn.fromPort);
+    if (duplicate) {
+      return ValidationResult.failure("Il ramo '${newConn.fromPort}' è già occupato.");
+    }
+    return ValidationResult.success();
+  }
+}
 
 /// Il validatore centrale che esegue tutte le regole in sequenza.
 class FlowchartValidator {
@@ -116,6 +134,7 @@ class FlowchartValidator {
     SingleEndNodeRule(),
     OutgoingConnectionRule(),
     IncomingConnectionRule(),
+    DecisionPortUniquenessRule(),
   ];
 
   ValidationResult validate(FlowchartLoaded state, Object actionContext) {

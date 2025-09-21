@@ -9,6 +9,7 @@ import '../../../../config/services/dialog_service.dart';
 import 'shape_widget.dart';
 import 'creation_handle.dart';
 import 'painters.dart';
+import 'decision_port_handle.dart';
 
 /// Enum defining the direction of a creation handle.
 enum HandleDirection { top, right, bottom, left }
@@ -63,11 +64,37 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
             builder: (context, constraints) {
               return GestureDetector(
                 onTapDown: (details) {
-                  // Deseleziona solo se il tap NON è su alcuna forma
                   final tapPos = details.localPosition;
+
+                  // Se esiste una forma selezionata, calcola una "safe zone" estesa intorno
+                  // alla forma + area dove appaiono handle e pannello per evitare
+                  // deselezioni accidentali quando si tenta di premere il pulsante "+" o le opzioni.
+                  if (state.selectedShapeId != null) {
+                    final sel = state.shapes.firstWhere(
+                      (s) => s.id == state.selectedShapeId,
+                      orElse: () => const FlowchartShape(id: 'missing', type: 'processo', x: 0, y: 0, width: 0, height: 0, text: ''),
+                    );
+                    if (sel.id != 'missing') {
+                      // Estendiamo il rettangolo: lateralmente +80, in basso +220 (handle + pannello)
+                      final extendedRect = Rect.fromLTWH(
+                        sel.x - 80,
+                        sel.y - 20, // piccolo margine sopra
+                        sel.width + 160,
+                        sel.height + 220,
+                      );
+                      if (extendedRect.contains(tapPos)) {
+                        // Non deselezionare: il tap è correlato alla zona di interazione corrente
+                        return;
+                      }
+                    }
+                  }
+
+                  // Deseleziona solo se il tap NON è su alcuna forma
                   final tappedShape = state.shapes.any((s) =>
-                    tapPos.dx >= s.x && tapPos.dx <= s.x + s.width &&
-                    tapPos.dy >= s.y && tapPos.dy <= s.y + s.height);
+                      tapPos.dx >= s.x &&
+                      tapPos.dx <= s.x + s.width &&
+                      tapPos.dy >= s.y &&
+                      tapPos.dy <= s.y + s.height);
                   if (!tappedShape) {
                     _setActiveHandle(null);
                     context.read<FlowchartBloc>().add(DeselectShape());
@@ -104,17 +131,49 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
                         isSelected: state.selectedShapeId == shape.id,
                       ),
 
-                    // Maniglie di creazione per la forma selezionata
+                    // Unico handle standard o doppi handle per decision
                     if (state.selectedShapeId != null)
                       for (final shape in state.shapes)
-                        if (shape.id == state.selectedShapeId && shape.canAddOutgoingConnection)
-                          CreationHandle(
-                            key: ValueKey('canvas_handle_bottom_${shape.id}'),
-                            direction: HandleDirection.bottom,
-                            sourceShape: shape,
-                            onPanelToggled: _setActiveHandle,
-                            canvasConstraints: constraints,
-                          ),
+                        if (shape.id == state.selectedShapeId)
+                          if (shape.type == 'condizione') ...[
+                            Builder(builder: (_) {
+                              // Determina quali porte (true/right, false/left) sono già usate
+                              final conns = state.connections.where((c) => c.fromShapeId == shape.id);
+                              final usedTrue = conns.any((c) => c.fromPort == 'true');
+                              final usedFalse = conns.any((c) => c.fromPort == 'false');
+                              final handles = <Widget>[];
+                              if (!usedFalse && shape.outgoingConnectionIds.length < shape.maxOutgoingConnections) {
+                                handles.add(
+                                  CreationHandle(
+                                    key: ValueKey('handle_left_${shape.id}'),
+                                    direction: HandleDirection.left,
+                                    sourceShape: shape,
+                                    onPanelToggled: _setActiveHandle,
+                                    canvasConstraints: constraints,
+                                  ),
+                                );
+                              }
+                              if (!usedTrue && shape.outgoingConnectionIds.length < shape.maxOutgoingConnections) {
+                                handles.add(
+                                  CreationHandle(
+                                    key: ValueKey('handle_right_${shape.id}'),
+                                    direction: HandleDirection.right,
+                                    sourceShape: shape,
+                                    onPanelToggled: _setActiveHandle,
+                                    canvasConstraints: constraints,
+                                  ),
+                                );
+                              }
+                              return Stack(children: handles);
+                            })
+                          ] else if (shape.canAddOutgoingConnection)
+                            CreationHandle(
+                              key: ValueKey('canvas_handle_bottom_${shape.id}'),
+                              direction: HandleDirection.bottom,
+                              sourceShape: shape,
+                              onPanelToggled: _setActiveHandle,
+                              canvasConstraints: constraints,
+                            ),
                   ],
                 ),
               );

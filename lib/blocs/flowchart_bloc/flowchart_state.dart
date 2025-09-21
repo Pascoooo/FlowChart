@@ -37,23 +37,17 @@ class FlowchartShape extends Equatable {
   /// Getter per la logica di business: numero massimo di connessioni in uscita.
   int get maxOutgoingConnections {
     switch (type) {
-      case 'decision':
-        return 2;
-      case 'end':
-        return 0;
+      case 'condizione':
+        return 2; // due rami true/false
+      case 'fine':
+        return 0; // nodo terminale
       default:
-        return 1;
+        return 1; // default singola uscita
     }
   }
 
-  /// Getter per la logica di business: numero massimo di connessioni in entrata.
   int get maxIncomingConnections {
-    switch (type) {
-      case 'start':
-        return 0;
-      default:
-        return 1;
-    }
+    return type == 'start' ? 0 : 1;
   }
 
   /// Getter per la UI: determina se il pulsante '+' debba essere mostrato.
@@ -90,9 +84,30 @@ class FlowchartShape extends Equatable {
   /// Deserializza una forma da JSON. Nota: non popola le liste di connessioni,
   /// se ne occuperà FlowchartLoaded.
   factory FlowchartShape.fromJson(Map<String, dynamic> json) {
+    String rawType = json['type'] as String;
+    String normType;
+    switch (rawType) {
+      case 'decision':
+      case 'decisione':
+      case 'diamond':
+        normType = 'condizione';
+        break;
+      case 'end':
+        normType = 'fine';
+        break;
+      case 'process':
+        normType = 'processo';
+        break;
+      case 'input_output':
+      case 'inputOutput':
+        normType = 'input'; // scelta arbitraria: vecchio parallelogramma generico -> input
+        break;
+      default:
+        normType = rawType;
+    }
     return FlowchartShape(
       id: json['id'] as String,
-      type: json['type'] as String,
+      type: normType,
       x: (json['x'] as num).toDouble(),
       y: (json['y'] as num).toDouble(),
       width: (json['width'] as num).toDouble(),
@@ -137,11 +152,13 @@ class FlowchartConnection extends Equatable {
   final String id;
   final String fromShapeId;
   final String toShapeId;
+  final String? fromPort; // 'true' | 'false' | null (compat)
 
   const FlowchartConnection({
     required this.id,
     required this.fromShapeId,
     required this.toShapeId,
+    this.fromPort,
   });
 
   factory FlowchartConnection.fromJson(Map<String, dynamic> json) {
@@ -149,6 +166,7 @@ class FlowchartConnection extends Equatable {
       id: json['id'] as String,
       fromShapeId: json['fromShapeId'] as String,
       toShapeId: json['toShapeId'] as String,
+      fromPort: json['fromPort'] as String?,
     );
   }
 
@@ -157,11 +175,12 @@ class FlowchartConnection extends Equatable {
       'id': id,
       'fromShapeId': fromShapeId,
       'toShapeId': toShapeId,
+      if (fromPort != null) 'fromPort': fromPort,
     };
   }
 
   @override
-  List<Object?> get props => [id, fromShapeId, toShapeId];
+  List<Object?> get props => [id, fromShapeId, toShapeId, fromPort];
 }
 
 //##############################################################################
@@ -200,13 +219,28 @@ class FlowchartLoaded extends FlowchartState {
       // BACKWARD COMPAT: vecchio formato = lista semplice di forme [{id,type,x,y,properties:{width,height,text}}]
       if (decoded is List) {
         final legacyShapes = <FlowchartShape>[];
-        bool startPresent = false;
         for (final raw in decoded) {
           if (raw is Map<String, dynamic>) {
             final props = raw['properties'] as Map<String, dynamic>?;
             final typeRaw = (raw['type'] as String?) ?? 'process';
-            final mappedType = (typeRaw == 'circle') ? 'start' : (typeRaw == 'diamond' ? 'decision' : typeRaw);
-            if (mappedType == 'start') startPresent = true;
+            String mappedType;
+            switch (typeRaw) {
+              case 'decisione':
+                mappedType = 'condizione';
+                break;
+              case 'end':
+                mappedType = 'fine';
+                break;
+              case 'input':
+              case 'output':
+                mappedType = 'input';
+                break;
+              case 'processo':
+                mappedType = 'processo';
+                break;
+              default:
+                mappedType = typeRaw;
+            }
             legacyShapes.add(
               FlowchartShape(
                 id: raw['id'] as String? ?? 'legacy_${DateTime.now().microsecondsSinceEpoch}',
@@ -220,7 +254,6 @@ class FlowchartLoaded extends FlowchartState {
             );
           }
         }
-        // Se non esiste un nodo start, non forziamo l'aggiunta (evitiamo duplicati). Ritorno stato base.
         return FlowchartLoaded(shapes: legacyShapes, connections: const []);
       }
 
@@ -251,7 +284,7 @@ class FlowchartLoaded extends FlowchartState {
         if (shapeMap.containsKey(connection.toShapeId)) {
           final toShape = shapeMap[connection.toShapeId]!;
           final updatedIncoming = List<String>.from(toShape.incomingConnectionIds)..add(connection.id);
-            shapeMap[connection.toShapeId] = toShape.copyWith(incomingConnectionIds: updatedIncoming);
+          shapeMap[connection.toShapeId] = toShape.copyWith(incomingConnectionIds: updatedIncoming);
         }
       }
 

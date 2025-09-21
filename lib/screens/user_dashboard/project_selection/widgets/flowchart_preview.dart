@@ -1,198 +1,286 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
-// Assicurati che questi import puntino ai file corretti nel tuo progetto
-import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
-import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
+// Rimuovo l'uso del Bloc per la preview: usiamo direttamente gli stessi painter della workarea
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
+import '../../../user_dashboard/project_workspace/views/painters.dart';
 
-// MODIFICA CHIAVE: Aggiunto "implements FlowchartBloc"
-class _StaticFlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> implements FlowchartBloc {
-  _StaticFlowchartBloc(FlowchartState initialState) : super(initialState) {
-    // Non registriamo handler per eventi - è solo per la visualizzazione
-  }
-
-  // Le seguenti implementazioni sono necessarie per soddisfare l'interfaccia di FlowchartBloc
-  @override
-  bool get canRedo => false;
-  @override
-  bool get canUndo => false;
-  @override
-  String? get nextRedoDescription => null;
-  @override
-  String? get nextUndoDescription => null;
-}
-
+/// Preview statica di un flowchart (solo visualizzazione) che:
+/// - Effettua il parse del JSON con FlowchartLoaded.fromJson
+/// - Scala tutto il contenuto (forme + connessioni) per entrare nell'area disponibile
+/// - Usa gli stessi painter di connessioni e diamond della workarea così da avere label true/false
+/// - Non permette interazioni / selezioni / drag
 class FlowchartPreview extends StatelessWidget {
   final String flowchartContent;
+  final bool showGrid;
+  final bool emphasizeBorders;
+  final bool showUnsavedBadge;
 
-  const FlowchartPreview({super.key, required this.flowchartContent});
+  const FlowchartPreview({
+    super.key,
+    required this.flowchartContent,
+    this.showGrid = true,
+    this.emphasizeBorders = true,
+    this.showUnsavedBadge = false,
+  });
 
-  // Ho migliorato il parsing per renderlo più sicuro
-  FlowchartLoaded _parseFlowchartContent(String content) {
+  FlowchartLoaded _parse(String raw) {
+    if (raw.trim().isEmpty) return const FlowchartLoaded();
     try {
-      if (content.trim().isEmpty) {
-        return const FlowchartLoaded(shapes: [], selectedShapeId: null);
-      }
-      return FlowchartLoaded.fromJson(content);
+      return FlowchartLoaded.fromJson(raw);
     } catch (e) {
-      // In caso di errore nel parsing, ritorna uno stato vuoto invece di crashare
-      debugPrint('Errore durante il parsing del contenuto del flowchart: $e');
-      return const FlowchartLoaded(shapes: [], selectedShapeId: null);
+      debugPrint('FlowchartPreview parse error: $e');
+      return const FlowchartLoaded();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final flowchartState = _parseFlowchartContent(flowchartContent);
+    final state = _parse(flowchartContent);
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+    final borderColor = emphasizeBorders
+        ? primary.withAlpha((0.85 * 255).round())
+        : theme.dividerColor;
 
-    return BlocProvider<FlowchartBloc>(
-      create: (_) => _StaticFlowchartBloc(flowchartState),
-      child: AspectRatio(
-        aspectRatio: 16 / 10,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Theme.of(context).dividerColor),
+    return AspectRatio(
+      aspectRatio: 16 / 10,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface, // rimosso gradient (niente sfumato)
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: borderColor,
+            width: emphasizeBorders ? 3 : 1.2,
           ),
-          clipBehavior: Clip.hardEdge,
-          child: const _StaticFlowchartCanvas(),
+          boxShadow: emphasizeBorders
+              ? [
+                  BoxShadow(
+                    color: primary.withAlpha((0.18 * 255).round()),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 6),
+                  ),
+                  BoxShadow(
+                    color: primary.withAlpha((0.10 * 255).round()),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withAlpha((0.05 * 255).round()),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  )
+                ],
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Stack(
+          children: [
+            _StaticFlowchartViewport(
+              shapes: state.shapes,
+              connections: state.connections,
+              showGrid: showGrid,
+              emphasized: emphasizeBorders,
+            ),
+            if (emphasizeBorders)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withAlpha((0.35 * 255).round()),
+                        width: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (showUnsavedBadge)
+              Positioned(
+                top: 8,
+                left: 10,
+                child: _UnsavedBadge(),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-// Canvas statico che scala il contenuto per adattarlo
-class _StaticFlowchartCanvas extends StatelessWidget {
-  const _StaticFlowchartCanvas();
-
+class _UnsavedBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<FlowchartBloc, FlowchartState>(
-      builder: (context, state) {
-        if (state is FlowchartLoaded) {
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final grid = Positioned.fill(
-                  child: CustomPaint(painter: _GridPainter.fromTheme(context))
-              );
-
-              if (state.shapes.isEmpty) {
-                return Stack(
-                  children: [
-                    grid,
-                    const Center(
-                      child: Text(
-                        "Diagramma Vuoto",
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }
-
-              // Calcola il bounding box di tutte le forme
-              final Rect? contentBounds = state.shapes.fold<Rect?>(
-                null,
-                    (previousValue, shape) {
-                  final width = (shape.width <= 0) ? 100.0 : shape.width;
-                  final height = (shape.height <= 0) ? 60.0 : shape.height;
-                  final shapeRect = Rect.fromLTWH(shape.x, shape.y, width, height);
-
-                  if (previousValue == null) return shapeRect;
-                  return previousValue.expandToInclude(shapeRect);
-                },
-              );
-
-              if (contentBounds == null || contentBounds.isEmpty) {
-                return Stack(
-                  children: [
-                    grid,
-                    const Center(child: Text("Contenuto non valido")),
-                  ],
-                );
-              }
-
-              // Calcola il fattore di scala con padding
-              const double padding = 20.0;
-              final availableWidth = constraints.maxWidth - (padding * 2);
-              final availableHeight = constraints.maxHeight - (padding * 2);
-
-              final scaleX = availableWidth / contentBounds.width;
-              final scaleY = availableHeight / contentBounds.height;
-              final scale = min(min(scaleX, scaleY), 1.0); // Non ingrandire oltre 1:1
-
-              // Calcola l'offset per centrare
-              final scaledContentWidth = contentBounds.width * scale;
-              final scaledContentHeight = contentBounds.height * scale;
-
-              final offsetX = (constraints.maxWidth - scaledContentWidth) / 2 - (contentBounds.left * scale);
-              final offsetY = (constraints.maxHeight - scaledContentHeight) / 2 - (contentBounds.top * scale);
-
-              return Stack(
-                clipBehavior: Clip.hardEdge,
-                children: [
-                  grid,
-                  Transform.translate(
-                    offset: Offset(offsetX, offsetY),
-                    child: Transform.scale(
-                      scale: scale,
-                      alignment: Alignment.topLeft,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: state.shapes.map((shape) {
-                          return Positioned(
-                            left: shape.x,
-                            top: shape.y,
-                            child: _ShapeRenderer(shape: shape, isSelected: false),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          );
-        }
-
-        return Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Theme.of(context).dividerColor),
+    final theme = Theme.of(context);
+    final bg = theme.colorScheme.errorContainer.withAlpha((0.90 * 255).round());
+    final txt = theme.colorScheme.onErrorContainer;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.error.withAlpha((0.5 * 255).round()), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.error.withAlpha((0.22 * 255).round()),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          )
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 16, color: txt),
+          const SizedBox(width: 6),
+          Text(
+            'Versione non salvata',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+              color: txt,
+            ),
           ),
-          child: const Center(
-            child: CircularProgressIndicator(),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
-// Componenti di rendering - CORRETTI e MIGLIORATI
-class _ShapeRenderer extends StatelessWidget {
-  final FlowchartShape shape;
-  final bool isSelected;
 
-  const _ShapeRenderer({
-    required this.shape,
-    required this.isSelected,
+class _StaticFlowchartViewport extends StatelessWidget {
+  final List<FlowchartShape> shapes;
+  final List<FlowchartConnection> connections;
+  final bool showGrid;
+  final bool emphasized;
+
+  const _StaticFlowchartViewport({
+    required this.shapes,
+    required this.connections,
+    required this.showGrid,
+    required this.emphasized,
   });
 
   @override
   Widget build(BuildContext context) {
-    final text = shape.text;
+    if (shapes.isEmpty) {
+      return Stack(
+        children: [
+          if (showGrid) Positioned.fill(child: CustomPaint(painter: _previewGrid(context, emphasized))),
+          Center(
+            child: Text(
+              'Diagramma Vuoto',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Calcola bounding box del contenuto
+    Rect? bounds;
+    for (final s in shapes) {
+      final w = (s.width <= 0) ? 100.0 : s.width;
+      final h = (s.height <= 0) ? 60.0 : s.height;
+      final r = Rect.fromLTWH(s.x, s.y, w, h);
+      bounds = bounds == null ? r : bounds.expandToInclude(r);
+    }
+    bounds ??= const Rect.fromLTWH(0, 0, 100, 60);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const padding = 20.0;
+        final availW = max(10.0, constraints.maxWidth - padding * 2);
+        final availH = max(10.0, constraints.maxHeight - padding * 2);
+        final scaleX = availW / bounds!.width;
+        final scaleY = availH / bounds.height;
+        final scale = min(min(scaleX, scaleY), 1.0); // non ingrandiamo oltre 1:1
+
+        final scaledContentW = bounds.width * scale;
+        final scaledContentH = bounds.height * scale;
+        final offsetX = (constraints.maxWidth - scaledContentW) / 2 - bounds.left * scale;
+        final offsetY = (constraints.maxHeight - scaledContentH) / 2 - bounds.top * scale;
+
+        return Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            if (showGrid)
+              Positioned.fill(
+                child: CustomPaint(painter: _previewGrid(context, emphasized)),
+              ),
+            // Applichiamo la stessa trasformazione a connessioni e forme
+            Transform.translate(
+              offset: Offset(offsetX, offsetY),
+              child: Transform.scale(
+                scale: scale,
+                alignment: Alignment.topLeft,
+                child: RepaintBoundary(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: ConnectionPainter(
+                            shapes: shapes,
+                            connections: connections,
+                            theme: Theme.of(context),
+                          ),
+                        ),
+                      ),
+                      for (final shape in shapes)
+                        Positioned(
+                          left: shape.x,
+                          top: shape.y,
+                          child: _StaticShape(shape: shape),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  GridPainter _previewGrid(BuildContext context, bool emphasized) {
+    if (!emphasized) return GridPainter.fromTheme(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final base = isDark ? Colors.white : Colors.black;
+    return GridPainter(
+      minorColor: base.withAlpha(((isDark ? 0.22 : 0.16) * 255).round()),
+      majorColor: base.withAlpha(((isDark ? 0.55 : 0.42) * 255).round()),
+      spacing: 24,
+      minorWidth: 1.1,
+      majorWidth: 1.9,
+      majorEvery: 4,
+    );
+  }
+}
+
+/// Versione statica del renderer forme che usa i tipi normalizzati
+/// (condizione, start, fine, processo, input ...)
+class _StaticShape extends StatelessWidget {
+  final FlowchartShape shape;
+  const _StaticShape({required this.shape});
+
+  @override
+  Widget build(BuildContext context) {
     final width = shape.width;
     final height = shape.height;
+    final text = shape.text;
 
-    const textStyle = TextStyle(
+    final textStyle = const TextStyle(
       fontSize: 12,
       color: Colors.black87,
       fontWeight: FontWeight.w500,
@@ -201,13 +289,10 @@ class _ShapeRenderer extends StatelessWidget {
     final borderColor = Colors.blueGrey.shade400;
     const borderWidth = 1.5;
 
-    Widget shapeContent;
-
     switch (shape.type) {
-      case 'diamond':
-      case 'decision':
-        shapeContent = CustomPaint(
-          painter: _DiamondPainter(
+      case 'condizione':
+        return CustomPaint(
+          painter: DiamondPainter(
             color: Colors.white,
             borderColor: borderColor,
             strokeWidth: borderWidth,
@@ -229,20 +314,71 @@ class _ShapeRenderer extends StatelessWidget {
             ),
           ),
         );
-        break;
-      case 'circle':
-      case 'start':
-      case 'end':
-        shapeContent = Container(
+      case 'input':
+        return CustomPaint(
+          painter: ParallelogramPainter(
+            fillColor: Colors.white,
+            borderColor: borderColor,
+            strokeWidth: borderWidth,
+            reversed: false,
+            drawShadow: false,
+          ),
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: textStyle,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        );
+      case 'output':
+        return CustomPaint(
+          painter: ParallelogramPainter(
+            fillColor: Colors.white,
+            borderColor: borderColor,
+            strokeWidth: borderWidth,
+            reversed: true,
+            drawShadow: false,
+          ),
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: textStyle,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        );
+      default:
+        return Container(
           width: width,
           height: height,
           decoration: BoxDecoration(
             color: Colors.white,
-            shape: BoxShape.circle,
+            borderRadius: BorderRadius.circular(
+              (shape.type == 'start' || shape.type == 'fine') ? 999 : 8,
+            ),
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withOpacity(0.08),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -254,139 +390,10 @@ class _ShapeRenderer extends StatelessWidget {
             text,
             textAlign: TextAlign.center,
             style: textStyle,
-            maxLines: 2,
+            maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
         );
-        break;
-      default:
-        shapeContent = Container(
-          width: width,
-            height: height,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: borderColor, width: borderWidth),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              text,
-              textAlign: TextAlign.center,
-              style: textStyle,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          );
     }
-
-    return shapeContent;
-  }
-}
-
-class _GridPainter extends CustomPainter {
-  final Color minorColor;
-  final Color majorColor;
-
-  _GridPainter({
-    required this.minorColor,
-    required this.majorColor,
-  });
-
-  factory _GridPainter.fromTheme(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return _GridPainter(
-      minorColor: (isDark ? Colors.white : Colors.black).withOpacity(0.08),
-      majorColor: (isDark ? Colors.white : Colors.black).withOpacity(0.15),
-    );
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final minorPaint = Paint()
-      ..color = minorColor
-      ..strokeWidth = 0.5;
-
-    final majorPaint = Paint()
-      ..color = majorColor
-      ..strokeWidth = 1.0;
-
-    const gridSize = 20.0;
-
-    // Linee verticali
-    for (double x = 0; x <= size.width; x += gridSize) {
-      final isMajor = (x / gridSize) % 5 == 0;
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        isMajor ? majorPaint : minorPaint,
-      );
-    }
-
-    // Linee orizzontali
-    for (double y = 0; y <= size.height; y += gridSize) {
-      final isMajor = (y / gridSize) % 5 == 0;
-      canvas.drawLine(
-        Offset(0, y),
-        Offset(size.width, y),
-        isMajor ? majorPaint : minorPaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _GridPainter oldDelegate) {
-    return oldDelegate.minorColor != minorColor ||
-        oldDelegate.majorColor != majorColor;
-  }
-}
-
-class _DiamondPainter extends CustomPainter {
-  final Color color;
-  final Color borderColor;
-  final double strokeWidth;
-
-  _DiamondPainter({
-    required this.color,
-    required this.borderColor,
-    required this.strokeWidth,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height / 2)
-      ..lineTo(size.width / 2, size.height)
-      ..lineTo(0, size.height / 2)
-      ..close();
-
-    // Riempimento
-    canvas.drawPath(path, Paint()..color = color);
-
-    // Bordo
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = borderColor
-        ..strokeWidth = strokeWidth
-        ..style = PaintingStyle.stroke,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _DiamondPainter oldDelegate) {
-    return oldDelegate.color != color ||
-        oldDelegate.borderColor != borderColor ||
-        oldDelegate.strokeWidth != strokeWidth;
   }
 }

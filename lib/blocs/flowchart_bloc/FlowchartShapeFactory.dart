@@ -1,4 +1,3 @@
-
 import 'dart:ui';
 
 import 'package:uuid/uuid.dart';
@@ -9,10 +8,11 @@ import 'flowchart_state.dart';
 /// Questo enum è la "fonte di verità" per i tipi di forme.
 enum ShapeType {
   start,
-  end,
-  process,
-  decision,
-  inputOutput,
+  input,
+  output,
+  processo,
+  condizione,
+  fine,
 }
 /// Una "fabbrica" centralizzata per creare ogni tipo di FlowchartShape.
 /// Nasconde la complessità della creazione degli oggetti.
@@ -24,52 +24,62 @@ class FlowchartShapeFactory {
       case ShapeType.start:
         return FlowchartShape(
           id: 'start_${_uuid.v4()}',
-          type: 'start', // Il tipo logico per le regole
+          type: 'start',
           x: position.dx,
           y: position.dy,
           width: 90.0,
           height: 90.0,
-          text: 'Inizio',
+          text: 'Start',
         );
-      case ShapeType.end:
+      case ShapeType.fine:
         return FlowchartShape(
-          id: 'end_${_uuid.v4()}',
-          type: 'end', // Il tipo logico per le regole
+          id: 'fine_${_uuid.v4()}',
+          type: 'fine',
           x: position.dx,
           y: position.dy,
           width: 90.0,
           height: 90.0,
-          text: 'Fine',
+          text: 'end',
         );
-      case ShapeType.process:
+      case ShapeType.input:
         return FlowchartShape(
           id: _uuid.v4(),
-          type: 'process',
+          type: 'input',
           x: position.dx,
           y: position.dy,
-          width: 120.0,
+          width: 130.0,
+            height: 60.0,
+          text: 'input',
+        );
+      case ShapeType.output:
+        return FlowchartShape(
+          id: _uuid.v4(),
+          type: 'output',
+          x: position.dx,
+          y: position.dy,
+          width: 130.0,
           height: 60.0,
-          text: 'Processo',
+          text: 'output',
         );
-      case ShapeType.decision:
+      case ShapeType.processo:
         return FlowchartShape(
           id: _uuid.v4(),
-          type: 'decision',
+          type: 'processo',
+          x: position.dx,
+          y: position.dy,
+          width: 150.0,
+          height: 60.0,
+          text: 'processo',
+        );
+      case ShapeType.condizione:
+        return FlowchartShape(
+          id: _uuid.v4(),
+          type: 'condizione',
           x: position.dx,
           y: position.dy,
           width: 120.0,
           height: 80.0,
-          text: 'Decisione',
-        );
-      case ShapeType.inputOutput:
-        return FlowchartShape(
-          id: _uuid.v4(),
-          type: 'input_output',
-          x: position.dx,
-          y: position.dy,
-          width: 150.0, // Parallelogramma
-          height: 60.0,
-          text: 'Input/Output',
+          text: 'condizione',
         );
     }
   }

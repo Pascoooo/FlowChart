@@ -31,13 +31,17 @@ class LoadFlowchart extends FlowchartEvent {
 class AddShape extends FlowchartEvent {
   final ShapeType shapeType;
   final String? fromShapeId;
+  final String? fromPort; // 'true' | 'false' per decision, null altrimenti
   final BoxConstraints canvasConstraints;
 
-  const AddShape(
-      {required this.shapeType, this.fromShapeId, required this.canvasConstraints});
+  const AddShape({
+      required this.shapeType,
+      this.fromShapeId,
+      this.fromPort,
+      required this.canvasConstraints});
 
   @override
-  List<Object?> get props => [shapeType, fromShapeId];
+  List<Object?> get props => [shapeType, fromShapeId, fromPort];
 }
 
 class RemoveShape extends FlowchartEvent {
@@ -103,3 +107,11 @@ class ExecuteCommand extends FlowchartEvent {
 
 class ResetFlowchart extends FlowchartEvent { const ResetFlowchart(); }
 class ClearHistory extends FlowchartEvent { const ClearHistory(); }
+
+class LinkToExistingEnd extends FlowchartEvent {
+  final String fromShapeId;
+  final String? fromPort; // per decisione left/right
+  const LinkToExistingEnd({required this.fromShapeId, this.fromPort});
+  @override
+  List<Object?> get props => [fromShapeId, fromPort];
+}

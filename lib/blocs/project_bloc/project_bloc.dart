@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui'; // AGGIUNTO per Offset usato nella factory
 import 'package:bloc/bloc.dart';
+import 'package:flowchart_thesis/config/services/dialog_service.dart';
 import 'package:project_repository/project_repository.dart';
 import 'project_event.dart';
 import 'project_state.dart';
@@ -74,8 +75,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         rtdbContent: event.rtdbContent,
       );
     } catch (e) {
-      // Gestire l'errore se necessario, ad esempio con un banner
-      print("Error recovering single file: $e");
     }
   }
 
@@ -86,7 +85,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         fileId: event.fileId,
       );
     } catch (e) {
-      print("Error discarding single file change: $e");
     }
   }
 

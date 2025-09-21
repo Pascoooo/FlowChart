@@ -8,6 +8,7 @@ import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import 'flowchart_canvas.dart';
+import '../../../../config/services/dialog_service.dart';
 
 class CreationHandle extends StatefulWidget {
   final HandleDirection direction;
@@ -34,8 +35,9 @@ class _CreationHandleState extends State<CreationHandle>
   late Animation<double> _panelAnimation;
 
   static const double handleSize = 24.0;
-  static const double panelHeight = 150.0;
   static const double interactionAreaSize = 300.0;
+  static const int _panelOptionsCount = 5; // Input, Output, Processo, Condizione, Fine
+  double get _estimatedPanelHeight => _panelOptionsCount * 48.0 + (_panelOptionsCount - 1) * 1.0 + 8; // button + dividers + small padding
 
   @override
   void initState() {
@@ -59,75 +61,121 @@ class _CreationHandleState extends State<CreationHandle>
   @override
   Widget build(BuildContext context) {
     final handleCenter = _getHandleCenter();
-    final areaTopLeft = Offset(
-      handleCenter.dx - (interactionAreaSize / 2),
-      handleCenter.dy - (interactionAreaSize / 2),
-    );
+
+    // Parametri pannello
+    const double panelWidth = 180; // larghezza effettiva pannello
+    final double panelHeight = _estimatedPanelHeight; // ~252px
+    const double gap = 6.0; // distanza tra bottone e pannello
+
+    // Calcolo posizione globale preferita (sotto)
+    double panelTopGlobal = handleCenter.dy + handleSize / 2 + gap;
+    final bool canShowBelow = panelTopGlobal + panelHeight <= widget.canvasConstraints.maxHeight - 4;
+    final bool opensBelow = canShowBelow;
+    if (!canShowBelow) {
+      panelTopGlobal = handleCenter.dy - handleSize / 2 - gap - panelHeight; // sopra
+      if (panelTopGlobal < 4) panelTopGlobal = 4;
+    }
+
+    // Posizionamento orizzontale centrato sul bottone
+    double panelLeftGlobal = handleCenter.dx - panelWidth / 2;
+    if (panelLeftGlobal < 4) panelLeftGlobal = 4;
+    final maxLeft = widget.canvasConstraints.maxWidth - panelWidth - 4;
+    if (panelLeftGlobal > maxLeft) panelLeftGlobal = maxLeft;
+
+    // Area interattiva FISSA (niente più calcoli dinamici variabili):
+    // - Chiusa: piccola (300x300) per non bloccare tap esterni
+    // - Aperta: dimensione fissa maggiore (400x560) per includere sempre tutto il pannello
+    final double areaWidth = _showPanel ? 400 : interactionAreaSize; // 400 > 180 + margine
+    final double areaHeight = _showPanel ? 560 : interactionAreaSize; // 560 >= 2*(panelHeight + handle/2 + gap)
+
+    // Centra l'area rispetto all'handle
+    double areaLeft = handleCenter.dx - areaWidth / 2;
+    double areaTop = handleCenter.dy - areaHeight / 2;
+
+    // Clamp ai bordi canvas
+    if (areaLeft < 0) areaLeft = 0;
+    if (areaTop < 0) areaTop = 0;
+    if (areaLeft + areaWidth > widget.canvasConstraints.maxWidth) {
+      areaLeft = widget.canvasConstraints.maxWidth - areaWidth;
+    }
+    if (areaTop + areaHeight > widget.canvasConstraints.maxHeight) {
+      areaTop = widget.canvasConstraints.maxHeight - areaHeight;
+    }
+
+    // Converte posizione pannello in coordinate relative all'area
+    final panelLeftRelative = panelLeftGlobal - areaLeft;
+    final panelTopRelative = panelTopGlobal - areaTop;
 
     return Positioned(
-      left: areaTopLeft.dx,
-      top: areaTopLeft.dy,
+      left: areaLeft,
+      top: areaTop,
       child: SizedBox(
-        width: interactionAreaSize,
-        height: interactionAreaSize,
+        width: areaWidth,
+        height: areaHeight,
         child: Stack(
-          alignment: Alignment.center,
+          clipBehavior: Clip.none,
           children: [
             if (_showPanel)
-              Positioned.fill(
-                child: Align(
-                  alignment: _getPanelAlignment(),
-                  child: FadeTransition(
-                    opacity: _panelAnimation,
-                    child: ScaleTransition(
-                      scale: _panelAnimation,
-                      alignment: _getPanelAlignment(),
-                      child: ShapeCreationPanel(
-                        onShapeCreated: _closePanel,
-                        sourceShapeId: widget.sourceShape.id,
-                        canvasConstraints: widget.canvasConstraints,
-                      ),
+              Positioned(
+                left: panelLeftRelative,
+                top: panelTopRelative,
+                child: FadeTransition(
+                  opacity: _panelAnimation,
+                  child: ScaleTransition(
+                    scale: _panelAnimation,
+                    alignment: opensBelow ? Alignment.topCenter : Alignment.bottomCenter,
+                    child: ShapeCreationPanel(
+                      onShapeCreated: _closePanel,
+                      sourceShapeId: widget.sourceShape.id,
+                      canvasConstraints: widget.canvasConstraints,
+                      fromPort: _resolvePort(),
                     ),
                   ),
                 ),
               ),
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _showPanel = !_showPanel;
-                  widget.onPanelToggled(_showPanel ? widget.direction : null);
-                  if (_showPanel) {
-                    _panelAnimationController.forward();
-                  } else {
-                    _panelAnimationController.reverse();
-                  }
-                });
-              },
-              child: Container(
-                width: handleSize,
-                height: handleSize,
-                decoration: BoxDecoration(
-                  color: _showPanel
-                      ? CupertinoColors.systemGrey
-                      : Theme.of(context).colorScheme.primary,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+            // Bottone handle (rimane centrato rispetto all'area calcolata)
+            Positioned(
+              left: handleCenter.dx - areaLeft - handleSize / 2,
+              top: handleCenter.dy - areaTop - handleSize / 2,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    _showPanel = !_showPanel;
+                    widget.onPanelToggled(_showPanel ? widget.direction : null);
+                    if (_showPanel) {
+                      _panelAnimationController.forward();
+                    } else {
+                      _panelAnimationController.reverse();
+                    }
+                  });
+                },
+                child: Container(
+                  width: handleSize,
+                  height: handleSize,
+                  decoration: BoxDecoration(
+                    color: _showPanel
+                        ? CupertinoColors.systemGrey
+                        : Theme.of(context).colorScheme.primary,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (child, animation) =>
+                        ScaleTransition(scale: animation, child: child),
+                    child: Icon(
+                      _showPanel ? Icons.remove : Icons.add,
+                      key: ValueKey<bool>(_showPanel),
+                      color: Colors.white,
+                      size: 16,
                     ),
-                  ],
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  transitionBuilder: (child, animation) =>
-                      ScaleTransition(scale: animation, child: child),
-                  child: Icon(
-                    _showPanel ? Icons.remove : Icons.add,
-                    key: ValueKey<bool>(_showPanel),
-                    color: Colors.white,
-                    size: 16,
                   ),
                 ),
               ),
@@ -148,21 +196,31 @@ class _CreationHandleState extends State<CreationHandle>
 
   Offset _getHandleCenter() {
     final shape = widget.sourceShape;
-    // La logica è semplificata perché abbiamo solo il pulsante inferiore
-    return Offset(shape.x + shape.width / 2, shape.y + shape.height + 5 + (handleSize / 2));
+    const gap = 5.0; // distanza dalla forma
+    switch (widget.direction) {
+      case HandleDirection.bottom:
+        return Offset(shape.x + shape.width / 2, shape.y + shape.height + gap + (handleSize / 2));
+      case HandleDirection.top:
+        return Offset(shape.x + shape.width / 2, shape.y - gap - (handleSize / 2));
+      case HandleDirection.left:
+        return Offset(shape.x - gap - (handleSize / 2), shape.y + shape.height / 2);
+      case HandleDirection.right:
+        return Offset(shape.x + shape.width + gap + (handleSize / 2), shape.y + shape.height / 2);
+    }
   }
 
-  Alignment _getPanelAlignment() {
-    final handleCenter = _getHandleCenter();
-    // Calcola dove finirebbe il bordo inferiore del pannello
-    final panelBottomEdge = handleCenter.dy + (handleSize / 2) + 18 + panelHeight;
-    // Controlla se sfora l'altezza massima della canvas
-    final bool goesBeyondCanvas = panelBottomEdge > widget.canvasConstraints.maxHeight;
-
-    const double spacing = 1.3;
-
-    // Se sfora, apri verso l'alto (spacing negativo), altrimenti verso il basso (spacing positivo)
-    return Alignment(0, goesBeyondCanvas ? -spacing : spacing);
+  String? _resolvePort() {
+    if (widget.sourceShape.type == 'condizione') {
+      switch (widget.direction) {
+        case HandleDirection.left:
+          return 'false';
+        case HandleDirection.right:
+          return 'true';
+        default:
+          return null;
+      }
+    }
+    return null;
   }
 }
 
@@ -170,23 +228,47 @@ class ShapeCreationPanel extends StatelessWidget {
   final String sourceShapeId;
   final VoidCallback onShapeCreated;
   final BoxConstraints canvasConstraints;
+  final String? fromPort;
 
   const ShapeCreationPanel({
     super.key,
     required this.sourceShapeId,
     required this.onShapeCreated,
     required this.canvasConstraints,
+    this.fromPort,
   });
 
   /// Invia l'evento semplificato al BLoC.
   /// Non crea più la forma, ma dice al BLoC QUALE TIPO di forma creare.
-  void _createShape(BuildContext context, ShapeType shapeType) {
+  void _createShape(BuildContext context, ShapeType shapeType) async {
     final bloc = context.read<FlowchartBloc>();
+    final flowState = bloc.state;
 
-    // CORREZIONE: Passa correttamente il parametro shapeType all'evento AddShape
+    // Caso speciale: utente richiede una seconda 'Fine'
+    if (shapeType == ShapeType.fine && flowState is FlowchartLoaded) {
+      final alreadyEnd = flowState.shapes.any((s) => s.type == 'fine' || s.type == 'end');
+      if (alreadyEnd) {
+        final bool? confirmed = await DialogService.showConfirmationDialog(
+          context,
+          title: 'Collegare al nodo Fine esistente? ',
+          message: 'Esiste già un nodo Fine. Vuoi collegarti a quest\' ultimo?',
+          confirmText: 'Collega',
+          cancelText: 'Annulla',
+        );
+        if (confirmed == true) {
+          bloc.add(LinkToExistingEnd(fromShapeId: sourceShapeId, fromPort: fromPort));
+          onShapeCreated();
+        } else {
+          onShapeCreated();
+        }
+        return;
+      }
+    }
+
     bloc.add(AddShape(
       shapeType: shapeType,
       fromShapeId: sourceShapeId,
+      fromPort: fromPort,
       canvasConstraints: canvasConstraints,
     ));
 
@@ -194,39 +276,65 @@ class ShapeCreationPanel extends StatelessWidget {
   }
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(14.0),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
         child: Container(
-          width: 160,
+          width: 180, // leggermente più larga per testi
           decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey6.withOpacity(0.8),
+            // pannello torna neutro (surface leggermente traslucido) invece del colore del testo
+            color: theme.colorScheme.surface.withAlpha((0.92 * 255).round()),
             borderRadius: BorderRadius.circular(14.0),
             border: Border.all(
-              color: CupertinoColors.systemGrey4.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withAlpha((0.08 * 255).round()),
+              width: 1.0,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(25),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ShapeButton(
-                icon: CupertinoIcons.square_on_square,
+                icon: FontAwesomeIcons.download, // Input
+                label: 'Input',
+                textColor: theme.colorScheme.onSurface,
+                onPressed: () => _createShape(context, ShapeType.input),
+              ),
+              const _Divider(),
+              ShapeButton(
+                icon: FontAwesomeIcons.upload, // Output
+                label: 'Output',
+                textColor: theme.colorScheme.onSurface,
+                onPressed: () => _createShape(context, ShapeType.output),
+              ),
+              const _Divider(),
+              ShapeButton(
+                icon: FontAwesomeIcons.gear, // Processo
                 label: 'Processo',
-                onPressed: () => _createShape(context, ShapeType.process),
+                textColor: theme.colorScheme.onSurface,
+                onPressed: () => _createShape(context, ShapeType.processo),
               ),
               const _Divider(),
               ShapeButton(
-                icon: FontAwesomeIcons.font,
-                label: 'Decisione',
-                onPressed: () => _createShape(context, ShapeType.decision),
+                icon: FontAwesomeIcons.codeBranch, // Condizione / diramazione
+                label: 'Condizione',
+                textColor: theme.colorScheme.onSurface,
+                onPressed: () => _createShape(context, ShapeType.condizione),
               ),
               const _Divider(),
               ShapeButton(
-                icon: CupertinoIcons.circle,
+                icon: FontAwesomeIcons.flagCheckered, // Fine
                 label: 'Fine',
-                isLast: true,
-                onPressed: () => _createShape(context, ShapeType.end),
+                textColor: theme.colorScheme.onSurface,
+                onPressed: () => _createShape(context, ShapeType.fine),
               ),
             ],
           ),
@@ -241,6 +349,7 @@ class ShapeButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
   final bool isLast;
+  final Color? textColor;
 
   const ShapeButton({
     super.key,
@@ -248,30 +357,35 @@ class ShapeButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.isLast = false,
+    this.textColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = textColor ?? CupertinoColors.activeBlue;
     return CupertinoButton(
       onPressed: onPressed,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      pressedOpacity: 0.85,
+      alignment: Alignment.centerLeft,
       borderRadius: isLast
           ? const BorderRadius.vertical(bottom: Radius.circular(14.0))
           : BorderRadius.zero,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: CupertinoColors.activeBlue,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              fontFamily: '.SF Pro Text',
-              letterSpacing: -0.2,
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: effectiveColor,
+                fontSize: 15.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.1,
+              ),
             ),
           ),
-          Icon(icon, size: 22, color: CupertinoColors.activeBlue),
+          Icon(icon, size: 20, color: effectiveColor),
         ],
       ),
     );

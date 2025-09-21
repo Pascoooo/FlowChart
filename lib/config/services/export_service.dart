@@ -4,6 +4,7 @@ import 'package:flowchart_thesis/config/services/dialog_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:universal_html/js.dart';
 
 /// Servizio con funzioni di utilità per l'esportazione.
 class ExportService {
@@ -17,12 +18,16 @@ class ExportService {
       if (boundary == null) {
         throw Exception('Render boundary non trovato.');
       }
-      // Aumenta il pixelRatio per una qualità decisamente superiore (ottimo per display retina)
       final image = await boundary.toImage(pixelRatio: 1.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (e) {
-      print("Errore durante la generazione dei byte PNG: $e");
+      DialogService.showInfoDialog(
+          context as BuildContext,
+          title: 'Errore di esportazione',
+          message: 'Si è verificato un errore durante la generazione dell\'immagine: $e',
+          closeText: 'OK',
+          icon: Icons.error_outline);
       return null;
     }
   }

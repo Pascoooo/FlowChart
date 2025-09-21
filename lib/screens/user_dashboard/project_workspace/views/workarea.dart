@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'flowchart_canvas.dart';
 import 'grid_toggle.dart';
+import '../../../../config/services/dialog_service.dart';
 
 /// The main work area for the flowchart editor, containing the canvas and UI elements.
 class WorkArea extends StatefulWidget {
@@ -53,6 +54,26 @@ class _WorkAreaState extends State<WorkArea> with SingleTickerProviderStateMixin
           repaintKey: widget.repaintKey,
           showGrid: widget.showGrid,
         ),
+        // Pulsante info (regole) in basso a sinistra
+        Positioned(
+          bottom: 24,
+          left: 24,
+          child: ScaleTransition(
+            scale: _buttonAnimation,
+            child: FadeTransition(
+              opacity: _buttonAnimation,
+              child: _InfoRulesButton(
+                onTap: () => DialogService.showInfoDialog(
+                  context,
+                  title: 'Regole',
+                  message: 'Opzione regole da implementare',
+                  icon: Icons.info_outline_rounded,
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Pulsante toggle griglia (già esistente) in basso a destra
         Positioned(
           bottom: 24,
           right: 24,
@@ -97,6 +118,38 @@ class _WorkAreaContent extends StatelessWidget {
         ),
         clipBehavior: Clip.hardEdge,
         child: FlowchartCanvas(showGrid: showGrid),
+      ),
+    );
+  }
+}
+
+class _InfoRulesButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _InfoRulesButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: 'Regole (coming soon)',
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          // mantiene stile coerente col toggle griglia
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.shadow.withAlpha((0.15 * 255).round()),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: theme.dividerColor.withAlpha((0.1 * 255).round())),
+        ),
+        child: IconButton(
+          onPressed: onTap,
+          icon: const Icon(Icons.info_outline_rounded, color: Colors.blueAccent),
+        ),
       ),
     );
   }

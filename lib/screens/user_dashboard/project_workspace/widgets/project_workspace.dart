@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
@@ -88,6 +89,16 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
   }
 
   void _onEdit() async {
+    // Cattura screenshot corrente della workarea prima di aprire l'editor di disegno
+    try {
+      final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
+      if (pngBytes != null) {
+        final b64 = base64Encode(pngBytes);
+        html.window.localStorage['editor_last_screenshot'] = b64;
+      }
+    } catch (_) {
+      // Silenzioso: se fallisce apriamo comunque l'editor con sfondo vuoto
+    }
     final String path = Uri.base.toString().split('#')[0];
     final Uri url = Uri.parse('$path#/drawing-editor');
     html.WindowBase popup = html.window.open(url.toString(), 'editor', 'width=1200,height=800');

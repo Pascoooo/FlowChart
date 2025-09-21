@@ -66,7 +66,6 @@ class _ShapeWidgetState extends State<ShapeWidget> {
         onTap: () {
           if (!widget.isSelected) {
             context.read<FlowchartBloc>().add(SelectShape(widget.shape.id));
-            print('SHAPE: Selected shape ${widget.shape.id}');
           }
         },
         behavior: HitTestBehavior.opaque,
@@ -139,8 +138,7 @@ class ShapeRenderer extends StatelessWidget {
     Widget shapeContent;
 
     switch (shape.type) {
-      case 'diamond':
-      case 'decision': // supporta il tipo logico usato nel modello
+      case 'condizione': // unico tipo diamante canonico
         shapeContent = CustomPaint(
           painter: DiamondPainter(
             color: Colors.white,
@@ -156,36 +154,78 @@ class ShapeRenderer extends StatelessWidget {
           ),
         );
         break;
+      case 'input':
+        shapeContent = CustomPaint(
+          painter: ParallelogramPainter(
+            fillColor: Colors.white,
+            borderColor: borderColor,
+            strokeWidth: borderWidth,
+            reversed: false,
+            drawShadow: isSelected,
+          ),
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Text(text, textAlign: TextAlign.center, style: textStyle, maxLines: 3, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ),
+        );
+        break;
+      case 'output':
+        shapeContent = CustomPaint(
+          painter: ParallelogramPainter(
+            fillColor: Colors.white,
+            borderColor: borderColor,
+            strokeWidth: borderWidth,
+            reversed: true,
+            drawShadow: isSelected,
+          ),
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Text(text, textAlign: TextAlign.center, style: textStyle, maxLines: 3, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ),
+        );
+        break;
       default:
         shapeContent = Container(
           width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(
-              (shape.type == 'circle' || shape.type == 'start' || shape.type == 'end') ? 999 : 8,
-            ),
-            border: Border.all(color: borderColor, width: borderWidth),
-            boxShadow: [
-              BoxShadow(
-                color: isSelected
-                    ? theme.colorScheme.primary.withAlpha(76)
-                    : Colors.black12,
-                blurRadius: isSelected ? 10 : 5,
-                offset: Offset(0, isSelected ? 5 : 3),
+            height: height,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(
+                (shape.type == 'start' || shape.type == 'fine') ? 999 : 8,
               ),
-            ],
-          ),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.all(8),
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: textStyle,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-        );
+              border: Border.all(color: borderColor, width: borderWidth),
+              boxShadow: [
+                BoxShadow(
+                  color: isSelected
+                      ? theme.colorScheme.primary.withAlpha(76)
+                      : Colors.black12,
+                  blurRadius: isSelected ? 10 : 5,
+                  offset: Offset(0, isSelected ? 5 : 3),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: textStyle,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
     }
 
     return AnimatedContainer(

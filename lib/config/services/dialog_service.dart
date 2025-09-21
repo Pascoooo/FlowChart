@@ -571,13 +571,15 @@ class _MegaRecoveryDialogLayout extends StatelessWidget {
                   title: "Versione Salvata",
                   subtitle: "(Questa versione è al sicuro nel cloud)",
                   content: firestoreContent,
+                  showUnsavedBadge: false,
                 ),
                 const VerticalDivider(width: 32, thickness: 1),
                 _buildPreviewColumn(
                   context,
-                  title: "Modifiche Locali",
+                  title: "Versione NON Salvata",
                   subtitle: "(Non salvate, da una sessione precedente)",
                   content: rtdbContent,
+                  showUnsavedBadge: true,
                 ),
               ],
             ),
@@ -610,6 +612,7 @@ class _MegaRecoveryDialogLayout extends StatelessWidget {
     required String title,
     required String subtitle,
     required String content,
+    bool showUnsavedBadge = false,
   }) {
     final cupertinoTheme = CupertinoTheme.of(context);
     return Expanded(
@@ -619,7 +622,10 @@ class _MegaRecoveryDialogLayout extends StatelessWidget {
           Text(subtitle, style: cupertinoTheme.textTheme.tabLabelTextStyle),
           const SizedBox(height: 8),
           Expanded(
-            child: FlowchartPreview(flowchartContent: content),
+            child: FlowchartPreview(
+              flowchartContent: content,
+              showUnsavedBadge: showUnsavedBadge,
+            ),
           ),
         ],
       ),

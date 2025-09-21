@@ -104,7 +104,7 @@ class ConnectionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = theme.colorScheme.onSurface.withOpacity(0.5)
+      ..color = theme.colorScheme.onSurface.withAlpha((0.5 * 255).round())
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 
@@ -115,22 +115,81 @@ class ConnectionPainter extends CustomPainter {
       final toShape = shapeMap[connection.toShapeId];
 
       if (fromShape != null && toShape != null) {
-        final startPoint = Offset(
-          fromShape.x + fromShape.width / 2,
-          fromShape.y + fromShape.height / 2,
-        );
-        final endPoint = Offset(
+        Offset startPoint;
+        if (fromShape.type == 'condizione' && connection.fromPort != null) {
+          if (connection.fromPort == 'true') {
+            startPoint = Offset(fromShape.x + fromShape.width, fromShape.y + fromShape.height / 2);
+          } else {
+            startPoint = Offset(fromShape.x, fromShape.y + fromShape.height / 2);
+          }
+        } else {
+          startPoint = Offset(
+            fromShape.x + fromShape.width / 2,
+            fromShape.y + fromShape.height / 2,
+          );
+        }
+
+        final endCenter = Offset(
           toShape.x + toShape.width / 2,
           toShape.y + toShape.height / 2,
         );
-
-        // Calcola il punto di fine sul perimetro della forma di destinazione
-        final endPointOnPerimeter = _getIntersectionPoint(startPoint, endPoint, toShape);
+        final endPointOnPerimeter = _getIntersectionPoint(startPoint, endCenter, toShape);
 
         canvas.drawLine(startPoint, endPointOnPerimeter, paint);
-
-        // Disegna la freccia nel nuovo punto di fine
         _drawArrow(canvas, paint, startPoint, endPointOnPerimeter);
+
+        // Disegna etichetta true/false se applicabile
+        if (fromShape.type == 'condizione' && connection.fromPort != null) {
+          final label = connection.fromPort!;
+          final textPainter = TextPainter(
+            text: TextSpan(
+              text: label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+
+          const padding = 4.0;
+          late Rect rect;
+          if (label == 'true') {
+            final dx = fromShape.x + fromShape.width + 10;
+            final dy = fromShape.y + fromShape.height / 2 - (textPainter.height / 2);
+            rect = Rect.fromLTWH(
+              dx,
+              dy,
+              textPainter.width + padding * 2,
+              textPainter.height + padding * 2,
+            );
+          } else { // false
+            final dx = fromShape.x - (textPainter.width + padding * 2) - 10;
+            final dy = fromShape.y + fromShape.height / 2 - (textPainter.height / 2);
+            rect = Rect.fromLTWH(
+              dx,
+              dy,
+              textPainter.width + padding * 2,
+              textPainter.height + padding * 2,
+            );
+          }
+
+          final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(8));
+          final bgPaint = Paint()..color = theme.colorScheme.surface.withAlpha(230);
+          canvas.drawRRect(rrect, bgPaint);
+          canvas.drawRRect(
+            rrect,
+            Paint()
+              ..color = Colors.black.withAlpha(25)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 0.5,
+          );
+          textPainter.paint(
+            canvas,
+            Offset(rect.left + padding, rect.top + padding),
+          );
+        }
       }
     }
   }
@@ -161,16 +220,7 @@ class ConnectionPainter extends CustomPainter {
     // Per un rettangolo, potremmo fare un calcolo più preciso, ma questo è un buon inizio.
     final finalPoint = Offset(intersectX, intersectY);
 
-    // Evita che la freccia sia troppo interna per forme molto rettangolari
-    if (toShape.type == 'rectangle') {
-      final borderX = toShape.x + (dx > 0 ? 0 : toShape.width);
-      final borderY = toShape.y + (dy > 0 ? 0 : toShape.height);
-      if ((finalPoint.dx > toShape.x && finalPoint.dx < toShape.x + toShape.width) &&
-          (finalPoint.dy > toShape.y && finalPoint.dy < toShape.y + toShape.height)) {
-        return finalPoint;
-      }
-    }
-
+    // Evitato controllo inutile per 'rectangle' (tipo non presente). Il punto calcolato finale va bene per tutte le forme.
     return finalPoint;
   }
 
@@ -192,4 +242,71 @@ class ConnectionPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant ConnectionPainter old) =>
       old.shapes != shapes || old.connections != connections;
+}
+
+class ParallelogramPainter extends CustomPainter {
+  final Color fillColor;
+  final Color borderColor;
+  final double strokeWidth;
+  final bool reversed;
+  final bool drawShadow;
+
+  ParallelogramPainter({
+    required this.fillColor,
+    required this.borderColor,
+    required this.strokeWidth,
+    this.reversed = false,
+    this.drawShadow = false,
+  });
+
+  Path _buildPath(Size size) {
+    final dx = size.width * 0.18; // inclinazione
+    final path = Path();
+    if (!reversed) {
+      path
+        ..moveTo(dx, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(size.width - dx, size.height)
+        ..lineTo(0, size.height)
+        ..close();
+    } else {
+      path
+        ..moveTo(0, 0)
+        ..lineTo(size.width - dx, 0)
+        ..lineTo(size.width, size.height)
+        ..lineTo(dx, size.height)
+        ..close();
+    }
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _buildPath(size);
+    if (drawShadow) {
+      final shadowPaint = Paint()
+        ..color = Colors.black.withAlpha(25)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+      canvas.save();
+      canvas.translate(0, 2); // piccola ombra sotto
+      canvas.drawPath(path, shadowPaint);
+      canvas.restore();
+    }
+    canvas.drawPath(path, Paint()..color = fillColor);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = borderColor
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant ParallelogramPainter old) =>
+      old.fillColor != fillColor ||
+      old.borderColor != borderColor ||
+      old.strokeWidth != strokeWidth ||
+      old.reversed != reversed ||
+      old.drawShadow != drawShadow;
 }
