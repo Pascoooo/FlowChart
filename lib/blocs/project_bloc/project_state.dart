@@ -10,12 +10,10 @@ abstract class ProjectState extends Equatable {
   List<Object?> get props => [];
 }
 
-/// Stato iniziale del BLoC.
 class ProjectInitial extends ProjectState {
   const ProjectInitial();
 }
 
-/// Stato che indica un'operazione in corso, con un messaggio opzionale per la UI.
 class ProjectLoading extends ProjectState {
   final String? message;
   const ProjectLoading({this.message});
@@ -23,7 +21,6 @@ class ProjectLoading extends ProjectState {
   List<Object?> get props => [message];
 }
 
-/// Stato che indica un errore bloccante.
 class ProjectError extends ProjectState {
   final String message;
   const ProjectError({required this.message});
@@ -31,16 +28,21 @@ class ProjectError extends ProjectState {
   List<Object> get props => [message];
 }
 
-/// Stato che indica la presenza di una sessione non salvata, per attivare il dialogo.
 class UnsavedChangesFound extends ProjectState {
   final String projectId;
   final String projectName;
-  const UnsavedChangesFound({required this.projectId, required this.projectName});
+  final List<UnsavedFileChange> changedFiles;
+
+  const UnsavedChangesFound({
+    required this.projectId,
+    required this.projectName,
+    required this.changedFiles,
+  });
+
   @override
-  List<Object> get props => [projectId, projectName];
+  List<Object> get props => [projectId, projectName, changedFiles];
 }
 
-/// Stato principale con i dati dei progetti caricati.
 class ProjectsLoaded extends ProjectState {
   final List<MyProject> projects;
   final MyProject? selectedProject;

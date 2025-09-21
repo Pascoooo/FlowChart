@@ -8,50 +8,35 @@ abstract class ProjectEvent extends Equatable {
 }
 
 // --- Eventi del Ciclo di Vita della Sessione ---
-
-/// Avvia il controllo per sessioni non salvate all'avvio dell'app.
 class CheckForUnsavedSessions extends ProjectEvent {
   const CheckForUnsavedSessions();
 }
-
-/// L'utente ha scelto di recuperare la sessione da RTDB.
 class RecoverSession extends ProjectEvent {
   final String projectId;
   const RecoverSession({required this.projectId});
   @override
   List<Object> get props => [projectId];
 }
-
-/// L'utente ha scelto di scartare la sessione da RTDB.
 class DiscardSession extends ProjectEvent {
   final String projectId;
   const DiscardSession({required this.projectId});
   @override
   List<Object> get props => [projectId];
 }
-
-/// Avvia il caricamento della lista dei progetti da Firestore.
-/// Usato dopo che il controllo della sessione è stato completato.
 class LoadProjects extends ProjectEvent {
   const LoadProjects();
 }
-
-/// Prepara la sessione in RTDB ("banco di lavoro") e seleziona un progetto per entrare nel workspace.
 class StartSessionAndSelectProject extends ProjectEvent {
   final MyProject project;
   const StartSessionAndSelectProject({required this.project});
   @override
   List<Object> get props => [project];
 }
-
-/// Salva la sessione (da RTDB a Firestore) ed esce dal workspace.
 class LeaveProject extends ProjectEvent {
   const LeaveProject();
 }
 
 // --- Eventi di Notifica dallo Stream ---
-
-/// Notifica al BLoC che lo stream di Firestore ha emesso nuovi dati.
 class ProjectsUpdated extends ProjectEvent {
   final List<MyProject> projects;
   const ProjectsUpdated(this.projects);
@@ -83,4 +68,33 @@ class RenameProject extends ProjectEvent {
   const RenameProject({required this.projectId, required this.newName});
   @override
   List<Object> get props => [projectId, newName];
+}
+
+// --- Eventi di Recupero Manuale ---
+
+/// Recupera le modifiche per un singolo file.
+class RecoverSingleFile extends ProjectEvent {
+  final String projectId;
+  final String fileId;
+  final String rtdbContent;
+
+  const RecoverSingleFile({
+    required this.projectId,
+    required this.fileId,
+    required this.rtdbContent,
+  });
+
+  @override
+  List<Object> get props => [projectId, fileId, rtdbContent];
+}
+
+/// Scarta le modifiche per un singolo file.
+class DiscardSingleFileChange extends ProjectEvent {
+  final String projectId;
+  final String fileId;
+
+  const DiscardSingleFileChange({required this.projectId, required this.fileId});
+
+  @override
+  List<Object> get props => [projectId, fileId];
 }

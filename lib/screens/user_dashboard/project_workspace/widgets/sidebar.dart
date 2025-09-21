@@ -52,7 +52,6 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
                 children: [
                   const _SidebarHeader(),
                   _buildDivider(theme),
-                  // La lista dei file si espande per riempire lo spazio
                   Expanded(
                     child: _FileSystemView(
                       projectId: widget.selectedProject.projectId,
