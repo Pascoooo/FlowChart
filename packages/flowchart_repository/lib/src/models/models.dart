@@ -1,3 +1,2 @@
 export 'flowchart.dart';
-export 'shape.dart';
-export 'connection.dart';
+export 'flow_node.dart';

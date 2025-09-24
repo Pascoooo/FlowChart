@@ -1,8 +1,6 @@
 import 'package:equatable/equatable.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter/material.dart';
-import 'FlowchartShapeFactory.dart';
-import 'flowchart_state.dart';
-import 'commands/flowchart_command.dart';
 
 abstract class FlowchartEvent extends Equatable {
   const FlowchartEvent();
@@ -10,108 +8,112 @@ abstract class FlowchartEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class FlowchartActionFailure extends FlowchartState {
-  final String title;
-  final String message;
-
-  const FlowchartActionFailure({required this.title, required this.message});
-
-  @override
-  List<Object?> get props => [title, message];
-}
-
-
+/// Carica un flowchart da una stringa JSON. (Invariato)
 class LoadFlowchart extends FlowchartEvent {
   final String jsonContent;
-  const LoadFlowchart(this.jsonContent);
+  final String fileName;
+
+  const LoadFlowchart({required this.jsonContent, required this.fileName});
+
   @override
-  List<Object?> get props => [jsonContent];
+  List<Object?> get props => [jsonContent, fileName];
 }
 
-class AddShape extends FlowchartEvent {
-  final ShapeType shapeType;
-  final String? fromShapeId;
-  final String? fromPort; // 'true' | 'false' per decision, null altrimenti
+/// Aggiunge un nuovo nodo al diagramma.
+class AddNode extends FlowchartEvent {
+  final FlowNodeKind kind;
+  final String fromNodeId;
+  final String? fromPort;
   final BoxConstraints canvasConstraints;
+  final Map<String, dynamic>? initialData;
 
-  const AddShape({
-      required this.shapeType,
-      this.fromShapeId,
-      this.fromPort,
-      required this.canvasConstraints});
+  const AddNode({
+    required this.kind,
+    required this.fromNodeId,
+    this.fromPort,
+    required this.canvasConstraints,
+    this.initialData,
+  });
 
   @override
-  List<Object?> get props => [shapeType, fromShapeId, fromPort];
+  List<Object?> get props => [kind, fromNodeId, fromPort, canvasConstraints];
 }
 
-class RemoveShape extends FlowchartEvent {
-  final String shapeId;
-  const RemoveShape(this.shapeId);
+/// Rimuove un nodo e le connessioni associate.
+class RemoveNode extends FlowchartEvent {
+  final String nodeId;
+  const RemoveNode(this.nodeId);
   @override
-  List<Object?> get props => [shapeId];
+  List<Object?> get props => [nodeId];
 }
 
-class UpdateShape extends FlowchartEvent {
-  final String shapeId;
+/// Aggiorna la posizione (x, y) di un nodo.
+class UpdateNodePosition extends FlowchartEvent {
+  final String nodeId;
   final double newX;
   final double newY;
-  final double? oldX;
-  final double? oldY;
+  final double oldX;
+  final double oldY;
 
-  const UpdateShape({
-    required this.shapeId,
+  const UpdateNodePosition({
+    required this.nodeId,
     required this.newX,
     required this.newY,
-    this.oldX,
-    this.oldY,
+    required this.oldX,
+    required this.oldY,
   });
   @override
-  List<Object?> get props => [shapeId, newX, newY, oldX, oldY];
+  List<Object?> get props => [nodeId, newX, newY, oldX, oldY];
 }
 
-// NUOVO: Evento per aggiornare proprietà delle forme
-class UpdateShapeProperties extends FlowchartEvent {
-  final String shapeId;
-  final double? width;
-  final double? height;
-  final String? text;
+/// Aggiorna il contenuto specifico di un nodo (es. testo, codice, condizione).
+/// Questo evento è più flessibile e potente del vecchio UpdateShapeProperties.
+class UpdateNodeContent extends FlowchartEvent {
+  final String nodeId;
+  // Usiamo una mappa per passare i dati specifici del nodo.
+  // Esempi:
+  // {'text': 'Nuovo testo'} per aggiornare l'etichetta di qualsiasi nodo.
+  // {'code': 'x = x + 1'} per un ProcessNode.
+  // {'condition': 'x > 10'} per un DecisionNode.
+  final Map<String, dynamic> newData;
 
-  const UpdateShapeProperties({
-    required this.shapeId,
-    this.width,
-    this.height,
-    this.text,
+  const UpdateNodeContent({
+    required this.nodeId,
+    required this.newData,
   });
 
   @override
-  List<Object?> get props => [shapeId, width, height, text];
+  List<Object?> get props => [nodeId, newData];
 }
 
-class SelectShape extends FlowchartEvent {
-  final String shapeId;
-  const SelectShape(this.shapeId);
+
+/// Seleziona un nodo per l'interazione.
+class SelectNode extends FlowchartEvent {
+  final String nodeId;
+  const SelectNode(this.nodeId);
   @override
-  List<Object?> get props => [shapeId];
+  List<Object?> get props => [nodeId];
 }
 
-class DeselectShape extends FlowchartEvent {}
-class UndoCommand extends FlowchartEvent { const UndoCommand(); }
-class RedoCommand extends FlowchartEvent { const RedoCommand(); }
+/// Deseleziona qualsiasi nodo attualmente selezionato.
+class DeselectNode extends FlowchartEvent {
+  const DeselectNode();
+}
 
-class ExecuteCommand extends FlowchartEvent {
-  final FlowchartCommand command;
-  const ExecuteCommand(this.command);
+/// Collega un nodo di partenza a un nodo 'End' già esistente.
+class LinkToExistingEnd extends FlowchartEvent {
+  final String fromNodeId;
+  final String? fromPort; // per DecisionNode
+
+  const LinkToExistingEnd({required this.fromNodeId, this.fromPort});
+
   @override
-  List<Object?> get props => [command];
+  List<Object?> get props => [fromNodeId, fromPort];
 }
 
+// --- Eventi per la gestione della cronologia e dello stato globale ---
+
+class Undo extends FlowchartEvent { const Undo(); }
+class Redo extends FlowchartEvent { const Redo(); }
 class ResetFlowchart extends FlowchartEvent { const ResetFlowchart(); }
 class ClearHistory extends FlowchartEvent { const ClearHistory(); }
-
-class LinkToExistingEnd extends FlowchartEvent {
-  final String fromShapeId;
-  final String? fromPort; // per decisione left/right
-  const LinkToExistingEnd({required this.fromShapeId, this.fromPort});
-  @override
-  List<Object?> get props => [fromShapeId, fromPort];
-}

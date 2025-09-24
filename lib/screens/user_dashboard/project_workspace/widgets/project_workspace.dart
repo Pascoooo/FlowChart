@@ -17,14 +17,16 @@ import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../config/services/banner_service.dart';
-import '../../../../config/services/dialog_service.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/export_service.dart';
 import '../../../settings/widgets/settings_provider.dart';
 import '../views/workarea.dart';
 
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
-  const ProjectWorkspace({super.key, required this.selectedProject});
+  final bool isReadOnly; // nuovo flag per vista condivisa/sola lettura
+  final VoidCallback? onLeave; // callback per tornare ai progetti
+  const ProjectWorkspace({super.key, required this.selectedProject, this.isReadOnly = false, this.onLeave});
 
   @override
   State<ProjectWorkspace> createState() => _ProjectWorkspaceState();
@@ -89,7 +91,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
   }
 
   void _onEdit() async {
-    // Cattura screenshot corrente della workarea prima di aprire l'editor di disegno
     try {
       final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
       if (pngBytes != null) {
@@ -97,7 +98,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
         html.window.localStorage['editor_last_screenshot'] = b64;
       }
     } catch (_) {
-      // Silenzioso: se fallisce apriamo comunque l'editor con sfondo vuoto
+      // Silenzioso
     }
     final String path = Uri.base.toString().split('#')[0];
     final Uri url = Uri.parse('$path#/drawing-editor');
@@ -113,7 +114,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
       final fileName = _getCurrentFileName(fileState);
       final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
       if (pngBytes == null) {
-        if (mounted) BannerService.showError(context, "Errore fatale durante la creazione dell'immagine.");
+        if (mounted) BannerService.showError(context, "Errore durante la creazione dell'immagine.");
         return;
       }
       final settingsProvider = innerContext.read<SettingsProvider>();
@@ -128,16 +129,16 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
           if (authState.user.driveConnected) {
             innerContext.read<AuthenticationBloc>().add(ExportFlowchartToDriveRequested(fileName: '$fileName.png', fileBytes: pngBytes));
           } else {
-            await DialogService.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
+            await AppDialogs.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
           }
           break;
         case ExportPreference.alwaysAsk:
-          await DialogService.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
+          await AppDialogs.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
           break;
       }
     } else {
       if (!mounted) return;
-      await DialogService.showInfoDialog(innerContext, title: "Nessun File Selezionato", message: "Per favore, seleziona un file prima di esportare.", icon: Icons.warning_amber_rounded, iconColor: Theme.of(innerContext).colorScheme.error, closeText: "Capito");
+      await AppDialogs.showInfoDialog(innerContext, title: "Nessun File Selezionato", message: "Seleziona un file prima di esportare.");
     }
   }
 
@@ -147,7 +148,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
 
   @override
   Widget build(BuildContext outerContext) {
-    return KeyboardShortcuts(
+    return KeyboardShortcuts( // USA I NUOVI EVENTI
       child: MultiBlocProvider(
         providers: [
           BlocProvider<FlowchartBloc>(create: (_) => FlowchartBloc()),
@@ -174,12 +175,13 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
               },
             ),
             BlocListener<FlowchartBloc, FlowchartState>(
-              // CORREZIONE CHIAVE: Aggiorna il DB solo se cambiano forme o connessioni
+              // CONTROLLA SUL NUOVO OGGETTO FLOWCHART
               listenWhen: (previous, current) {
                 if (previous is FlowchartLoaded && current is FlowchartLoaded) {
-                  return previous.shapes != current.shapes || previous.connections != current.connections;
+                  // Confronta direttamente l'oggetto flowchart
+                  return previous.flowchart != current.flowchart;
                 }
-                return false; // Non salvare se lo stato non è 'Loaded' o altri casi
+                return previous is! FlowchartLoaded && current is FlowchartLoaded;
               },
               listener: (context, state) {
                 if (state is FlowchartLoaded && _currentFileId != null) {
@@ -227,31 +229,21 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
 
                       final flowchartBloc = context.read<FlowchartBloc>();
                       final currentState = flowchartBloc.state;
-
                       final contentToLoad = liveContent ?? activeFile.content;
 
-                      // Previene ricaricamenti inutili
                       if (currentState is FlowchartLoaded && currentState.toJson() == contentToLoad) {
                         return;
                       }
 
                       _lastRtdbContent = contentToLoad;
 
-                      // CORREZIONE CHIAVE: Preserva lo stato della UI (es. selezione)
-                      final remoteState = FlowchartLoaded.fromJson(contentToLoad);
-                      final currentSelection = (currentState is FlowchartLoaded) ? currentState.selectedShapeId : null;
-                      final selectionStillExists = currentSelection != null && remoteState.shapes.any((s) => s.id == currentSelection);
+                      // USA IL NUOVO EVENTO E PASSA IL NOME DEL FILE
+                      flowchartBloc.add(LoadFlowchart(
+                        jsonContent: contentToLoad,
+                        fileName: activeFile.name,
+                      ));
 
-                      // Carica i nuovi dati e ripristina la selezione se possibile
-                      flowchartBloc.add(LoadFlowchart(contentToLoad));
-                      if(selectionStillExists) {
-                        // Un piccolo ritardo per assicurarsi che lo stato sia aggiornato prima di riapplicare la selezione
-                        Future.delayed(const Duration(milliseconds: 50), () {
-                          if (mounted) {
-                            flowchartBloc.add(SelectShape(currentSelection));
-                          }
-                        });
-                      }
+                      // Logica di ripristino selezione (ora nel BLoC)
                     });
                   }
                 } else if (state is FileSystemError) {
@@ -275,6 +267,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
                 onExport: () => _handleExport(innerContext),
                 showGrid: _showGrid,
                 toggleGrid: _toggleGrid,
+                isReadOnly: widget.isReadOnly,
+                onLeave: widget.onLeave,
               );
             },
           ),
@@ -296,6 +290,8 @@ class _WorkspaceLayout extends StatelessWidget {
   final VoidCallback onExport;
   final bool showGrid;
   final VoidCallback toggleGrid;
+  final bool isReadOnly;
+  final VoidCallback? onLeave;
 
   const _WorkspaceLayout({
     required this.sidebarSlideAnimation,
@@ -309,6 +305,8 @@ class _WorkspaceLayout extends StatelessWidget {
     required this.onExport,
     required this.showGrid,
     required this.toggleGrid,
+    required this.isReadOnly,
+    this.onLeave,
   });
 
   @override
@@ -319,7 +317,7 @@ class _WorkspaceLayout extends StatelessWidget {
           position: sidebarSlideAnimation,
           child: FadeTransition(
             opacity: fadeAnimation,
-            child: ProjectSidebar(selectedProject: selectedProject),
+            child: ProjectSidebar(selectedProject: selectedProject, isReadOnly: isReadOnly),
           ),
         ),
         Expanded(
@@ -335,6 +333,8 @@ class _WorkspaceLayout extends StatelessWidget {
                       selectedProject: selectedProject,
                       onEdit: onEdit,
                       onExport: onExport,
+                      isReadOnly: isReadOnly,
+                      onLeave: onLeave,
                     ),
                   ),
                 ),
@@ -350,6 +350,7 @@ class _WorkspaceLayout extends StatelessWidget {
                           repaintKey: workareaKey,
                           showGrid: showGrid,
                           onToggleGrid: toggleGrid,
+                          isReadOnly: isReadOnly,
                         ),
                       ),
                     ),

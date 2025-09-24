@@ -1,205 +1,170 @@
+import 'package:flowchart_repository/flowchart_repository.dart';
 import '../flowchart_state.dart';
 
+/// Interfaccia base per tutti i comandi eseguibili.
 abstract class FlowchartCommand {
   FlowchartLoaded execute(FlowchartLoaded currentState);
   FlowchartLoaded undo(FlowchartLoaded currentState);
   String get description;
 }
 
-class AddShapeCommand implements FlowchartCommand {
-  final FlowchartShape shape;
-  AddShapeCommand(this.shape);
+// --- COMANDI PER I NODI ---
+
+class AddNodeCommand implements FlowchartCommand {
+  final FlowNode node;
+  AddNodeCommand(this.node);
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
-    final updatedShapes = List<FlowchartShape>.from(currentState.shapes)..add(shape);
-    return currentState.copyWith(shapes: updatedShapes);
+    final updatedNodes = List<FlowNode>.from(currentState.flowchart.nodes)..add(node);
+    final newFlowchart = currentState.flowchart.copyWith(nodes: updatedNodes);
+    return currentState.copyWith(flowchart: newFlowchart, selectedNodeId: node.id);
   }
 
   @override
   FlowchartLoaded undo(FlowchartLoaded currentState) {
-    final updatedShapes = currentState.shapes.where((s) => s.id != shape.id).toList();
-    return currentState.copyWith(shapes: updatedShapes);
+    final updatedNodes = currentState.flowchart.nodes.where((n) => n.id != node.id).toList();
+    final newFlowchart = currentState.flowchart.copyWith(nodes: updatedNodes);
+    return currentState.copyWith(flowchart: newFlowchart);
   }
 
   @override
-  String get description => 'Aggiungi ${shape.type}';
+  String get description => 'Aggiungi ${node.kind.name}';
 }
 
-class RemoveShapeCommand implements FlowchartCommand {
-  final FlowchartShape removedShape;
-  RemoveShapeCommand(this.removedShape);
+class RemoveNodeCommand implements FlowchartCommand {
+  final FlowNode node;
+  RemoveNodeCommand(this.node);
 
   @override
-  FlowchartLoaded execute(FlowchartLoaded currentState) {
-    final updatedShapes = currentState.shapes.where((s) => s.id != removedShape.id).toList();
-    return currentState.copyWith(shapes: updatedShapes);
-  }
-
+  FlowchartLoaded execute(FlowchartLoaded currentState) => AddNodeCommand(this.node).undo(currentState);
   @override
-  FlowchartLoaded undo(FlowchartLoaded currentState) {
-    final updatedShapes = List<FlowchartShape>.from(currentState.shapes)..add(removedShape);
-    return currentState.copyWith(shapes: updatedShapes);
-  }
-
+  FlowchartLoaded undo(FlowchartLoaded currentState) => AddNodeCommand(this.node).execute(currentState);
   @override
-  String get description => 'Rimuovi ${removedShape.type}';
+  String get description => 'Rimuovi ${node.kind.name}';
 }
 
-class MoveShapeCommand implements FlowchartCommand {
-  final String shapeId;
+class MoveNodeCommand implements FlowchartCommand {
+  final String nodeId;
   final double newX, newY, oldX, oldY;
 
-  MoveShapeCommand({
-    required this.shapeId,
-    required this.newX,
-    required this.newY,
-    required this.oldX,
-    required this.oldY
+  MoveNodeCommand({
+    required this.nodeId,
+    required this.newX, required this.newY,
+    required this.oldX, required this.oldY,
   });
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
-    final updatedShapes = currentState.shapes.map((s) {
-      return s.id == shapeId ? s.copyWith(x: newX, y: newY) : s;
+    // FIX: Aggiunto <FlowNode> per specificare il tipo di ritorno della mappa.
+    final updatedNodes = currentState.flowchart.nodes.map<FlowNode>((n) {
+      if (n.id == nodeId) {
+        return (n as dynamic).copyWith(x: newX, y: newY);
+      }
+      return n;
     }).toList();
-    return currentState.copyWith(shapes: updatedShapes);
+    final newFlowchart = currentState.flowchart.copyWith(nodes: updatedNodes);
+    return currentState.copyWith(flowchart: newFlowchart);
   }
 
   @override
   FlowchartLoaded undo(FlowchartLoaded currentState) {
-    final updatedShapes = currentState.shapes.map((s) {
-      return s.id == shapeId ? s.copyWith(x: oldX, y: oldY) : s;
+    // FIX: Aggiunto <FlowNode>
+    final updatedNodes = currentState.flowchart.nodes.map<FlowNode>((n) {
+      if (n.id == nodeId) {
+        return (n as dynamic).copyWith(x: oldX, y: oldY);
+      }
+      return n;
     }).toList();
-    return currentState.copyWith(shapes: updatedShapes);
+    final newFlowchart = currentState.flowchart.copyWith(nodes: updatedNodes);
+    return currentState.copyWith(flowchart: newFlowchart);
   }
 
   @override
-  String get description => 'Sposta forma';
+  String get description => 'Sposta nodo';
 }
 
-/// Comando potenziato per aggiornare le proprietà di una forma,
-/// incluso testo E le liste di connessioni per mantenere la consistenza dei dati.
-class UpdateShapePropertiesCommand implements FlowchartCommand {
-  final String shapeId;
-  final String? newText, oldText;
-  final List<String>? newIncoming, oldIncoming;
-  final List<String>? newOutgoing, oldOutgoing;
+class UpdateNodeContentCommand implements FlowchartCommand {
+  final String nodeId;
+  final FlowNode oldNode;
+  final Map<String, dynamic> newData;
 
-  // Costruttore principale per il testo
-  UpdateShapePropertiesCommand({
-    required this.shapeId,
-    this.newText,
-    this.oldText,
-  }) : newIncoming = null, oldIncoming = null, newOutgoing = null, oldOutgoing = null;
-
-  // Costruttore nominato per aggiornare solo le connessioni
-  UpdateShapePropertiesCommand.connections({
-    required this.shapeId,
-    this.newIncoming, this.oldIncoming,
-    this.newOutgoing, this.oldOutgoing,
-  }) : newText = null, oldText = null;
-
+  UpdateNodeContentCommand({required this.nodeId, required this.oldNode, required this.newData});
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
-    final updatedShapes = currentState.shapes.map((s) {
-      if (s.id == shapeId) {
-        return s.copyWith(
-          text: newText ?? s.text,
-          incomingConnectionIds: newIncoming ?? s.incomingConnectionIds,
-          outgoingConnectionIds: newOutgoing ?? s.outgoingConnectionIds,
-        );
-      }
-      return s;
-    }).toList();
-    return currentState.copyWith(shapes: updatedShapes);
+    final newNode = (oldNode as dynamic).copyWith(
+      text: newData['text'],
+      code: newData['code'],
+      condition: newData['condition'],
+      template: newData['template'],
+      variables: newData['variables'], // nuovo campo per OutputNode
+      declarations: newData['declarations'], // nuovo campo per InputNode
+    );
+    // FIX: Aggiunto <FlowNode>
+    final updatedNodes = currentState.flowchart.nodes.map<FlowNode>((n) => n.id == nodeId ? newNode : n).toList();
+    final newFlowchart = currentState.flowchart.copyWith(nodes: updatedNodes);
+    return currentState.copyWith(flowchart: newFlowchart);
   }
 
   @override
   FlowchartLoaded undo(FlowchartLoaded currentState) {
-    final updatedShapes = currentState.shapes.map((s) {
-      if (s.id == shapeId) {
-        return s.copyWith(
-          text: oldText ?? s.text,
-          incomingConnectionIds: oldIncoming ?? s.incomingConnectionIds,
-          outgoingConnectionIds: oldOutgoing ?? s.outgoingConnectionIds,
-        );
-      }
-      return s;
-    }).toList();
-    return currentState.copyWith(shapes: updatedShapes);
+    // FIX: Aggiunto <FlowNode>
+    final updatedNodes = currentState.flowchart.nodes.map<FlowNode>((n) => n.id == nodeId ? oldNode : n).toList();
+    final newFlowchart = currentState.flowchart.copyWith(nodes: updatedNodes);
+    return currentState.copyWith(flowchart: newFlowchart);
   }
 
   @override
-  String get description => 'Aggiorna proprietà forma';
+  String get description => 'Modifica contenuto nodo';
 }
 
-class AddConnectionCommand implements FlowchartCommand {
-  final FlowchartConnection connection;
-  AddConnectionCommand(this.connection);
+
+// --- COMANDI PER LE CONNESSIONI ---
+
+class AddEdgeCommand implements FlowchartCommand {
+  final FlowchartEdge edge;
+  AddEdgeCommand(this.edge);
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
-    final updatedConnections = List<FlowchartConnection>.from(currentState.connections)..add(connection);
-    final updatedShapes = currentState.shapes.map((shape) {
-      if (shape.id == connection.fromShapeId) {
-        final newOutgoing = List<String>.from(shape.outgoingConnectionIds)..add(connection.id);
-        return shape.copyWith(outgoingConnectionIds: newOutgoing);
-      }
-      if (shape.id == connection.toShapeId) {
-        final newIncoming = List<String>.from(shape.incomingConnectionIds)..add(connection.id);
-        return shape.copyWith(incomingConnectionIds: newIncoming);
-      }
-      return shape;
-    }).toList();
-    return currentState.copyWith(shapes: updatedShapes, connections: updatedConnections);
+    final updatedEdges = List<FlowchartEdge>.from(currentState.flowchart.edges)..add(edge);
+    final newFlowchart = currentState.flowchart.copyWith(edges: updatedEdges);
+    return currentState.copyWith(flowchart: newFlowchart);
   }
 
   @override
   FlowchartLoaded undo(FlowchartLoaded currentState) {
-    final updatedConnections = currentState.connections.where((c) => c.id != connection.id).toList();
-    final updatedShapes = currentState.shapes.map((shape) {
-      if (shape.id == connection.fromShapeId) {
-        final newOutgoing = List<String>.from(shape.outgoingConnectionIds)..remove(connection.id);
-        return shape.copyWith(outgoingConnectionIds: newOutgoing);
-      }
-      if (shape.id == connection.toShapeId) {
-        final newIncoming = List<String>.from(shape.incomingConnectionIds)..remove(connection.id);
-        return shape.copyWith(incomingConnectionIds: newIncoming);
-      }
-      return shape;
-    }).toList();
-    return currentState.copyWith(shapes: updatedShapes, connections: updatedConnections);
+    final updatedEdges = currentState.flowchart.edges.where((e) => e != edge).toList();
+    final newFlowchart = currentState.flowchart.copyWith(edges: updatedEdges);
+    return currentState.copyWith(flowchart: newFlowchart);
   }
 
   @override
   String get description => 'Aggiungi connessione';
 }
 
-class RemoveConnectionCommand implements FlowchartCommand {
-  final FlowchartConnection connection;
-  RemoveConnectionCommand(this.connection);
+class RemoveEdgeCommand implements FlowchartCommand {
+  final FlowchartEdge edge;
+  RemoveEdgeCommand(this.edge);
 
   @override
-  FlowchartLoaded execute(FlowchartLoaded currentState) {
-    return AddConnectionCommand(connection).undo(currentState);
-  }
-
+  FlowchartLoaded execute(FlowchartLoaded currentState) => AddEdgeCommand(edge).undo(currentState);
   @override
-  FlowchartLoaded undo(FlowchartLoaded currentState) {
-    return AddConnectionCommand(connection).execute(currentState);
-  }
-
+  FlowchartLoaded undo(FlowchartLoaded currentState) => AddEdgeCommand(edge).execute(currentState);
   @override
   String get description => 'Rimuovi connessione';
 }
 
+
+// --- COMANDO COMPOSITO ---
+
 class CompositeCommand implements FlowchartCommand {
   final List<FlowchartCommand> commands;
-  final String _description;
+  @override
+  final String description;
 
-  CompositeCommand(this.commands, this._description);
+  CompositeCommand(this.commands, this.description);
 
   @override
   FlowchartLoaded execute(FlowchartLoaded currentState) {
@@ -210,7 +175,4 @@ class CompositeCommand implements FlowchartCommand {
   FlowchartLoaded undo(FlowchartLoaded currentState) {
     return commands.reversed.fold(currentState, (state, command) => command.undo(state));
   }
-
-  @override
-  String get description => _description;
 }

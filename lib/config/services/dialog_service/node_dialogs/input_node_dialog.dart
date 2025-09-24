@@ -1,0 +1,342 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
+Future<Map<String, dynamic>?> showInputNodeDialog(BuildContext context) {
+  // --- REFACTOR: Utilizzo di showDialog per un controllo completo sul layout. ---
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    barrierDismissible: false,
+    useRootNavigator: true,
+    builder: (_) => const _InputNodeDialog(),
+  );
+}
+
+class _InputNodeDialog extends StatefulWidget {
+  const _InputNodeDialog();
+
+  @override
+  State<_InputNodeDialog> createState() => _InputNodeDialogState();
+}
+
+class _InputNodeDialogState extends State<_InputNodeDialog> {
+  final TextEditingController _labelController = TextEditingController();
+  final List<_VarRowData> _vars = [];
+  bool _attemptedSubmit = false;
+
+  static const _cTypes = <String>[
+    'int', 'float', 'double', 'bool', 'char', 'string'
+  ];
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    for (final v in _vars) {
+      v.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addVar() =>
+      setState(() => _vars.add(_VarRowData(type: 'int', hasInit: true)));
+
+  void _removeVar(int i) {
+    _vars[i].dispose();
+    setState(() => _vars.removeAt(i));
+    if (_attemptedSubmit) _validateForm();
+  }
+
+  bool _validateValue(String type, String value) {
+    if (value.isEmpty) return false;
+    switch (type) {
+      case 'int':
+        return int.tryParse(value) != null;
+      case 'float':
+      case 'double':
+        return double.tryParse(value) != null;
+      case 'bool':
+        return ['true', 'false', '0', '1'].contains(value.toLowerCase());
+      case 'char':
+        return value.length == 1;
+      case 'string':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // --- REFACTOR: Sistema di validazione granulare che assegna errori specifici a ogni campo. ---
+  bool _validateForm() {
+    if (_vars.isEmpty) return false;
+
+    final names = <String, List<int>>{};
+    bool isFormValid = true;
+
+    // Primo passaggio: validazione dei singoli campi e raccolta dei nomi
+    for (var i = 0; i < _vars.length; i++) {
+      final v = _vars[i];
+      final name = v.name.text.trim();
+      final idRe = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');
+
+      // Validazione nome
+      if (name.isEmpty) {
+        v.nameError = 'Obbligatorio';
+      } else if (!idRe.hasMatch(name)) {
+        v.nameError = 'Formato non valido';
+      } else {
+        v.nameError = null;
+        names.putIfAbsent(name, () => []).add(i);
+      }
+
+      // Validazione valore iniziale
+      if (v.hasInit) {
+        final val = v.init.text.trim();
+        if (val.isEmpty) {
+          v.initError = 'Obbligatorio';
+        } else if (!_validateValue(v.type, val)) {
+          v.initError = 'Valore non valido per il tipo "${v.type}"';
+        } else {
+          v.initError = null;
+        }
+      } else {
+        v.initError = null;
+      }
+
+      if (v.nameError != null || v.initError != null) {
+        isFormValid = false;
+      }
+    }
+
+    // Secondo passaggio: gestione dei nomi duplicati
+    names.forEach((name, indices) {
+      if (indices.length > 1) {
+        isFormValid = false;
+        for (var index in indices) {
+          _vars[index].nameError = 'Nome duplicato';
+        }
+      }
+    });
+
+    return isFormValid;
+  }
+
+  void _confirm() {
+    setState(() {
+      _attemptedSubmit = true;
+    });
+
+    if (!_validateForm()) {
+      return;
+    }
+
+    Navigator.of(context).pop({
+      'text': _labelController.text.trim().isEmpty
+          ? 'Input'
+          : _labelController.text.trim(),
+      'declarations': _vars
+          .map((v) => {
+        'name': v.name.text.trim(),
+        'dataType': v.type,
+        'initialValue': v.hasInit ? v.init.text.trim() : null,
+      })
+          .toList(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 600),
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                FaIcon(FontAwesomeIcons.keyboard,
+                    color: theme.colorScheme.primary, size: 24),
+                const SizedBox(width: 12),
+                Text('Configura Nodo Input',
+                    style: theme.textTheme.headlineSmall),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Definisci le variabili che il programma richiederà in input.',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: _labelController,
+              decoration: const InputDecoration(
+                labelText: 'Etichetta Nodo (opzionale)',
+                hintText: 'Es. Inserimento Dati Utente',
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Text('Variabili da Dichiarare',
+                    style: theme.textTheme.titleLarge),
+                const Spacer(),
+                CupertinoButton.filled(
+                  onPressed: _addVar,
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    children: const [
+                      FaIcon(FontAwesomeIcons.plus, size: 14),
+                      SizedBox(width: 8),
+                      Text('Aggiungi'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: _vars.isEmpty
+                    ? Center(
+                    child: Text('Aggiungi almeno una variabile.',
+                        style: TextStyle(color: theme.hintColor)))
+                    : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _vars.length,
+                  itemBuilder: (_, i) => _buildVarRow(i),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                CupertinoButton(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  child: Text('Annulla',
+                      style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant)),
+                ),
+                const SizedBox(width: 8),
+                CupertinoButton.filled(
+                  onPressed: _confirm,
+                  child: const Text('Conferma'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- UI/UX: La riga della variabile è stata ridisegnata per chiarezza e per un miglior feedback sugli errori. ---
+  Widget _buildVarRow(int index) {
+    final v = _vars[index];
+    final theme = Theme.of(context);
+
+    // Esegui la validazione a ogni build se è stato tentato l'invio
+    if (_attemptedSubmit) _validateForm();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  controller: v.name,
+                  decoration: InputDecoration(
+                    labelText: 'Nome Variabile *',
+                    errorText: _attemptedSubmit ? v.nameError : null,
+                  ),
+                  onChanged: (_) {
+                    if (_attemptedSubmit) setState(() => _validateForm());
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  value: v.type,
+                  items: _cTypes
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (val) => setState(() {
+                    v.type = val!;
+                    v.init.clear();
+                  }),
+                  decoration: const InputDecoration(labelText: 'Tipo *'),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: CupertinoButton(
+                    padding: const EdgeInsets.all(10),
+                    minSize: 0,
+                    onPressed: () => _removeVar(index),
+                    child: FaIcon(FontAwesomeIcons.trash,
+                        size: 18, color: theme.colorScheme.error)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // --- UI/UX: Il checkbox per l'inizializzazione è stato sostituito con un componente più integrato. ---
+          SwitchListTile(
+            title: const Text('Inizializza con un valore'),
+            value: v.hasInit,
+            onChanged: (val) => setState(() {
+              v.hasInit = val;
+              if (!val) v.init.clear();
+            }),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+          if (v.hasInit)
+            Padding(
+              padding: const EdgeInsets.only(top: 12.0),
+              child: TextField(
+                controller: v.init,
+                decoration: InputDecoration(
+                  labelText: 'Valore Iniziale *',
+                  errorText: _attemptedSubmit ? v.initError : null,
+                ),
+                onChanged: (_) {
+                  if (_attemptedSubmit) setState(() => _validateForm());
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- REFACTOR: La classe dati ora include campi specifici per gli errori. ---
+class _VarRowData {
+  final TextEditingController name = TextEditingController();
+  final TextEditingController init = TextEditingController();
+  String type;
+  bool hasInit;
+  String? nameError;
+  String? initError;
+
+  _VarRowData({required this.type, this.hasInit = false});
+
+  void dispose() {
+    name.dispose();
+    init.dispose();
+  }
+}

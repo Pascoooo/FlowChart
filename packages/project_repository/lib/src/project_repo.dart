@@ -29,7 +29,6 @@ class PendingSessionInfo {
   });
 }
 
-// --- CLASSE ASTRATTA RIFATTORIZZATA ---
 
 /// Definisce il contratto di alto livello per la gestione dei dati dei progetti.
 /// Nasconde la complessità della doppia gestione Firestore/RTDB.
@@ -92,4 +91,11 @@ abstract class ProjectRepo {
 
   /// Aggiorna in tempo reale il contenuto del file su cui si sta lavorando.
   Future<void> updateLiveFileContent(String projectId, String fileId, String content);
+
+  // CONDIVISIONE PROGETTI
+  Future<void> updateProjectVisibility({required String projectId, required bool isPublic});
+  Future<MyProject?> getPublicProjectById(String projectId);
+
+
+  Future<Map<String, dynamic>?> getPublicProjectWithFiles(String projectId);
 }

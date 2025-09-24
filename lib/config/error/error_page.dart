@@ -1,5 +1,8 @@
 import 'package:flowchart_thesis/config/router/app_router.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../blocs/auth_bloc/authentication_bloc.dart';
+import '../../blocs/auth_bloc/authentication_event.dart';
 
 class ErrorPage extends StatelessWidget {
   final String? error;
@@ -57,7 +60,7 @@ class ErrorPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Si è verificato un errore imprevisto. Torna alla pagina principale per continuare.',
+                  'Si è verificato un errore imprevisto. Puoi uscire e rientrare.',
                   style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
                   textAlign: TextAlign.center,
                 ),
@@ -80,9 +83,12 @@ class ErrorPage extends StatelessWidget {
                 ],
                 const SizedBox(height: 32),
                 ElevatedButton.icon(
-                  onPressed: () => AppRouter.goToAuth(context),
-                  icon: const Icon(Icons.home, size: 20),
-                  label: const Text('Torna alla Home'),
+                  onPressed: () {
+                    context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
+                    Future.microtask(() => AppRouter.goToAuth(context));
+                  },
+                  icon: const Icon(Icons.logout, size: 20),
+                  label: const Text('Logout e Rientra'),
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 52),
                     textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),

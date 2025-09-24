@@ -1,5 +1,3 @@
-// lib/data/repositories/rtdb_session_service.dart
-
 import 'package:file_repository/file_repository.dart';
 import 'package:firebase_database/firebase_database.dart';
 
@@ -12,7 +10,6 @@ class RtdbSessionService {
   RtdbSessionService({required this.uid})
       : _rtdbSessionRef = FirebaseDatabase.instance.ref('sessions/$uid');
 
-  // --- Gestione Sessione Generale ---
 
   Future<DataSnapshot> getSessionSnapshot() => _rtdbSessionRef.get();
 
@@ -58,13 +55,12 @@ class RtdbSessionService {
         .child(projectId)
         .child('files')
         .child(file.fileId)
-        .set({'name': file.name, 'content': file.content ?? ''});
+        .set({'name': file.name, 'content': file.content});
   }
 
   Future<void> removeFileFromSession(String projectId, String fileId) async {
     final fileNode = _rtdbSessionRef.child(projectId).child('files').child(fileId);
     final sessionFilesSnapshot = await _rtdbSessionRef.child(projectId).child('files').get();
-
     if (sessionFilesSnapshot.exists && (sessionFilesSnapshot.value as Map).length > 1) {
       await fileNode.remove();
     } else {

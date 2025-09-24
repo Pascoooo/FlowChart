@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
+import '../../../../config/services/dialog_service/service_dialog.dart';
 import 'flowchart_canvas.dart';
 import 'grid_toggle.dart';
-import '../../../../config/services/dialog_service.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 
 /// The main work area for the flowchart editor, containing the canvas and UI elements.
 class WorkArea extends StatefulWidget {
   final GlobalKey repaintKey;
   final bool showGrid;
   final VoidCallback onToggleGrid;
+  final bool isReadOnly;
 
   const WorkArea({
     super.key,
     required this.repaintKey,
     required this.showGrid,
     required this.onToggleGrid,
+    this.isReadOnly = false,
   });
 
   @override
@@ -53,41 +56,43 @@ class _WorkAreaState extends State<WorkArea> with SingleTickerProviderStateMixin
         _WorkAreaContent(
           repaintKey: widget.repaintKey,
           showGrid: widget.showGrid,
+          isReadOnly: widget.isReadOnly,
         ),
-        // Pulsante info (regole) in basso a sinistra
-        Positioned(
-          bottom: 24,
-          left: 24,
-          child: ScaleTransition(
-            scale: _buttonAnimation,
-            child: FadeTransition(
-              opacity: _buttonAnimation,
-              child: _InfoRulesButton(
-                onTap: () => DialogService.showInfoDialog(
-                  context,
-                  title: 'Regole',
-                  message: 'Opzione regole da implementare',
-                  icon: Icons.info_outline_rounded,
+        // Pulsanti mostrati solo se non read-only
+        if (!widget.isReadOnly) ...[
+          Positioned(
+            bottom: 24,
+            left: 24,
+            child: ScaleTransition(
+              scale: _buttonAnimation,
+              child: FadeTransition(
+                opacity: _buttonAnimation,
+                child: _InfoRulesButton(
+                  onTap: () => AppDialogs.showInfoDialog(
+                    context,
+                    title: 'Regole',
+                    message: 'Opzione regole da implementare',
+                    type: DialogType.info,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        // Pulsante toggle griglia (già esistente) in basso a destra
-        Positioned(
-          bottom: 24,
-          right: 24,
-          child: ScaleTransition(
-            scale: _buttonAnimation,
-            child: FadeTransition(
-              opacity: _buttonAnimation,
-              child: GridToggleButton(
-                showGrid: widget.showGrid,
-                onToggle: widget.onToggleGrid,
+          Positioned(
+            bottom: 24,
+            right: 24,
+            child: ScaleTransition(
+              scale: _buttonAnimation,
+              child: FadeTransition(
+                opacity: _buttonAnimation,
+                child: GridToggleButton(
+                  showGrid: widget.showGrid,
+                  onToggle: widget.onToggleGrid,
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -97,8 +102,9 @@ class _WorkAreaState extends State<WorkArea> with SingleTickerProviderStateMixin
 class _WorkAreaContent extends StatelessWidget {
   final GlobalKey repaintKey;
   final bool showGrid;
+  final bool isReadOnly;
 
-  const _WorkAreaContent({required this.repaintKey, required this.showGrid});
+  const _WorkAreaContent({required this.repaintKey, required this.showGrid, this.isReadOnly = false});
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +123,7 @@ class _WorkAreaContent extends StatelessWidget {
           ],
         ),
         clipBehavior: Clip.hardEdge,
-        child: FlowchartCanvas(showGrid: showGrid),
+        child: FlowchartCanvas(showGrid: showGrid, isReadOnly: isReadOnly),
       ),
     );
   }

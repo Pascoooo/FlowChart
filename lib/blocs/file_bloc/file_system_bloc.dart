@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:ui';
 import 'package:bloc/bloc.dart';
 import 'package:file_repository/file_repository.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:project_repository/project_repository.dart';
-import '../flowchart_bloc/FlowchartShapeFactory.dart';
+import 'package:uuid/uuid.dart';
+import '../flowchart_bloc/flowchart_shape_factory.dart';
 import 'file_system_event.dart';
 import 'file_system_state.dart';
 
@@ -34,6 +36,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     }
   }
 
+
   /// Crea un nuovo file con un contenuto di default, lo salva e lo imposta come attivo.
   Future<void> _onCreateNewFile(
       CreateNewFile event, Emitter<FileSystemState> emit) async {
@@ -42,27 +45,32 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     emit(currentState.copyWith(isLoading: true));
     try {
-      // 1. Usa la Factory per creare la forma di default in modo pulito e centralizzato
-      final defaultShape = FlowchartShapeFactory.createShape(
-        ShapeType.start,
+      // 1. Usa la NUOVA Factory per creare il nodo di start di default.
+      final startNode = FlowNodeFactory.createNode(
+        FlowNodeKind.start,
         const Offset(120.0, 120.0),
       );
 
-      // 2. Prepara il contenuto JSON
-      // (Assicurati che il tuo modello FlowchartShape abbia un metodo toJson())
-      final Map<String, dynamic> initialContentData = {
-        'shapes': [defaultShape.toJson()],
-        'connections': [],
-      };
-      final String initialContent = jsonEncode(initialContentData);
+      // 2. Crea un oggetto Flowchart completo, usando il nome del file dall'evento.
+      final initialFlowchart = Flowchart(
+        flowchartId: const Uuid().v4(),
+        name: event.fileName.trim(), // Il nome del flowchart è il nome del file
+        schemaVersion: kFlowNodeSchemaVersion,
+        nodes: [startNode], // Il flowchart contiene solo il nodo di start
+        edges: const [],
+      );
 
-      // 3. Salva il file come prima
+      // 3. Serializza il nuovo oggetto Flowchart in una stringa JSON.
+      final initialContent = jsonEncode(initialFlowchart.toEntity().toDocument());
+
+      // 4. Salva il file nel repository.
       final newFile = await projectRepository.addFileToProject(
         projectId: event.projectId,
         fileName: event.fileName.trim(),
         content: initialContent,
       );
 
+      // 5. Aggiorna lo stato: aggiungi il file alla lista e impostalo come attivo.
       final updatedFiles = List<MyFile>.from(currentState.files)..add(newFile);
       emit(FileSystemLoaded(
         files: updatedFiles,
@@ -73,7 +81,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       emit(currentState.copyWith(isLoading: false, error: 'Impossibile creare il file. Dettagli: ${e.toString()}'));
     }
   }
-
   /// Imposta un file come attivo nello stato corrente.
   void _onOpenFile(OpenFile event, Emitter<FileSystemState> emit) {
     if (state is FileSystemLoaded) {

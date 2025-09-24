@@ -11,7 +11,8 @@ import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../config/services/banner_service.dart';
-import '../../../config/services/dialog_service.dart';
+import '../../../config/services/dialog_service/app_dialogs.dart';
+import '../../../config/services/dialog_service/service_dialog.dart';
 import '../../user_dashboard/animations/background_animation.dart';
 import '../widgets/export_setting.dart';
 import '../widgets/settings_provider.dart';
@@ -319,7 +320,7 @@ class SystemSettings extends StatelessWidget {
   }
 
   void _disconnectFromGoogleDrive(BuildContext context) async {
-    final bool? confirmed = await DialogService.showConfirmationDialog(
+    final bool? confirmed = await AppDialogs.showConfirmationDialog(
       context,
       title: 'Disconnetti Google Drive',
       message:
@@ -334,7 +335,7 @@ class SystemSettings extends StatelessWidget {
   }
 
   void _confirmLogout(BuildContext context) async {
-    final bool? confirmed = await DialogService.showConfirmationDialog(
+    final bool? confirmed = await AppDialogs.showConfirmationDialog(
       context,
       title: 'Conferma Logout',
       message: 'Sei sicuro di voler uscire dal tuo account?',
@@ -348,7 +349,7 @@ class SystemSettings extends StatelessWidget {
   }
 
   void _confirmAccountDeletion(BuildContext context) async {
-    final bool? firstConfirmation = await DialogService.showConfirmationDialog(
+    final bool? firstConfirmation = await AppDialogs.showConfirmationDialog(
       context,
       title: 'Eliminazione Account',
       message: 'Questa azione eliminerà definitivamente il tuo account e tutti i dati associati.',
@@ -358,7 +359,7 @@ class SystemSettings extends StatelessWidget {
 
     if (firstConfirmation != true || !context.mounted) return;
 
-    final bool? secondConfirmation = await DialogService.showConfirmationDialog(
+    final bool? secondConfirmation = await AppDialogs.showConfirmationDialog(
       context,
       title: 'Conferma Definitiva',
       message: 'Sei assolutamente sicuro? Questa azione è irreversibile.',
@@ -372,7 +373,7 @@ class SystemSettings extends StatelessWidget {
   }
 
   void _confirmResetSettings(BuildContext context) async {
-    final bool? confirmed = await DialogService.showConfirmationDialog(
+    final bool? confirmed = await AppDialogs.showConfirmationDialog(
       context,
       title: 'Conferma Ripristino',
       message: 'Questa azione ripristinerà tutte le impostazioni ai valori predefiniti. Vuoi procedere?',
@@ -380,21 +381,21 @@ class SystemSettings extends StatelessWidget {
       cancelText: 'Annulla',
     );
     if (confirmed == true && context.mounted) {
-      DialogService.showInfoDialog(
+      AppDialogs.showInfoDialog(
         context,
         title: 'Successo',
         message: 'Impostazioni ripristinate con successo.',
-        icon: Icons.check_circle_outline,
+        type: DialogType.success
       );
     }
   }
 
   void _showAppInfoDialog(BuildContext context) {
-    DialogService.showInfoDialog(
+    AppDialogs.showInfoDialog(
       context,
       title: 'Informazioni App',
       message: 'Unichart\nVersione 1.0.0\n© 2025 Unichart Inc.',
-      icon: Icons.info_outline_rounded,
+      type: DialogType.info
     );
   }
 
@@ -413,12 +414,12 @@ class SystemSettings extends StatelessWidget {
           final settingsProvider = context.read<SettingsProvider>();
           if (settingsProvider.exportPreference == ExportPreference.drive) {
             settingsProvider.updateExportPreference(ExportPreference.alwaysAsk);
-            DialogService.showInfoDialog(
+            AppDialogs.showInfoDialog(
               context,
               title: 'Google Drive Disconnesso',
               message:
               'Il tuo account Google Drive è stato disconnesso. La preferenza di esportazione è stata cambiata a "Chiedi sempre".',
-              icon: Icons.info_outline_rounded,
+              type:  DialogType.info
             );
           }
         }

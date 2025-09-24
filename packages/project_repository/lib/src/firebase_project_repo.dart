@@ -91,21 +91,28 @@ class FirebaseProjectRepo implements ProjectRepo {
     return null;
   }
 
+  /// **METODO CHIAVE AGGIORNATO**
+  /// Controlla se ci sono differenze strutturali (aggiunta/rimozione di nodi)
+  /// tra due versioni JSON di un flowchart, usando il nuovo modello dati.
   bool _haveStructuralDifferences(String rtdbContent, String firestoreContent) {
     try {
       final rtdbData = jsonDecode(rtdbContent);
       final firestoreData = jsonDecode(firestoreContent);
 
-      final List<dynamic> rtdbShapes = rtdbData['shapes'] ?? [];
-      final List<dynamic> firestoreShapes = firestoreData['shapes'] ?? [];
+      // Legge la lista di 'nodes' invece di 'shapes'.
+      final List<dynamic> rtdbNodes = rtdbData['nodes'] ?? [];
+      final List<dynamic> firestoreNodes = firestoreData['nodes'] ?? [];
 
-      if (rtdbShapes.length != firestoreShapes.length) return true;
+      if (rtdbNodes.length != firestoreNodes.length) return true;
 
-      final rtdbFingerprints = rtdbShapes.map((s) => '${s['id']}:${s['type']}').toSet();
-      final firestoreFingerprints = firestoreShapes.map((s) => '${s['id']}:${s['type']}').toSet();
+      // Crea un "fingerprint" per ogni nodo basato su ID e 'kind'.
+      final rtdbFingerprints = rtdbNodes.map((n) => '${n['id']}:${n['kind']}').toSet();
+      final firestoreFingerprints = firestoreNodes.map((n) => '${n['id']}:${n['kind']}').toSet();
 
+      // Se i set di fingerprint non sono identici, la struttura è cambiata.
       return !rtdbFingerprints.containsAll(firestoreFingerprints);
     } catch (e) {
+      // Se il parsing fallisce, considerala una differenza strutturale per sicurezza.
       return true;
     }
   }
@@ -153,7 +160,6 @@ class FirebaseProjectRepo implements ProjectRepo {
     return _session.removeFileFromSession(projectId, fileId);
   }
 
-  // Progetti (da Firestore)
   @override
   Stream<List<MyProject>> projects() => _storage.projects();
 
@@ -162,7 +168,6 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<void> deleteProject({required String projectId}) async {
-    // Operazione coordinata: prima rimuove la sessione, poi il progetto.
     await _session.removeProjectSession(projectId);
     await _storage.deleteProject(projectId: projectId);
   }
@@ -171,7 +176,6 @@ class FirebaseProjectRepo implements ProjectRepo {
   Future<void> renameProject({required String projectId, required String newName}) =>
       _storage.renameProject(projectId: projectId, newName: newName);
 
-  // File (CRUD Intelligente)
   @override
   Future<List<MyFile>> getProjectFiles({required String projectId}) =>
       _storage.getProjectFiles(projectId: projectId);
@@ -199,7 +203,6 @@ class FirebaseProjectRepo implements ProjectRepo {
     await _session.renameFileInSession(projectId, fileId, newName);
   }
 
-  // Sessione Live (da RTDB)
   @override
   Stream<String?> liveFileContent(String projectId, String fileId) =>
       _session.liveFileContent(projectId, fileId);
@@ -207,4 +210,20 @@ class FirebaseProjectRepo implements ProjectRepo {
   @override
   Future<void> updateLiveFileContent(String projectId, String fileId, String content) =>
       _session.updateLiveFileContent(projectId, fileId, content);
+
+  @override
+  Future<void> updateProjectVisibility({required String projectId, required bool isPublic}) {
+    return _storage.updateProjectVisibility(projectId: projectId, isPublic: isPublic);
+  }
+  @override
+  Future<MyProject?> getPublicProjectById(String projectId) async {
+    return _storage.getPublicProjectById(projectId);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getPublicProjectWithFiles(String projectId) {
+    // Questa chiamata è volutamente diretta solo allo storage (Firestore)
+    // e non avvia alcuna sessione live (RTDB).
+    return _storage.getPublicProjectWithFiles(projectId);
+  }
 }

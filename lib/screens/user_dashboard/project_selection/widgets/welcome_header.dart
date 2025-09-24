@@ -8,7 +8,7 @@ import '../../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../../config/constants/themes.dart';
 import '../../../../config/router/app_router.dart';
-import '../../../../config/services/dialog_service.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 
 class WelcomeHeader extends StatefulWidget {
   const WelcomeHeader({super.key});

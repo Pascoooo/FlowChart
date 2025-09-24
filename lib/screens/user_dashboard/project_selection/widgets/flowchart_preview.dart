@@ -1,15 +1,11 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 
-// Rimuovo l'uso del Bloc per la preview: usiamo direttamente gli stessi painter della workarea
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../user_dashboard/project_workspace/views/painters.dart';
 
-/// Preview statica di un flowchart (solo visualizzazione) che:
-/// - Effettua il parse del JSON con FlowchartLoaded.fromJson
-/// - Scala tutto il contenuto (forme + connessioni) per entrare nell'area disponibile
-/// - Usa gli stessi painter di connessioni e diamond della workarea così da avere label true/false
-/// - Non permette interazioni / selezioni / drag
+/// Preview statica di un flowchart (solo visualizzazione).
 class FlowchartPreview extends StatelessWidget {
   final String flowchartContent;
   final bool showGrid;
@@ -24,13 +20,14 @@ class FlowchartPreview extends StatelessWidget {
     this.showUnsavedBadge = false,
   });
 
+  // Il metodo di parsing ora usa il factory corretto dentro FlowchartLoaded
   FlowchartLoaded _parse(String raw) {
-    if (raw.trim().isEmpty) return const FlowchartLoaded();
+    if (raw.trim().isEmpty) return FlowchartLoaded.empty();
     try {
       return FlowchartLoaded.fromJson(raw);
     } catch (e) {
       debugPrint('FlowchartPreview parse error: $e');
-      return const FlowchartLoaded();
+      return FlowchartLoaded.empty();
     }
   }
 
@@ -48,7 +45,7 @@ class FlowchartPreview extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface, // rimosso gradient (niente sfumato)
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: borderColor,
@@ -56,32 +53,28 @@ class FlowchartPreview extends StatelessWidget {
           ),
           boxShadow: emphasizeBorders
               ? [
-                  BoxShadow(
-                    color: primary.withAlpha((0.18 * 255).round()),
-                    blurRadius: 14,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 6),
-                  ),
-                  BoxShadow(
-                    color: primary.withAlpha((0.10 * 255).round()),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ]
+            BoxShadow(
+              color: primary.withAlpha((0.18 * 255).round()),
+              blurRadius: 14,
+              spreadRadius: 1,
+              offset: const Offset(0, 6),
+            ),
+          ]
               : [
-                  BoxShadow(
-                    color: Colors.black.withAlpha((0.05 * 255).round()),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  )
-                ],
+            BoxShadow(
+              color: Colors.black.withAlpha((0.05 * 255).round()),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            )
+          ],
         ),
         clipBehavior: Clip.hardEdge,
         child: Stack(
           children: [
             _StaticFlowchartViewport(
-              shapes: state.shapes,
-              connections: state.connections,
+              // Passa i nuovi modelli
+              nodes: state.flowchart.nodes,
+              edges: state.flowchart.edges,
               showGrid: showGrid,
               emphasized: emphasizeBorders,
             ),
@@ -153,21 +146,22 @@ class _UnsavedBadge extends StatelessWidget {
 }
 
 class _StaticFlowchartViewport extends StatelessWidget {
-  final List<FlowchartShape> shapes;
-  final List<FlowchartConnection> connections;
+  // Accetta i nuovi modelli
+  final List<FlowNode> nodes;
+  final List<FlowchartEdge> edges;
   final bool showGrid;
   final bool emphasized;
 
   const _StaticFlowchartViewport({
-    required this.shapes,
-    required this.connections,
+    required this.nodes,
+    required this.edges,
     required this.showGrid,
     required this.emphasized,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (shapes.isEmpty) {
+    if (nodes.isEmpty) {
       return Stack(
         children: [
           if (showGrid) Positioned.fill(child: CustomPaint(painter: _previewGrid(context, emphasized))),
@@ -185,13 +179,10 @@ class _StaticFlowchartViewport extends StatelessWidget {
       );
     }
 
-    // Calcola bounding box del contenuto
     Rect? bounds;
-    for (final s in shapes) {
-      final w = (s.width <= 0) ? 100.0 : s.width;
-      final h = (s.height <= 0) ? 60.0 : s.height;
-      final r = Rect.fromLTWH(s.x, s.y, w, h);
-      bounds = bounds == null ? r : bounds.expandToInclude(r);
+    for (final node in nodes) {
+      final rect = Rect.fromLTWH(node.x, node.y, node.width, node.height);
+      bounds = bounds == null ? rect : bounds.expandToInclude(rect);
     }
     bounds ??= const Rect.fromLTWH(0, 0, 100, 60);
 
@@ -202,7 +193,7 @@ class _StaticFlowchartViewport extends StatelessWidget {
         final availH = max(10.0, constraints.maxHeight - padding * 2);
         final scaleX = availW / bounds!.width;
         final scaleY = availH / bounds.height;
-        final scale = min(min(scaleX, scaleY), 1.0); // non ingrandiamo oltre 1:1
+        final scale = min(min(scaleX, scaleY), 1.0);
 
         final scaledContentW = bounds.width * scale;
         final scaledContentH = bounds.height * scale;
@@ -216,7 +207,6 @@ class _StaticFlowchartViewport extends StatelessWidget {
               Positioned.fill(
                 child: CustomPaint(painter: _previewGrid(context, emphasized)),
               ),
-            // Applichiamo la stessa trasformazione a connessioni e forme
             Transform.translate(
               offset: Offset(offsetX, offsetY),
               child: Transform.scale(
@@ -229,17 +219,17 @@ class _StaticFlowchartViewport extends StatelessWidget {
                       Positioned.fill(
                         child: CustomPaint(
                           painter: ConnectionPainter(
-                            shapes: shapes,
-                            connections: connections,
+                            nodes: nodes, // Passa i nuovi modelli
+                            edges: edges,
                             theme: Theme.of(context),
                           ),
                         ),
                       ),
-                      for (final shape in shapes)
+                      for (final node in nodes)
                         Positioned(
-                          left: shape.x,
-                          top: shape.y,
-                          child: _StaticShape(shape: shape),
+                          left: node.x,
+                          top: node.y,
+                          child: _StaticNode(node: node), // Widget rinominato
                         ),
                     ],
                   ),
@@ -268,29 +258,23 @@ class _StaticFlowchartViewport extends StatelessWidget {
   }
 }
 
-/// Versione statica del renderer forme che usa i tipi normalizzati
-/// (condizione, start, fine, processo, input ...)
-class _StaticShape extends StatelessWidget {
-  final FlowchartShape shape;
-  const _StaticShape({required this.shape});
+class _StaticNode extends StatelessWidget {
+  final FlowNode node; // Accetta il nuovo modello
+  const _StaticNode({required this.node});
 
   @override
   Widget build(BuildContext context) {
-    final width = shape.width;
-    final height = shape.height;
-    final text = shape.text;
-
     final textStyle = const TextStyle(
       fontSize: 12,
       color: Colors.black87,
       fontWeight: FontWeight.w500,
     );
-
     final borderColor = Colors.blueGrey.shade400;
     const borderWidth = 1.5;
 
-    switch (shape.type) {
-      case 'condizione':
+    // Lo switch ora usa il 'kind' del nodo
+    switch (node.kind) {
+      case FlowNodeKind.decision:
         return CustomPaint(
           painter: DiamondPainter(
             color: Colors.white,
@@ -298,13 +282,13 @@ class _StaticShape extends StatelessWidget {
             strokeWidth: borderWidth,
           ),
           child: SizedBox(
-            width: width,
-            height: height,
+            width: node.width,
+            height: node.height,
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Text(
-                  text,
+                  node.text,
                   textAlign: TextAlign.center,
                   style: textStyle,
                   maxLines: 2,
@@ -314,7 +298,7 @@ class _StaticShape extends StatelessWidget {
             ),
           ),
         );
-      case 'input':
+      case FlowNodeKind.input:
         return CustomPaint(
           painter: ParallelogramPainter(
             fillColor: Colors.white,
@@ -324,13 +308,13 @@ class _StaticShape extends StatelessWidget {
             drawShadow: false,
           ),
           child: SizedBox(
-            width: width,
-            height: height,
+            width: node.width,
+            height: node.height,
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 child: Text(
-                  text,
+                  node.text,
                   textAlign: TextAlign.center,
                   style: textStyle,
                   maxLines: 3,
@@ -340,7 +324,7 @@ class _StaticShape extends StatelessWidget {
             ),
           ),
         );
-      case 'output':
+      case FlowNodeKind.output:
         return CustomPaint(
           painter: ParallelogramPainter(
             fillColor: Colors.white,
@@ -350,13 +334,13 @@ class _StaticShape extends StatelessWidget {
             drawShadow: false,
           ),
           child: SizedBox(
-            width: width,
-            height: height,
+            width: node.width,
+            height: node.height,
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 child: Text(
-                  text,
+                  node.text,
                   textAlign: TextAlign.center,
                   style: textStyle,
                   maxLines: 3,
@@ -366,14 +350,14 @@ class _StaticShape extends StatelessWidget {
             ),
           ),
         );
-      default:
+      default: // Per Start, End, Process
         return Container(
-          width: width,
-          height: height,
+          width: node.width,
+          height: node.height,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(
-              (shape.type == 'start' || shape.type == 'fine') ? 999 : 8,
+              (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 8,
             ),
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: [
@@ -387,7 +371,7 @@ class _StaticShape extends StatelessWidget {
           alignment: Alignment.center,
           padding: const EdgeInsets.all(8),
           child: Text(
-            text,
+            node.text,
             textAlign: TextAlign.center,
             style: textStyle,
             maxLines: 3,

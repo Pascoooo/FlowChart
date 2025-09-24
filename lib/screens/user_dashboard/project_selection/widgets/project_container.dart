@@ -1,8 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_selection/widgets/project_carousel.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
+import '../../../../blocs/project_bloc/project_bloc.dart';
+import '../../../../blocs/project_bloc/project_event.dart';
 import '../../../../config/constants/themes.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 
 class ProjectContainer extends StatefulWidget {
   final List<MyProject> projects;
@@ -71,23 +76,63 @@ class ProjectContainerState extends State<ProjectContainer>
             width: AppConstants.projectContainerWidth,
             height: AppConstants.projectContainerHeight,
             decoration: _buildContainerDecoration(theme),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
+            child: Stack( // Use a Stack to overlay the new button
               children: [
-                const SizedBox(height: 30),
-                _buildEnhancedHeader(theme),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 250,
-                  child: _buildContent(),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 30),
+                    _buildEnhancedHeader(theme),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      height: 250,
+                      child: _buildContent(),
+                    ),
+                    const Spacer(flex: 2),
+                  ],
                 ),
-                const Spacer(flex: 2),
+                // Position the new button in the top right corner
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: _buildViewSharedButton(context, theme),
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  /// **NUOVO PULSANTE "APRI CON ID"**
+  /// **NUOVO PULSANTE "APRI CON ID"**
+  Widget _buildViewSharedButton(BuildContext context, ThemeData theme) {
+    return Tooltip(
+      message: "Apri progetto condiviso",
+      child: ElevatedButton.icon(
+        icon: const FaIcon(FontAwesomeIcons.link, size: 16),
+        label: const Text("Apri con ID"),
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: () async {
+          final projectId = await AppDialogs.showInputDialog(
+            context,
+            title: "Apri Progetto Condiviso",
+            message: "Incolla l'ID del progetto che vuoi visualizzare.",
+            hintText: "ID Progetto...",
+            confirmText: "Apri",
+          );
+          if (projectId != null && projectId.trim().isNotEmpty) {
+            context.read<ProjectBloc>().add(LoadStaticWorkspace(projectId: projectId.trim()));
+          }
+        },
+      ),
     );
   }
 
@@ -155,7 +200,6 @@ class ProjectContainerState extends State<ProjectContainer>
                 const SizedBox(width: 16),
                 Text(
                   "I tuoi progetti",
-                  // MODIFICA: Cambiato lo stile del testo a headlineLarge per un font più grande
                   style: theme.textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: theme.colorScheme.onSurface,

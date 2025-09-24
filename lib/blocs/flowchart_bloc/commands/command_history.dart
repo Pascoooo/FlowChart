@@ -1,5 +1,4 @@
-// lib/blocs/flowchart_bloc/history/command_history.dart
-import '../commands/flowchart_command.dart';
+import 'flowchart_command.dart';
 
 /// Gestore della cronologia dei comandi per undo/redo
 class CommandHistory {
@@ -13,6 +12,7 @@ class CommandHistory {
     _undoStack.add(command);
     _redoStack.clear();
 
+    // Limita la dimensione della cronologia per non usare troppa memoria
     if (_undoStack.length > maxHistorySize) {
       _undoStack.removeAt(0);
     }
@@ -20,8 +20,6 @@ class CommandHistory {
 
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
-  FlowchartCommand? get nextUndoCommand => _undoStack.isNotEmpty ? _undoStack.last : null;
-  FlowchartCommand? get nextRedoCommand => _redoStack.isNotEmpty ? _redoStack.last : null;
 
   FlowchartCommand? undo() {
     if (!canUndo) return null;

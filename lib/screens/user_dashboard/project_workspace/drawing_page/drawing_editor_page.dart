@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:flowchart_thesis/config/services/dialog_service.dart';
+import 'package:flowchart_thesis/config/services/dialog_service/app_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:universal_html/html.dart' as html;
 
@@ -155,7 +155,7 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
   }
 
   void _clearAllStrokes() {
-    final confirmed = DialogService.showConfirmationDialog(
+    final confirmed = AppDialogs.showConfirmationDialog(
       context,
       title: "Conferma",
       message: "Sei sicuro di voler cancellare tutto il disegno?",

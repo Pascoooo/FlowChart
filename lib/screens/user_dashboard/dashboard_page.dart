@@ -1,3 +1,4 @@
+import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/static_workspace.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../blocs/project_bloc/project_bloc.dart';
@@ -5,7 +6,8 @@ import '../../blocs/project_bloc/project_event.dart';
 import '../../blocs/project_bloc/project_state.dart';
 import '../../config/error/error_page.dart';
 import '../../config/services/banner_service.dart';
-import '../../config/services/dialog_service.dart';
+import '../../config/services/dialog_service/app_dialogs.dart';
+import '../../config/services/dialog_service/recovery_dialogs.dart';
 import 'animations/background_animation.dart';
 import 'animations/project_loading_indicator.dart';
 import 'project_selection/views/project_selector.dart';
@@ -31,16 +33,11 @@ class _DashboardPageState extends State<DashboardPage> {
   void _showRecoveryDialog(BuildContext context, UnsavedChangesFound state) {
     WidgetsBinding.instance.addPostFrameCallback((_) async { // Aggiunto async
       // Attendiamo che l'utente faccia una scelta nel dialogo.
-      final action = await DialogService.showInitialRecoveryDialog(
+      final action = await AppDialogs.showInitialRecoveryDialog(
         context: context,
         projectName: state.projectName,
       );
-
-      // Eseguiamo la logica DOPO che il dialogo è stato chiuso.
-      // Questo previene i crash di navigazione.
-      // Assicuriamoci che il widget sia ancora montato prima di accedere al context.
       if (!mounted) return;
-
       switch (action) {
         case RecoveryAction.recoverAll:
           context.read<ProjectBloc>().add(RecoverSession(projectId: state.projectId));
@@ -65,7 +62,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _showManualRecoveryDialog(
       BuildContext context, UnsavedChangesFound state) async {
     // Attendiamo che il dialogo manuale venga completato.
-    final didComplete = await DialogService.showManualRecoveryDialog(
+    final didComplete = await AppDialogs.showManualRecoveryDialog(
       context: context,
       state: state,
     );
@@ -101,6 +98,16 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (state is ProjectError) {
                   return ErrorPage(error: state.message);
                 }
+                // --- NUOVA CONDIZIONE AGGIUNTA QUI ---
+                if (state is StaticWorkspaceLoaded) {
+                  // Se lo stato è quello per la vista statica, mostriamo il nuovo widget
+                  return StaticProjectWorkspace(
+                    key: ValueKey('static-workspace-${state.project.projectId}'),
+                    project: state.project,
+                    files: state.files,
+                  );
+                }
+
                 if (state is ProjectsLoaded) {
                   return _buildProjectsLoadedView(state);
                 }
@@ -118,19 +125,21 @@ class _DashboardPageState extends State<DashboardPage> {
       duration: _kTransitionDuration,
       child: state.selectedProject != null
           ? ProjectWorkspace(
-        key: ValueKey('workspace-${state.selectedProject!.projectId}'),
-        selectedProject: state.selectedProject!,
-      )
+              key: ValueKey('workspace-${state.selectedProject!.projectId}'),
+              selectedProject: state.selectedProject!,
+              isReadOnly: state.isReadOnlyView,
+              onLeave: () => context.read<ProjectBloc>().add(const LeaveProject()),
+            )
           : ProjectSelector(
-        key: const ValueKey('project-selector'),
-        projects: state.projects,
-        onProjectSelected: (project) => context
-            .read<ProjectBloc>()
-            .add(StartSessionAndSelectProject(project: project)),
-        onCreateProject: (name) => context
-            .read<ProjectBloc>()
-            .add(CreateProject(projectName: name)),
-      ),
+              key: const ValueKey('project-selector'),
+              projects: state.projects,
+              onProjectSelected: (project) => context
+                  .read<ProjectBloc>()
+                  .add(StartSessionAndSelectProject(project: project)),
+              onCreateProject: (name) => context
+                  .read<ProjectBloc>()
+                  .add(CreateProject(projectName: name)),
+            ),
     );
   }
 }

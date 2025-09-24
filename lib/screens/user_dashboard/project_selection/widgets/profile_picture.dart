@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../../config/router/app_router.dart';
-import '../../../../config/services/dialog_service.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 
 class ProfileMenu extends StatelessWidget {
   const ProfileMenu({super.key});
@@ -21,7 +21,7 @@ class ProfileMenu extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (value) async {
         if (value == 'logout') {
-          final confirm = await DialogService.showConfirmationDialog(context,
+          final confirm = await AppDialogs.showConfirmationDialog(context,
               title: "Logout",
               message: "Sei sicuro di voler uscire?",
               confirmText: "Esci",

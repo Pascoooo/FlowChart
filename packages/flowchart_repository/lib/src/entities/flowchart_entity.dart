@@ -1,40 +1,33 @@
-import 'connection_entity.dart';
-import 'shape_entity.dart';
+import 'flow_node_entity.dart';
 
+/// Rappresenta l'intero documento del flowchart in Firestore.
 class FlowchartEntity {
   final String flowchartId;
   final String name;
-  final List<ShapeEntity> shapes;
-  final List<ConnectionEntity> connections;
+  final int schemaVersion;
+  final List<FlowNodeEntity> nodes;
+  final List<EdgeEntity> edges;
 
   FlowchartEntity({
-    required this.flowchartId,
-    required this.name,
-    required this.shapes,
-    required this.connections,
+    required this.flowchartId, required this.name, required this.schemaVersion,
+    required this.nodes, required this.edges,
   });
 
-  /// Converte l'entità in un documento Map.
   Map<String, dynamic> toDocument() {
     return {
-      'flowchartId': flowchartId,
-      'name': name,
-      'shapes': shapes.map((s) => s.toDocument()).toList(),
-      'connections': connections.map((c) => c.toDocument()).toList(),
+      'flowchartId': flowchartId, 'name': name, 'schemaVersion': schemaVersion,
+      'nodes': nodes.map((n) => n.toDocument()).toList(),
+      'edges': edges.map((e) => e.toDocument()).toList(),
     };
   }
 
-  /// Crea un'entità da un documento Map.
   static FlowchartEntity fromDocument(Map<String, dynamic> doc) {
     return FlowchartEntity(
-      flowchartId: doc['flowchartId'] as String,
-      name: doc['name'] as String,
-      shapes: (doc['shapes'] as List<dynamic>)
-          .map((s) => ShapeEntity.fromDocument(s as Map<String, dynamic>))
-          .toList(),
-      connections: (doc['connections'] as List<dynamic>)
-          .map((c) => ConnectionEntity.fromDocument(c as Map<String, dynamic>))
-          .toList(),
+      flowchartId: doc['flowchartId'],
+      name: doc['name'],
+      schemaVersion: doc['schemaVersion'] ?? 1,
+      nodes: (doc['nodes'] as List).map((n) => FlowNodeEntity.fromDocument(n)).toList(),
+      edges: (doc['edges'] as List).map((e) => EdgeEntity.fromDocument(e)).toList(),
     );
   }
 }

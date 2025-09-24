@@ -10,14 +10,16 @@ import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
 import '../../../../config/router/app_router.dart';
-import '../../../../config/services/dialog_service.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 
 class ProjectSidebar extends StatefulWidget {
   final MyProject selectedProject;
+  final bool isReadOnly;
 
   const ProjectSidebar({
     super.key,
     required this.selectedProject,
+    this.isReadOnly = false,
   });
 
   @override
@@ -40,13 +42,6 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.colorScheme.shadow.withOpacity(0.1),
-                    blurRadius: 24,
-                    offset: const Offset(4, 0),
-                  ),
-                ],
               ),
               child: Column(
                 children: [
@@ -55,17 +50,17 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
                   Expanded(
                     child: _FileSystemView(
                       projectId: widget.selectedProject.projectId,
+                      isReadOnly: widget.isReadOnly, // <-- MODIFICA: Passa il flag
                     ),
                   ),
-                  // MODIFICA: Il pulsante "Nuovo File" è ora qui,
-                  // sempre in fondo alla sezione dei file.
-                  CreateFileButton(projectId: widget.selectedProject.projectId),
+                  // <-- MODIFICA: Mostra il pulsante solo se non è in sola lettura -->
+                  if (!widget.isReadOnly)
+                    CreateFileButton(projectId: widget.selectedProject.projectId),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          // Le azioni in basso rimangono separate
           const BottomActions(),
         ],
       ),
@@ -224,7 +219,8 @@ class _SidebarHeaderState extends State<_SidebarHeader>
 
 class _FileSystemView extends StatelessWidget {
   final String projectId;
-  const _FileSystemView({required this.projectId});
+  final bool isReadOnly;
+  const _FileSystemView({required this.projectId, this.isReadOnly = false});
 
   @override
   Widget build(BuildContext context) {
@@ -259,6 +255,7 @@ class _FileSystemView extends StatelessWidget {
                   file: file,
                   isSelected: file.fileId == state.activeFileId,
                   projectId: projectId,
+                  isReadOnly: isReadOnly, // <-- MODIFICA: Passa il flag
                 );
               },
             ),
@@ -275,15 +272,17 @@ class FileListItem extends StatelessWidget {
   final MyFile file;
   final bool isSelected;
   final String projectId;
+  final bool isReadOnly;
 
   const FileListItem({super.key,
     required this.file,
     required this.isSelected,
     required this.projectId,
+    this.isReadOnly = false, // <-- MODIFICA: Aggiungi il flag
   });
 
   void _showRenameFileDialog(BuildContext context, MyFile file) async {
-    final newName = await DialogService.showInputDialog(context,
+    final newName = await AppDialogs.showInputDialog(context,
         initialValue: file.name,
         title: "Rinomina file",
         message: "Inserisci un nuovo nome per il file",
@@ -322,7 +321,7 @@ class FileListItem extends StatelessWidget {
   }
 
   void _showDeleteConfirmationDialog(BuildContext context, MyFile file) async {
-    final bool? confirmed = await DialogService.showConfirmationDialog(
+    final bool? confirmed = await AppDialogs.showConfirmationDialog(
       context,
       title: "Elimina File",
       message:
@@ -390,9 +389,7 @@ class FileListItem extends StatelessWidget {
                   ),
               ],
             ),
-            trailing: isMain
-                ? null
-                : PopupMenuButton<String>(
+            trailing: isMain || isReadOnly ? null : PopupMenuButton<String>(
               icon: Icon(
                 Icons.more_vert,
                 color: theme.colorScheme.onSurface.withOpacity(0.6),
@@ -448,7 +445,7 @@ class CreateFileButton extends StatelessWidget {
   const CreateFileButton({super.key, required this.projectId});
 
   void _showCreateFileDialog(BuildContext context, String projectId) async {
-    final newName = await DialogService.showInputDialog(context,
+    final newName = await AppDialogs.showInputDialog(context,
         title: "Crea file",
         message: "Inserisci un nuovo nome per il file",
         hintText: "es. File",

@@ -1,27 +1,31 @@
 import 'package:file_repository/file_repository.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
-import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
-import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
-import 'package:flowchart_thesis/blocs/file_bloc/file_system_bloc.dart';
-import 'package:flowchart_thesis/blocs/file_bloc/file_system_state.dart';
-import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
-import 'package:flowchart_thesis/config/services/dialog_service.dart';
-
+import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
+import '../../../../blocs/file_bloc/file_system_bloc.dart';
+import '../../../../blocs/file_bloc/file_system_state.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/banner_service.dart';
 
 class TopBar extends StatefulWidget {
   final MyProject selectedProject;
   final VoidCallback onEdit;
   final VoidCallback onExport;
+  final bool isReadOnly; // nuovo flag
+  final VoidCallback? onLeave; // callback uscita
 
   const TopBar({
     super.key,
     required this.selectedProject,
     required this.onEdit,
     required this.onExport,
+    this.isReadOnly = false,
+    this.onLeave,
   });
 
   @override
@@ -79,11 +83,15 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
                 onEdit: widget.onEdit,
                 onExport: widget.onExport,
                 animation: _opacityAnimation,
+                isReadOnly: widget.isReadOnly,
+                onLeave: widget.onLeave,
               );
             } else {
-              child = _SimpleTopBar(projectName: widget.selectedProject.name);
+              child = _SimpleTopBar(
+                projectName: widget.selectedProject.name,
+                onLeave: widget.onLeave,
+              );
             }
-
             return SlideTransition(
               position: _slideAnimation,
               child: FadeTransition(
@@ -102,7 +110,8 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
 
 class _SimpleTopBar extends StatelessWidget {
   final String projectName;
-  const _SimpleTopBar({required this.projectName});
+  final VoidCallback? onLeave;
+  const _SimpleTopBar({required this.projectName, this.onLeave});
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +149,7 @@ class _SimpleTopBar extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  "Loading...",
+                  'Caricamento...',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurface.withOpacity(0.6),
                   ),
@@ -166,6 +175,8 @@ class _AdvancedTopBar extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onExport;
   final Animation<double> animation;
+  final bool isReadOnly; // <-- già dichiarato sopra ma ora lo manteniamo
+  final VoidCallback? onLeave;
 
   const _AdvancedTopBar({
     required this.state,
@@ -173,15 +184,17 @@ class _AdvancedTopBar extends StatelessWidget {
     required this.onEdit,
     required this.onExport,
     required this.animation,
+    this.isReadOnly = false,
+    this.onLeave,
   });
 
 
   Future<void> _resetFlowchart(BuildContext context) async {
-    final bool? confirmed = await DialogService.showConfirmationDialog(
+    final bool? confirmed = await AppDialogs.showConfirmationDialog(
       context,
       title: 'Conferma reset',
       message:
-      'Sei sicuro di voler resettare il flowchart? Tutte le forme tranne "Start" verranno eliminate.',
+      'Sei sicuro di voler resettare il flowchart? Tutti i nodi tranne "Inizio" verranno eliminati.',
       confirmText: 'Resetta',
       cancelText: 'Annulla',
     );
@@ -190,42 +203,16 @@ class _AdvancedTopBar extends StatelessWidget {
     }
   }
 
-  Future<void> _deleteSelected(BuildContext context, String shapeId) async {
-    if (shapeId.startsWith('start_')) {
-      BannerService.showInfo(
-          context, 'La forma "Start" non può essere eliminata.');
-      return;
-    }
-
-    final flowState = context.read<FlowchartBloc>().state;
-    if (flowState is FlowchartLoaded) {
-      final shape = flowState.shapes.firstWhere(
-          (s) => s.id == shapeId,
-          orElse: () => const FlowchartShape(
-            id: 'missing', type: 'process', x: 0, y: 0, width: 0, height: 0, text: '',
-          ));
-      if (shape.id == 'missing') {
-        BannerService.showError(context, 'Forma non trovata.');
-        return;
-      }
-      if (shape.outgoingConnectionIds.isNotEmpty) {
-        DialogService.showInfoDialog(context,
-            title: 'Eliminazione non consentita',
-            message: 'La forma selezionata ha connessioni in uscita. '
-                'Elimina prima tutte le connessioni associate.');
-        return;
-      }
-    }
-
-    bool? confirmed = await DialogService.showConfirmationDialog(
+  Future<void> _deleteSelected(BuildContext context, String nodeId) async {
+    bool? confirmed = await AppDialogs.showConfirmationDialog(
       context,
       title: 'Conferma eliminazione',
-      message: 'Sei sicuro di voler eliminare la forma selezionata?',
+      message: 'Sei sicuro di voler eliminare il nodo selezionato?',
       confirmText: 'Elimina',
       cancelText: 'Annulla',
     );
     if (confirmed == true && context.mounted) {
-      context.read<FlowchartBloc>().add(RemoveShape(shapeId));
+      context.read<FlowchartBloc>().add(RemoveNode(nodeId));
     }
   }
 
@@ -236,7 +223,7 @@ class _AdvancedTopBar extends StatelessWidget {
       builder: (context, constraints) {
         const double minWidthForCenterActions = 750.0;
         final bool showCenterActions =
-              constraints.maxWidth >= minWidthForCenterActions;
+            constraints.maxWidth >= minWidthForCenterActions;
 
         return Container(
           height: 80,
@@ -260,10 +247,18 @@ class _AdvancedTopBar extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // BLOCCO SINISTRA: back + breadcrumb
                   Flexible(
-                    child: _Breadcrumb(
-                      state: state,
-                      selectedProjectName: selectedProjectName,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Expanded(
+                          child: _Breadcrumb(
+                            state: state,
+                            selectedProjectName: selectedProjectName,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Row(
@@ -280,30 +275,23 @@ class _AdvancedTopBar extends StatelessWidget {
                   ),
                 ],
               ),
-              if (showCenterActions)
+              if (showCenterActions && !isReadOnly)
                 BlocBuilder<FlowchartBloc, FlowchartState>(
                   builder: (context, flowchartState) {
-                    final String? selectedShapeId =
-                    flowchartState is FlowchartLoaded
-                        ? flowchartState.selectedShapeId
-                        : null;
-                    final bool isStartShapeSelected =
-                        selectedShapeId?.startsWith('start_') ?? false;
-                    bool isLeaf = false;
-                    if (flowchartState is FlowchartLoaded && selectedShapeId != null) {
-                      final shape = flowchartState.shapes.firstWhere(
-                          (s) => s.id == selectedShapeId,
-                          orElse: () => const FlowchartShape(id: 'missing', type: 'process', x: 0, y: 0, width: 0, height: 0, text: ''));
-                      if (shape.id != 'missing') {
-                        isLeaf = shape.outgoingConnectionIds.isEmpty;
-                      }
+                    if (flowchartState is! FlowchartLoaded) {
+                      return const SizedBox.shrink();
                     }
+
+                    final selectedNode = flowchartState.getNodeById(flowchartState.selectedNodeId ?? '');
+                    final isDeletionEnabled = selectedNode != null &&
+                        selectedNode.kind != FlowNodeKind.start &&
+                        flowchartState.getOutgoingEdges(selectedNode.id).isEmpty;
+
                     return _AnimatedFlowchartActions(
                       animation: animation,
                       onReset: _resetFlowchart,
-                      selectedShapeId: selectedShapeId,
-                      isDeletionEnabled:
-                      selectedShapeId != null && !isStartShapeSelected && isLeaf,
+                      selectedNodeId: flowchartState.selectedNodeId,
+                      isDeletionEnabled: isDeletionEnabled,
                       onDeleteSelected: _deleteSelected,
                     );
                   },
@@ -320,34 +308,33 @@ class _AnimatedFlowchartActions extends StatelessWidget {
   final bool isDeletionEnabled;
   final Animation<double> animation;
   final void Function(BuildContext) onReset;
-  final String? selectedShapeId;
-  final void Function(BuildContext, String shapeId) onDeleteSelected;
+  final String? selectedNodeId;
+  final void Function(BuildContext, String nodeId) onDeleteSelected;
 
   const _AnimatedFlowchartActions({
     required this.isDeletionEnabled,
     required this.animation,
     required this.onReset,
-    this.selectedShapeId,
+    this.selectedNodeId,
     required this.onDeleteSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    // MODIFICA: Il pulsante della griglia è stato rimosso da questa lista
     final buttons = <Widget>[
       _buildAnimatedButton(
         context: context,
-        tooltip: 'Elimina forma selezionata',
+        tooltip: 'Elimina nodo selezionato',
         icon: Icons.delete_rounded,
         onPressed: isDeletionEnabled
-            ? () => onDeleteSelected(context, selectedShapeId!)
+            ? () => onDeleteSelected(context, selectedNodeId!)
             : null,
         interval: const Interval(0.6, 1.0),
       ),
       const UndoRedoControls(),
       _buildAnimatedButton(
         context: context,
-        tooltip: 'Reset flowchart',
+        tooltip: 'Resetta flowchart',
         icon: Icons.delete_sweep_rounded,
         onPressed: () => onReset(context),
         interval: const Interval(0.7, 1.0),
@@ -404,7 +391,7 @@ class _Breadcrumb extends StatelessWidget {
     if (state.files.isNotEmpty) {
       final matchingFile = state.files.firstWhere(
               (file) => file.fileId == state.activeFileId,
-          orElse: () => const MyFile(fileId: '', name: 'Unknown', content: ''));
+          orElse: () => MyFile.empty);
       currentFileName = matchingFile.name;
     }
 
@@ -433,25 +420,25 @@ class _Breadcrumb extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-          separator,
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.secondary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                currentFileName,
-                style: textStyle?.copyWith(
-                    color: theme.colorScheme.secondary,
-                    fontWeight: FontWeight.w600),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+        separator,
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              currentFileName,
+              style: textStyle?.copyWith(
+                  color: theme.colorScheme.secondary,
+                  fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-        ],
+        ),
+      ],
     );
   }
 }
@@ -461,25 +448,26 @@ class UndoRedoControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bloc = context.watch<FlowchartBloc>();
+    // Ora usiamo context.select per rebuildare solo questo widget
+    // quando canUndo o canRedo cambiano. È più efficiente.
+    final canUndo = context.select((FlowchartBloc bloc) => bloc.canUndo);
+    final canRedo = context.select((FlowchartBloc bloc) => bloc.canRedo);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _UndoRedoButton(
           icon: Icons.undo_rounded,
-          tooltip:
-          bloc.canUndo ? 'Annulla: ${bloc.nextUndoDescription}' : 'Annulla',
-          enabled: bloc.canUndo,
-          onPressed: bloc.canUndo ? () => bloc.add(const UndoCommand()) : null,
+          tooltip: 'Annulla',
+          enabled: canUndo,
+          onPressed: canUndo ? () => context.read<FlowchartBloc>().add(const Undo()) : null,
         ),
         const SizedBox(width: 4),
         _UndoRedoButton(
           icon: Icons.redo_rounded,
-          tooltip:
-          bloc.canRedo ? 'Ripeti: ${bloc.nextRedoDescription}' : 'Ripeti',
-          enabled: bloc.canRedo,
-          onPressed: bloc.canRedo ? () => bloc.add(const RedoCommand()) : null,
+          tooltip: 'Ripeti',
+          enabled: canRedo,
+          onPressed: canRedo ? () => context.read<FlowchartBloc>().add(const Redo()) : null,
         ),
       ],
     );
@@ -542,7 +530,7 @@ class KeyboardShortcuts extends StatelessWidget {
             onInvoke: (UndoIntent intent) {
               final bloc = context.read<FlowchartBloc>();
               if (bloc.canUndo) {
-                bloc.add(const UndoCommand());
+                bloc.add(const Undo());
               }
               return null;
             },
@@ -551,7 +539,7 @@ class KeyboardShortcuts extends StatelessWidget {
             onInvoke: (RedoIntent intent) {
               final bloc = context.read<FlowchartBloc>();
               if (bloc.canRedo) {
-                bloc.add(const RedoCommand());
+                bloc.add(const Redo());
               }
               return null;
             },
@@ -573,4 +561,3 @@ class UndoIntent extends Intent {
 class RedoIntent extends Intent {
   const RedoIntent();
 }
-

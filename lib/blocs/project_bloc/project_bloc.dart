@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:ui'; // AGGIUNTO per Offset usato nella factory
 import 'package:bloc/bloc.dart';
-import 'package:flowchart_thesis/config/services/dialog_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_repository/file_repository.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:project_repository/project_repository.dart';
+import 'package:uuid/uuid.dart';
 import 'project_event.dart';
 import 'project_state.dart';
-import '../flowchart_bloc/FlowchartShapeFactory.dart'; // AGGIUNTO per usare la factory
+import '../flowchart_bloc/flowchart_shape_factory.dart'; // AGGIUNTO per usare la factory
 
 class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   final ProjectRepo projectRepository;
@@ -23,9 +27,10 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     on<CreateProject>(_onCreateProject);
     on<DeleteProject>(_onDeleteProject);
     on<RenameProject>(_onRenameProject);
-    // NUOVI HANDLER
     on<RecoverSingleFile>(_onRecoverSingleFile);
     on<DiscardSingleFileChange>(_onDiscardSingleFileChange);
+    on<UpdateProjectVisibility>(_onUpdateProjectVisibility);
+    on<LoadStaticWorkspace>(_onLoadStaticWorkspace);
   }
 
   Future<void> _onCheckForUnsavedSessions(CheckForUnsavedSessions event, Emitter<ProjectState> emit) async {
@@ -116,16 +121,37 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   }
 
   Future<void> _onLeaveProject(LeaveProject event, Emitter<ProjectState> emit) async {
+    // Nuova gestione: se siamo in vista statica condivisa
+    if (state is StaticWorkspaceLoaded) {
+      emit(const ProjectLoading(message: 'Uscita...'));
+      add(const LoadProjects());
+      return;
+    }
+
     if (state is! ProjectsLoaded) return;
     final currentState = state as ProjectsLoaded;
     final projectId = currentState.selectedProject?.projectId;
 
     if (projectId == null) return;
 
+    // Se è una vista sola lettura (progetto condiviso) non eseguo endWorkspaceSession
+    if (currentState.isReadOnlyView) {
+      final updated = currentState.copyWith(clearSelectedProject: true);
+      emit(updated);
+      if (updated.projects.isEmpty) {
+        add(const LoadProjects());
+      }
+      return;
+    }
+
     emit(const ProjectLoading(message: 'Salvataggio in corso...'));
     try {
       await projectRepository.endWorkspaceSession(projectId);
-      emit(currentState.copyWith(clearSelectedProject: true));
+      final cleared = currentState.copyWith(clearSelectedProject: true);
+      emit(cleared);
+      if (cleared.projects.isEmpty) {
+        add(const LoadProjects());
+      }
     } catch (e) {
       emit(currentState.copyWith(error: 'Errore critico durante il salvataggio.'));
     }
@@ -133,20 +159,38 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
 
   Future<void> _onCreateProject(CreateProject event, Emitter<ProjectState> emit) async {
     try {
+      // 1. Crea il nuovo progetto (questo non cambia)
       final newProject = await projectRepository.createProject(name: event.projectName.trim());
-      // CREAZIONE UNIFICATA CONTENUTO INIZIALE (schema nuovo)
-      final startShape = FlowchartShapeFactory.createShape(ShapeType.start, const Offset(120.0, 120.0));
-      final initialContent = jsonEncode({
-        'shapes': [startShape.toJson()],
-        'connections': [],
-      });
+
+      // 2. Crea il contenuto iniziale usando i NUOVI modelli
+
+      // Usa la nuova factory per creare il nodo di start
+      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(120.0, 120.0));
+
+      // Crea un oggetto Flowchart completo
+      final initialFlowchart = Flowchart(
+        flowchartId: const Uuid().v4(), // Diamo un ID anche al flowchart stesso
+        name: 'main', // Nome del file iniziale
+        schemaVersion: kFlowNodeSchemaVersion, // Usa la costante definita nei modelli
+        nodes: [startNode],
+        edges: const [],
+      );
+
+      // Converte il flowchart in un'entità e poi in un documento mappa, pronto per il JSON
+      final initialContent = jsonEncode(initialFlowchart.toEntity().toDocument());
+
+      // 3. Aggiunge il file "main" al progetto con il contenuto appena creato
       await projectRepository.addFileToProject(
         projectId: newProject.projectId,
         fileName: 'main',
         content: initialContent,
       );
+
+      // 4. Avvia la sessione e seleziona il nuovo progetto
       add(StartSessionAndSelectProject(project: newProject));
+
     } catch (e) {
+      // La gestione dell'errore rimane invariata
       if (state is ProjectsLoaded) {
         emit((state as ProjectsLoaded).copyWith(error: 'Errore nella creazione del progetto.'));
       } else {
@@ -176,6 +220,81 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+
+  Future<void> _onUpdateProjectVisibility(
+      UpdateProjectVisibility event,
+      Emitter<ProjectState> emit,
+      ) async {
+    if (state is! ProjectsLoaded) return;
+    final currentState = state as ProjectsLoaded;
+
+    try {
+      await projectRepository.updateProjectVisibility(
+        projectId: event.projectId,
+        isPublic: event.isPublic,
+      );
+
+      // --- MIGLIORAMENTO: Aggiorna lo stato della UI immediatamente ---
+      // Troviamo l'indice del progetto modificato nella lista attuale
+      final projectIndex = currentState.projects.indexWhere((p) => p.projectId == event.projectId);
+      if (projectIndex != -1) {
+        // Creiamo una nuova lista di progetti aggiornata
+        final updatedProjects = List<MyProject>.from(currentState.projects);
+        // Aggiorniamo il singolo progetto con il nuovo stato di visibilità
+        // (Nota: lastVisibilityChange si aggiornerà al prossimo caricamento da Firestore)
+        updatedProjects[projectIndex] = updatedProjects[projectIndex].copyWith(isPublic: event.isPublic);
+        // Emettiamo il nuovo stato con la lista aggiornata per una reattività istantanea
+        emit(currentState.copyWith(projects: updatedProjects));
+      }
+
+    } on VisibilityChangeRateLimitException catch (e) {
+      final remaining = e.remaining;
+      final hours = remaining.inHours;
+      final minutes = remaining.inMinutes.remainder(60);
+
+      String errorMessage;
+      if (hours > 0) {
+        errorMessage = 'Attendi ancora $hours ore e $minutes minuti.';
+      } else {
+        errorMessage = 'Attendi ancora $minutes minuti.';
+      }
+      emit(currentState.copyWith(error: errorMessage));
+    } catch (e, st) {
+      log('Errore in _onUpdateProjectVisibility: $e', stackTrace: st);
+      emit(currentState.copyWith(error: 'Impossibile aggiornare la visibilità. Riprova.'));
+    }
+  }
+
+  Future<void> _onLoadStaticWorkspace(
+      LoadStaticWorkspace event,
+      Emitter<ProjectState> emit,
+      ) async {
+    emit(const ProjectLoading(message: 'Caricamento progetto condiviso...'));
+    final projectId = event.projectId.trim();
+
+    if (projectId.isEmpty) {
+      emit(const ProjectError(message: 'L\'ID del progetto non può essere vuoto.'));
+      return;
+    }
+
+    try {
+      final result = await projectRepository.getPublicProjectWithFiles(projectId);
+
+      if (result == null) {
+        emit(const ProjectError(message: 'Progetto non trovato o non pubblico.'));
+        return;
+      }
+
+      emit(StaticWorkspaceLoaded(
+        project: result['project'] as MyProject,
+        files: result['files'] as List<MyFile>,
+      ));
+
+    } catch (e, st) {
+      log('Errore in _onLoadStaticWorkspace: $e', stackTrace: st);
+      emit(const ProjectError(message: 'Impossibile caricare il progetto condiviso.'));
+    }
+  }
   @override
   Future<void> close() {
     _projectsSubscription?.cancel();

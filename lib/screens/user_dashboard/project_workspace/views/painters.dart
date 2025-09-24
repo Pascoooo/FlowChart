@@ -1,8 +1,10 @@
 import 'dart:math';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter/material.dart';
-import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 
-// GridPainter e DiamondPainter rimangono invariati
+// GridPainter, DiamondPainter, e ParallelogramPainter non necessitano di modifiche
+// in quanto non dipendono direttamente dai modelli di dati del flowchart.
+// Li includo qui per completezza del file.
 
 class GridPainter extends CustomPainter {
   final Color minorColor, majorColor;
@@ -89,15 +91,16 @@ class DiamondPainter extends CustomPainter {
       old.color != color || old.borderColor != borderColor || old.strokeWidth != strokeWidth;
 }
 
-/// Painter for drawing connections between shapes.
+/// Painter per disegnare le connessioni tra i nodi.
 class ConnectionPainter extends CustomPainter {
-  final List<FlowchartShape> shapes;
-  final List<FlowchartConnection> connections;
+  // Utilizza i nuovi modelli
+  final List<FlowNode> nodes;
+  final List<FlowchartEdge> edges;
   final ThemeData theme;
 
   ConnectionPainter({
-    required this.shapes,
-    required this.connections,
+    required this.nodes,
+    required this.edges,
     required this.theme,
   });
 
@@ -108,39 +111,42 @@ class ConnectionPainter extends CustomPainter {
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 
-    final shapeMap = {for (var shape in shapes) shape.id: shape};
+    // La mappa ora contiene FlowNode
+    final nodeMap = {for (var node in nodes) node.id: node};
 
-    for (final connection in connections) {
-      final fromShape = shapeMap[connection.fromShapeId];
-      final toShape = shapeMap[connection.toShapeId];
+    for (final edge in edges) {
+      final fromNode = nodeMap[edge.from];
+      final toNode = nodeMap[edge.to];
 
-      if (fromShape != null && toShape != null) {
+      if (fromNode != null && toNode != null) {
         Offset startPoint;
-        if (fromShape.type == 'condizione' && connection.fromPort != null) {
-          if (connection.fromPort == 'true') {
-            startPoint = Offset(fromShape.x + fromShape.width, fromShape.y + fromShape.height / 2);
-          } else {
-            startPoint = Offset(fromShape.x, fromShape.y + fromShape.height / 2);
+        // La logica ora usa FlowNodeKind
+        if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
+          if (edge.port == 'true') {
+            startPoint = Offset(fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
+          } else { // 'false'
+            startPoint = Offset(fromNode.x, fromNode.y + fromNode.height / 2);
           }
         } else {
           startPoint = Offset(
-            fromShape.x + fromShape.width / 2,
-            fromShape.y + fromShape.height / 2,
+            fromNode.x + fromNode.width / 2,
+            fromNode.y + fromNode.height / 2,
           );
         }
 
         final endCenter = Offset(
-          toShape.x + toShape.width / 2,
-          toShape.y + toShape.height / 2,
+          toNode.x + toNode.width / 2,
+          toNode.y + toNode.height / 2,
         );
-        final endPointOnPerimeter = _getIntersectionPoint(startPoint, endCenter, toShape);
+        // La funzione helper ora accetta FlowNode
+        final endPointOnPerimeter = _getIntersectionPoint(startPoint, endCenter, toNode);
 
         canvas.drawLine(startPoint, endPointOnPerimeter, paint);
         _drawArrow(canvas, paint, startPoint, endPointOnPerimeter);
 
         // Disegna etichetta true/false se applicabile
-        if (fromShape.type == 'condizione' && connection.fromPort != null) {
-          final label = connection.fromPort!;
+        if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
+          final label = edge.port!;
           final textPainter = TextPainter(
             text: TextSpan(
               text: label,
@@ -156,8 +162,8 @@ class ConnectionPainter extends CustomPainter {
           const padding = 4.0;
           late Rect rect;
           if (label == 'true') {
-            final dx = fromShape.x + fromShape.width + 10;
-            final dy = fromShape.y + fromShape.height / 2 - (textPainter.height / 2);
+            final dx = fromNode.x + fromNode.width + 10;
+            final dy = fromNode.y + fromNode.height / 2 - (textPainter.height / 2);
             rect = Rect.fromLTWH(
               dx,
               dy,
@@ -165,8 +171,8 @@ class ConnectionPainter extends CustomPainter {
               textPainter.height + padding * 2,
             );
           } else { // false
-            final dx = fromShape.x - (textPainter.width + padding * 2) - 10;
-            final dy = fromShape.y + fromShape.height / 2 - (textPainter.height / 2);
+            final dx = fromNode.x - (textPainter.width + padding * 2) - 10;
+            final dy = fromNode.y + fromNode.height / 2 - (textPainter.height / 2);
             rect = Rect.fromLTWH(
               dx,
               dy,
@@ -194,34 +200,25 @@ class ConnectionPainter extends CustomPainter {
     }
   }
 
-  /// Calcola il punto di intersezione tra la linea (dal centro di fromShape al centro di toShape)
-  /// e il perimetro di toShape.
-  Offset _getIntersectionPoint(Offset startPoint, Offset endPoint, FlowchartShape toShape) {
+  /// Calcola il punto di intersezione. La logica interna non cambia, solo il tipo di parametro.
+  Offset _getIntersectionPoint(Offset startPoint, Offset endPoint, FlowNode toNode) {
     final dx = endPoint.dx - startPoint.dx;
     final dy = endPoint.dy - startPoint.dy;
 
     if (dx == 0 && dy == 0) return endPoint;
 
     final angle = atan2(dy, dx);
-    double radiusX, radiusY;
-
-    // Approssimazione per forme non circolari
-    radiusX = toShape.width / 2;
-    radiusY = toShape.height / 2;
+    double radiusX = toNode.width / 2;
+    double radiusY = toNode.height / 2;
 
     final cosAngle = cos(angle);
     final sinAngle = sin(angle);
 
-    // Calcolo basato su un'ellisse inscritta nel rettangolo della forma
+    // Calcolo basato su un'ellisse inscritta nel rettangolo del nodo
     final intersectX = endPoint.dx - (radiusX * cosAngle);
     final intersectY = endPoint.dy - (radiusY * sinAngle);
 
-    // Per il diamante, l'approssimazione ellittica è abbastanza buona
-    // Per un rettangolo, potremmo fare un calcolo più preciso, ma questo è un buon inizio.
-    final finalPoint = Offset(intersectX, intersectY);
-
-    // Evitato controllo inutile per 'rectangle' (tipo non presente). Il punto calcolato finale va bene per tutte le forme.
-    return finalPoint;
+    return Offset(intersectX, intersectY);
   }
 
   void _drawArrow(Canvas canvas, Paint paint, Offset startPoint, Offset endPoint) {
@@ -241,7 +238,7 @@ class ConnectionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ConnectionPainter old) =>
-      old.shapes != shapes || old.connections != connections;
+      old.nodes != nodes || old.edges != edges;
 }
 
 class ParallelogramPainter extends CustomPainter {
@@ -288,7 +285,7 @@ class ParallelogramPainter extends CustomPainter {
         ..color = Colors.black.withAlpha(25)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
       canvas.save();
-      canvas.translate(0, 2); // piccola ombra sotto
+      canvas.translate(0, 2);
       canvas.drawPath(path, shadowPaint);
       canvas.restore();
     }
@@ -305,8 +302,8 @@ class ParallelogramPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant ParallelogramPainter old) =>
       old.fillColor != fillColor ||
-      old.borderColor != borderColor ||
-      old.strokeWidth != strokeWidth ||
-      old.reversed != reversed ||
-      old.drawShadow != drawShadow;
+          old.borderColor != borderColor ||
+          old.strokeWidth != strokeWidth ||
+          old.reversed != reversed ||
+          old.drawShadow != drawShadow;
 }

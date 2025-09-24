@@ -4,7 +4,7 @@ import 'package:project_repository/project_repository.dart';
 import 'package:provider/provider.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
-import '../../../../config/services/dialog_service.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/widgets/buttons.dart';
 import '../widgets/profile_picture.dart';
 import '../widgets/project_container.dart';
@@ -25,7 +25,7 @@ class ProjectSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Future<void> showCreateProjectDialog() async {
-      final String? projectName = await DialogService.showInputDialog(
+      final String? projectName = await AppDialogs.showInputDialog(
         context,
         title: "Nuovo Progetto",
         message: "Dai un nome al tuo progetto per iniziare",

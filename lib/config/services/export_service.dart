@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:flowchart_thesis/config/services/dialog_service.dart';
+import 'package:flowchart_thesis/config/services/dialog_service/app_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:universal_html/js.dart';
+
+import 'dialog_service/service_dialog.dart';
 
 /// Servizio con funzioni di utilità per l'esportazione.
 class ExportService {
@@ -22,12 +24,13 @@ class ExportService {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (e) {
-      DialogService.showInfoDialog(
+      AppDialogs.showInfoDialog(
           context as BuildContext,
           title: 'Errore di esportazione',
           message: 'Si è verificato un errore durante la generazione dell\'immagine: $e',
           closeText: 'OK',
-          icon: Icons.error_outline);
+
+          type: DialogType.error);
       return null;
     }
   }
@@ -48,18 +51,20 @@ class ExportService {
       html.Url.revokeObjectUrl(url);
 
       if (!context.mounted) return;
-      await DialogService.showInfoDialog(context,
+      // --- MODIFICA: Utilizzo di AppDialogs e del nuovo DialogType.success ---
+      await AppDialogs.showInfoDialog(context,
           title: 'Esportazione completata',
           message: 'Il file è stato scaricato con successo.',
-          closeText: 'OK',
-          icon: Icons.check_circle_outline);
+          type: DialogType.success,
+          closeText: 'OK');
     } catch (e) {
       if (context.mounted) {
-        await DialogService.showInfoDialog(context,
+        // --- MODIFICA: Utilizzo di AppDialogs e del nuovo DialogType.error ---
+        await AppDialogs.showInfoDialog(context,
             title: 'Errore di esportazione',
             message: 'Si è verificato un errore durante il download: $e',
-            closeText: 'OK',
-            icon: Icons.error_outline);
+            type: DialogType.error,
+            closeText: 'OK');
       }
     }
   }

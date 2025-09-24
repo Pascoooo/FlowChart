@@ -1,191 +1,8 @@
 import 'dart:convert';
 import 'dart:developer';
 import 'package:equatable/equatable.dart';
-
-//##############################################################################
-// # MODELLO FLOWCHART SHAPE "INTELLIGENTE"
-//##############################################################################
-
-class FlowchartShape extends Equatable {
-  final String id;
-  final String type;
-  final double x;
-  final double y;
-  final double width;
-  final double height;
-  final String text;
-
-  /// Lista degli ID delle connessioni in entrata.
-  /// Rende la forma "consapevole" del suo stato nel grafo.
-  final List<String> incomingConnectionIds;
-
-  /// Lista degli ID delle connessioni in uscita.
-  final List<String> outgoingConnectionIds;
-
-  const FlowchartShape({
-    required this.id,
-    required this.type,
-    required this.x,
-    required this.y,
-    required this.width,
-    required this.height,
-    required this.text,
-    this.incomingConnectionIds = const [],
-    this.outgoingConnectionIds = const [],
-  });
-
-  /// Getter per la logica di business: numero massimo di connessioni in uscita.
-  int get maxOutgoingConnections {
-    switch (type) {
-      case 'condizione':
-        return 2; // due rami true/false
-      case 'fine':
-        return 0; // nodo terminale
-      default:
-        return 1; // default singola uscita
-    }
-  }
-
-  int get maxIncomingConnections {
-    return type == 'start' ? 0 : 1;
-  }
-
-  /// Getter per la UI: determina se il pulsante '+' debba essere mostrato.
-  bool get canAddOutgoingConnection =>
-      outgoingConnectionIds.length < maxOutgoingConnections;
-
-  /// Metodo copyWith per aggiornamenti immutabili dello stato.
-  FlowchartShape copyWith({
-    String? id,
-    String? type,
-    double? x,
-    double? y,
-    double? width,
-    double? height,
-    String? text,
-    List<String>? incomingConnectionIds,
-    List<String>? outgoingConnectionIds,
-  }) {
-    return FlowchartShape(
-      id: id ?? this.id,
-      type: type ?? this.type,
-      x: x ?? this.x,
-      y: y ?? this.y,
-      width: width ?? this.width,
-      height: height ?? this.height,
-      text: text ?? this.text,
-      incomingConnectionIds:
-      incomingConnectionIds ?? this.incomingConnectionIds,
-      outgoingConnectionIds:
-      outgoingConnectionIds ?? this.outgoingConnectionIds,
-    );
-  }
-
-  /// Deserializza una forma da JSON. Nota: non popola le liste di connessioni,
-  /// se ne occuperà FlowchartLoaded.
-  factory FlowchartShape.fromJson(Map<String, dynamic> json) {
-    String rawType = json['type'] as String;
-    String normType;
-    switch (rawType) {
-      case 'decision':
-      case 'decisione':
-      case 'diamond':
-        normType = 'condizione';
-        break;
-      case 'end':
-        normType = 'fine';
-        break;
-      case 'process':
-        normType = 'processo';
-        break;
-      case 'input_output':
-      case 'inputOutput':
-        normType = 'input'; // scelta arbitraria: vecchio parallelogramma generico -> input
-        break;
-      default:
-        normType = rawType;
-    }
-    return FlowchartShape(
-      id: json['id'] as String,
-      type: normType,
-      x: (json['x'] as num).toDouble(),
-      y: (json['y'] as num).toDouble(),
-      width: (json['width'] as num).toDouble(),
-      height: (json['height'] as num).toDouble(),
-      text: json['text'] as String,
-    );
-  }
-
-  /// Serializza una forma in JSON. Nota: non include le liste di connessioni
-  /// per evitare ridondanza di dati.
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'type': type,
-      'x': x,
-      'y': y,
-      'width': width,
-      'height': height,
-      'text': text,
-    };
-  }
-
-  @override
-  List<Object?> get props => [
-    id,
-    type,
-    x,
-    y,
-    width,
-    height,
-    text,
-    incomingConnectionIds,
-    outgoingConnectionIds
-  ];
-}
-
-//##############################################################################
-// # MODELLO FLOWCHART CONNECTION
-//##############################################################################
-
-class FlowchartConnection extends Equatable {
-  final String id;
-  final String fromShapeId;
-  final String toShapeId;
-  final String? fromPort; // 'true' | 'false' | null (compat)
-
-  const FlowchartConnection({
-    required this.id,
-    required this.fromShapeId,
-    required this.toShapeId,
-    this.fromPort,
-  });
-
-  factory FlowchartConnection.fromJson(Map<String, dynamic> json) {
-    return FlowchartConnection(
-      id: json['id'] as String,
-      fromShapeId: json['fromShapeId'] as String,
-      toShapeId: json['toShapeId'] as String,
-      fromPort: json['fromPort'] as String?,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'fromShapeId': fromShapeId,
-      'toShapeId': toShapeId,
-      if (fromPort != null) 'fromPort': fromPort,
-    };
-  }
-
-  @override
-  List<Object?> get props => [id, fromShapeId, toShapeId, fromPort];
-}
-
-//##############################################################################
-// # STATI DEL BLOC
-//##############################################################################
+import 'package:flowchart_repository/flowchart_repository.dart';
+import 'package:uuid/uuid.dart';
 
 abstract class FlowchartState extends Equatable {
   const FlowchartState();
@@ -195,128 +12,97 @@ abstract class FlowchartState extends Equatable {
 
 class FlowchartInitial extends FlowchartState {}
 
+/// **CLASSE AGGIUNTA QUI**
+/// Stato emesso quando un'azione non è valida (es. violazione di una regola).
+/// La UI ascolterà questo stato per mostrare un feedback all'utente.
+class FlowchartActionFailure extends FlowchartState {
+  final String title;
+  final String message;
+
+  const FlowchartActionFailure({required this.title, required this.message});
+
+  @override
+  List<Object?> get props => [title, message];
+}
+
 class FlowchartLoaded extends FlowchartState {
-  final List<FlowchartShape> shapes;
-  final List<FlowchartConnection> connections;
-  final String? selectedShapeId;
+  final Flowchart flowchart;
+  final String? selectedNodeId;
+  static const _uuid = Uuid();
 
   const FlowchartLoaded({
-    this.shapes = const [],
-    this.connections = const [],
-    this.selectedShapeId,
+    required this.flowchart,
+    this.selectedNodeId,
   });
 
-  /// Costruttore Factory che deserializza il JSON e costruisce lo stato "ricco".
-  /// Questa è la logica centrale che rende i modelli "intelligenti".
+  factory FlowchartLoaded.empty({String? fileName}) {
+    return FlowchartLoaded(
+      flowchart: Flowchart(
+        flowchartId: _uuid.v4(),
+        name: fileName ?? 'Nuovo Flowchart',
+        schemaVersion: 1,
+        nodes: const [],
+        edges: const [],
+      ),
+    );
+  }
+
+  // ... il resto della classe `FlowchartLoaded` rimane invariato ...
+
+  FlowNode? getNodeById(String id) {
+    try {
+      return flowchart.nodes.firstWhere((node) => node.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  List<FlowchartEdge> getOutgoingEdges(String nodeId) {
+    return flowchart.edges.where((edge) => edge.from == nodeId).toList();
+  }
+
+  bool canAddOutgoingConnection(String nodeId) {
+    final node = getNodeById(nodeId);
+    if (node == null) return false;
+
+    final maxConnections = switch (node.kind) {
+      FlowNodeKind.decision => 2,
+      FlowNodeKind.end => 0,
+      _ => 1,
+    };
+
+    return getOutgoingEdges(nodeId).length < maxConnections;
+  }
+
   factory FlowchartLoaded.fromJson(String jsonString) {
-    // Se il JSON è vuoto, ritorna uno stato iniziale pulito.
     if (jsonString.isEmpty) {
-      return const FlowchartLoaded();
+      return FlowchartLoaded.empty();
     }
     try {
-      final dynamic decoded = jsonDecode(jsonString);
-
-      // BACKWARD COMPAT: vecchio formato = lista semplice di forme [{id,type,x,y,properties:{width,height,text}}]
-      if (decoded is List) {
-        final legacyShapes = <FlowchartShape>[];
-        for (final raw in decoded) {
-          if (raw is Map<String, dynamic>) {
-            final props = raw['properties'] as Map<String, dynamic>?;
-            final typeRaw = (raw['type'] as String?) ?? 'process';
-            String mappedType;
-            switch (typeRaw) {
-              case 'decisione':
-                mappedType = 'condizione';
-                break;
-              case 'end':
-                mappedType = 'fine';
-                break;
-              case 'input':
-              case 'output':
-                mappedType = 'input';
-                break;
-              case 'processo':
-                mappedType = 'processo';
-                break;
-              default:
-                mappedType = typeRaw;
-            }
-            legacyShapes.add(
-              FlowchartShape(
-                id: raw['id'] as String? ?? 'legacy_${DateTime.now().microsecondsSinceEpoch}',
-                type: mappedType,
-                x: (raw['x'] as num?)?.toDouble() ?? 120.0,
-                y: (raw['y'] as num?)?.toDouble() ?? 120.0,
-                width: (raw['width'] as num?)?.toDouble() ?? (props != null ? (props['width'] as num?)?.toDouble() ?? 100.0 : 100.0),
-                height: (raw['height'] as num?)?.toDouble() ?? (props != null ? (props['height'] as num?)?.toDouble() ?? 60.0 : 60.0),
-                text: (raw['text'] as String?) ?? (props != null ? props['text'] as String? ?? '' : ''),
-              ),
-            );
-          }
-        }
-        return FlowchartLoaded(shapes: legacyShapes, connections: const []);
-      }
-
-      // Formato nuovo atteso: { shapes: [...], connections: [...] }
-      final Map<String, dynamic> jsonMap = decoded as Map<String, dynamic>;
-      // 1. Carica le liste "piatte" di forme e connessioni
-      final baseShapes = (jsonMap['shapes'] as List<dynamic>?)
-          ?.map((json) => FlowchartShape.fromJson(json))
-          .toList() ??
-          [];
-      final connections = (jsonMap['connections'] as List<dynamic>?)
-          ?.map((json) => FlowchartConnection.fromJson(json))
-          .toList() ??
-          [];
-
-      if (baseShapes.isEmpty) return const FlowchartLoaded();
-
-      // 2. Crea una mappa per un accesso efficiente O(1) alle forme
-      final shapeMap = {for (var shape in baseShapes) shape.id: shape};
-
-      // 3. Itera sulle connessioni UNA SOLA VOLTA per popolare le liste di ogni forma
-      for (final connection in connections) {
-        if (shapeMap.containsKey(connection.fromShapeId)) {
-          final fromShape = shapeMap[connection.fromShapeId]!;
-          final updatedOutgoing = List<String>.from(fromShape.outgoingConnectionIds)..add(connection.id);
-          shapeMap[connection.fromShapeId] = fromShape.copyWith(outgoingConnectionIds: updatedOutgoing);
-        }
-        if (shapeMap.containsKey(connection.toShapeId)) {
-          final toShape = shapeMap[connection.toShapeId]!;
-          final updatedIncoming = List<String>.from(toShape.incomingConnectionIds)..add(connection.id);
-          shapeMap[connection.toShapeId] = toShape.copyWith(incomingConnectionIds: updatedIncoming);
-        }
-      }
-
-      return FlowchartLoaded(
-        shapes: shapeMap.values.toList(),
-        connections: connections,
-      );
+      final Map<String, dynamic> decoded = jsonDecode(jsonString);
+      final entity = FlowchartEntity.fromDocument(decoded);
+      final flowchart = Flowchart.fromEntity(entity);
+      return FlowchartLoaded(flowchart: flowchart);
     } catch (e, stackTrace) {
-      log("Errore critico nel parsing del JSON del flowchart: $e", stackTrace: stackTrace);
-      return const FlowchartLoaded();
+      log("Errore nel parsing del JSON del flowchart: $e", stackTrace: stackTrace);
+      return FlowchartLoaded.empty();
     }
   }
 
   String toJson() {
-    final Map<String, dynamic> jsonMap = {
-      'shapes': shapes.map((shape) => shape.toJson()).toList(),
-      'connections': connections.map((conn) => conn.toJson()).toList(),
-    };
-    return jsonEncode(jsonMap);
+    final entity = flowchart.toEntity();
+    return jsonEncode(entity.toDocument());
   }
 
   FlowchartLoaded copyWith({
-    List<FlowchartShape>? shapes,
-    List<FlowchartConnection>? connections,
-    String? selectedShapeId,
+    Flowchart? flowchart,
+    String? selectedNodeId,
     bool clearSelection = false,
   }) {
     return FlowchartLoaded(
-      shapes: shapes ?? this.shapes,
-      connections: connections ?? this.connections,
-      selectedShapeId:
-      clearSelection ? null : (selectedShapeId ?? this.selectedShapeId),
+      flowchart: flowchart ?? this.flowchart,
+      selectedNodeId:
+      clearSelection ? null : (selectedNodeId ?? this.selectedNodeId),
     );
   }
 
@@ -325,5 +111,5 @@ class FlowchartLoaded extends FlowchartState {
   }
 
   @override
-  List<Object?> get props => [shapes, connections, selectedShapeId];
+  List<Object?> get props => [flowchart, selectedNodeId];
 }

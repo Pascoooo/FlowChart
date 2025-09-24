@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
+import 'package:file_repository/file_repository.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:flutter/material.dart';
-
 
 @immutable
 abstract class ProjectState extends Equatable {
@@ -46,17 +46,20 @@ class UnsavedChangesFound extends ProjectState {
 class ProjectsLoaded extends ProjectState {
   final List<MyProject> projects;
   final MyProject? selectedProject;
+  final bool isReadOnlyView;
   final String? error;
 
   const ProjectsLoaded({
     required this.projects,
     this.selectedProject,
+    this.isReadOnlyView = false, // Default a non read-only
     this.error,
   });
 
   ProjectsLoaded copyWith({
     List<MyProject>? projects,
     MyProject? selectedProject,
+    bool? isReadOnlyView, // <-- AGGIUNTO
     bool clearSelectedProject = false,
     String? error,
     bool clearError = false,
@@ -64,10 +67,26 @@ class ProjectsLoaded extends ProjectState {
     return ProjectsLoaded(
       projects: projects ?? this.projects,
       selectedProject: clearSelectedProject ? null : (selectedProject ?? this.selectedProject),
+      isReadOnlyView: isReadOnlyView ?? this.isReadOnlyView, // <-- AGGIUNTO
       error: clearError ? null : error,
     );
   }
 
   @override
-  List<Object?> get props => [projects, selectedProject, error];
+  List<Object?> get props => [projects, selectedProject, isReadOnlyView, error];
+}
+
+// Aggiungi questa nuova classe alla fine del file
+
+class StaticWorkspaceLoaded extends ProjectState {
+  final MyProject project;
+  final List<MyFile> files;
+
+  const StaticWorkspaceLoaded({
+    required this.project,
+    required this.files,
+  });
+
+  @override
+  List<Object> get props => [project, files];
 }
