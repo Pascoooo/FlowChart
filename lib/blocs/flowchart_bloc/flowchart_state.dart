@@ -12,9 +12,6 @@ abstract class FlowchartState extends Equatable {
 
 class FlowchartInitial extends FlowchartState {}
 
-/// **CLASSE AGGIUNTA QUI**
-/// Stato emesso quando un'azione non è valida (es. violazione di una regola).
-/// La UI ascolterà questo stato per mostrare un feedback all'utente.
 class FlowchartActionFailure extends FlowchartState {
   final String title;
   final String message;
@@ -35,19 +32,21 @@ class FlowchartLoaded extends FlowchartState {
     this.selectedNodeId,
   });
 
+// All'interno della classe FlowchartLoaded in flowchart_state.dart
+
   factory FlowchartLoaded.empty({String? fileName}) {
     return FlowchartLoaded(
       flowchart: Flowchart(
         flowchartId: _uuid.v4(),
         name: fileName ?? 'Nuovo Flowchart',
-        schemaVersion: 1,
+        schemaVersion: kFlowNodeSchemaVersion,
         nodes: const [],
         edges: const [],
+        signature: const FlowchartSignature(),
+        variables: const [],
       ),
     );
   }
-
-  // ... il resto della classe `FlowchartLoaded` rimane invariato ...
 
   FlowNode? getNodeById(String id) {
     try {
@@ -84,7 +83,8 @@ class FlowchartLoaded extends FlowchartState {
       final flowchart = Flowchart.fromEntity(entity);
       return FlowchartLoaded(flowchart: flowchart);
     } catch (e, stackTrace) {
-      log("Errore nel parsing del JSON del flowchart: $e", stackTrace: stackTrace);
+      log("Errore nel parsing del JSON del flowchart: $e",
+          stackTrace: stackTrace);
       return FlowchartLoaded.empty();
     }
   }

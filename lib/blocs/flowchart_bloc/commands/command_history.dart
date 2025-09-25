@@ -12,7 +12,6 @@ class CommandHistory {
     _undoStack.add(command);
     _redoStack.clear();
 
-    // Limita la dimensione della cronologia per non usare troppa memoria
     if (_undoStack.length > maxHistorySize) {
       _undoStack.removeAt(0);
     }

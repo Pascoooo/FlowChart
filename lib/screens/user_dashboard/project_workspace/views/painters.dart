@@ -2,10 +2,6 @@ import 'dart:math';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter/material.dart';
 
-// GridPainter, DiamondPainter, e ParallelogramPainter non necessitano di modifiche
-// in quanto non dipendono direttamente dai modelli di dati del flowchart.
-// Li includo qui per completezza del file.
-
 class GridPainter extends CustomPainter {
   final Color minorColor, majorColor;
   final double spacing, minorWidth, majorWidth;
@@ -88,12 +84,12 @@ class DiamondPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant DiamondPainter old) =>
-      old.color != color || old.borderColor != borderColor || old.strokeWidth != strokeWidth;
+      old.color != color ||
+          old.borderColor != borderColor ||
+          old.strokeWidth != strokeWidth;
 }
 
-/// Painter per disegnare le connessioni tra i nodi.
 class ConnectionPainter extends CustomPainter {
-  // Utilizza i nuovi modelli
   final List<FlowNode> nodes;
   final List<FlowchartEdge> edges;
   final ThemeData theme;
@@ -107,11 +103,11 @@ class ConnectionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = theme.colorScheme.onSurface.withAlpha((0.5 * 255).round())
+      ..color = theme.colorScheme.onSurface.withOpacity(0.5)
       ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke;
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
-    // La mappa ora contiene FlowNode
     final nodeMap = {for (var node in nodes) node.id: node};
 
     for (final edge in edges) {
@@ -120,105 +116,45 @@ class ConnectionPainter extends CustomPainter {
 
       if (fromNode != null && toNode != null) {
         Offset startPoint;
-        // La logica ora usa FlowNodeKind
         if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
           if (edge.port == 'true') {
             startPoint = Offset(fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
-          } else { // 'false'
+          } else {
             startPoint = Offset(fromNode.x, fromNode.y + fromNode.height / 2);
           }
         } else {
-          startPoint = Offset(
-            fromNode.x + fromNode.width / 2,
-            fromNode.y + fromNode.height / 2,
-          );
+          startPoint = Offset(fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
         }
 
-        final endCenter = Offset(
-          toNode.x + toNode.width / 2,
-          toNode.y + toNode.height / 2,
-        );
-        // La funzione helper ora accetta FlowNode
-        final endPointOnPerimeter = _getIntersectionPoint(startPoint, endCenter, toNode);
+        final endCenter = Offset(toNode.x + toNode.width / 2, toNode.y + toNode.height / 2);
+        final endPoint = _getIntersectionPointWithRect(startPoint, endCenter, toNode);
 
-        canvas.drawLine(startPoint, endPointOnPerimeter, paint);
-        _drawArrow(canvas, paint, startPoint, endPointOnPerimeter);
+        canvas.drawLine(startPoint, endPoint, paint);
+        _drawArrow(canvas, paint, startPoint, endPoint);
 
-        // Disegna etichetta true/false se applicabile
         if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
-          final label = edge.port!;
-          final textPainter = TextPainter(
-            text: TextSpan(
-              text: label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout();
-
-          const padding = 4.0;
-          late Rect rect;
-          if (label == 'true') {
-            final dx = fromNode.x + fromNode.width + 10;
-            final dy = fromNode.y + fromNode.height / 2 - (textPainter.height / 2);
-            rect = Rect.fromLTWH(
-              dx,
-              dy,
-              textPainter.width + padding * 2,
-              textPainter.height + padding * 2,
-            );
-          } else { // false
-            final dx = fromNode.x - (textPainter.width + padding * 2) - 10;
-            final dy = fromNode.y + fromNode.height / 2 - (textPainter.height / 2);
-            rect = Rect.fromLTWH(
-              dx,
-              dy,
-              textPainter.width + padding * 2,
-              textPainter.height + padding * 2,
-            );
-          }
-
-          final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(8));
-          final bgPaint = Paint()..color = theme.colorScheme.surface.withAlpha(230);
-          canvas.drawRRect(rrect, bgPaint);
-          canvas.drawRRect(
-            rrect,
-            Paint()
-              ..color = Colors.black.withAlpha(25)
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 0.5,
-          );
-          textPainter.paint(
-            canvas,
-            Offset(rect.left + padding, rect.top + padding),
-          );
+          _drawBranchLabel(canvas, fromNode, edge.port!);
         }
       }
     }
   }
 
-  /// Calcola il punto di intersezione. La logica interna non cambia, solo il tipo di parametro.
-  Offset _getIntersectionPoint(Offset startPoint, Offset endPoint, FlowNode toNode) {
-    final dx = endPoint.dx - startPoint.dx;
-    final dy = endPoint.dy - startPoint.dy;
+  Offset _getIntersectionPointWithRect(Offset startPoint, Offset endCenter, FlowNode toNode) {
+    final toRect = Rect.fromLTWH(toNode.x, toNode.y, toNode.width, toNode.height);
+    final line = Line(endCenter, startPoint);
 
-    if (dx == 0 && dy == 0) return endPoint;
+    Offset? topIntersection = line.intersection(Line(toRect.topLeft, toRect.topRight));
+    Offset? rightIntersection = line.intersection(Line(toRect.topRight, toRect.bottomRight));
+    Offset? bottomIntersection = line.intersection(Line(toRect.bottomRight, toRect.bottomLeft));
+    Offset? leftIntersection = line.intersection(Line(toRect.bottomLeft, toRect.topLeft));
 
-    final angle = atan2(dy, dx);
-    double radiusX = toNode.width / 2;
-    double radiusY = toNode.height / 2;
+    final intersections = [topIntersection, rightIntersection, bottomIntersection, leftIntersection]
+        .where((p) => p != null).cast<Offset>().toList();
 
-    final cosAngle = cos(angle);
-    final sinAngle = sin(angle);
+    if (intersections.isEmpty) return endCenter;
 
-    // Calcolo basato su un'ellisse inscritta nel rettangolo del nodo
-    final intersectX = endPoint.dx - (radiusX * cosAngle);
-    final intersectY = endPoint.dy - (radiusY * sinAngle);
-
-    return Offset(intersectX, intersectY);
+    intersections.sort((a, b) => (a - startPoint).distance.compareTo((b - startPoint).distance));
+    return intersections.first;
   }
 
   void _drawArrow(Canvas canvas, Paint paint, Offset startPoint, Offset endPoint) {
@@ -236,9 +172,84 @@ class ConnectionPainter extends CustomPainter {
     canvas.drawPath(arrowPath, paint);
   }
 
+  void _drawBranchLabel(Canvas canvas, FlowNode fromNode, String label) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label == 'true' ? 'Vero' : 'Falso',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: theme.colorScheme.onSurface,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    const padding = 6.0;
+    const offsetFromNode = 12.0;
+    late Offset labelPos;
+
+    if (label == 'true') {
+      labelPos = Offset(
+        fromNode.x + fromNode.width + offsetFromNode,
+        fromNode.y + fromNode.height / 2 - (textPainter.height / 2),
+      );
+    } else {
+      labelPos = Offset(
+        fromNode.x - textPainter.width - (padding * 2) - offsetFromNode,
+        fromNode.y + fromNode.height / 2 - (textPainter.height / 2),
+      );
+    }
+
+    final rect = Rect.fromLTWH(
+      labelPos.dx,
+      labelPos.dy,
+      textPainter.width + padding * 2,
+      textPainter.height + padding * 2,
+    );
+
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(99));
+    final bgPaint = Paint()..color = theme.colorScheme.surface.withAlpha(240);
+    canvas.drawRRect(rrect, bgPaint);
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = theme.colorScheme.outline.withOpacity(0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+    textPainter.paint(
+      canvas,
+      Offset(rect.left + padding, rect.top + padding),
+    );
+  }
+
   @override
   bool shouldRepaint(covariant ConnectionPainter old) =>
-      old.nodes != nodes || old.edges != edges;
+      old.nodes != nodes || old.edges != edges || old.theme != theme;
+}
+
+class Line {
+  final Offset p1, p2;
+  Line(this.p1, this.p2);
+
+  Offset? intersection(Line other) {
+    final x1 = p1.dx, y1 = p1.dy;
+    final x2 = p2.dx, y2 = p2.dy;
+    final x3 = other.p1.dx, y3 = other.p1.dy;
+    final x4 = other.p2.dx, y4 = other.p2.dy;
+
+    final den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (den == 0) return null;
+
+    final t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+    final u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
+
+    if (t > 0 && t <= 1 && u >= 0 && u <= 1) { // Adjusted bounds for accuracy
+      return Offset(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
+    }
+    return null;
+  }
 }
 
 class ParallelogramPainter extends CustomPainter {
@@ -246,48 +257,33 @@ class ParallelogramPainter extends CustomPainter {
   final Color borderColor;
   final double strokeWidth;
   final bool reversed;
-  final bool drawShadow;
 
   ParallelogramPainter({
     required this.fillColor,
     required this.borderColor,
     required this.strokeWidth,
     this.reversed = false,
-    this.drawShadow = false,
   });
 
-  Path _buildPath(Size size) {
-    final dx = size.width * 0.18; // inclinazione
+  @override
+  void paint(Canvas canvas, Size size) {
+    final slant = size.width * 0.2;
     final path = Path();
+
     if (!reversed) {
       path
-        ..moveTo(dx, 0)
+        ..moveTo(slant, 0)
         ..lineTo(size.width, 0)
-        ..lineTo(size.width - dx, size.height)
+        ..lineTo(size.width - slant, size.height)
         ..lineTo(0, size.height)
         ..close();
     } else {
       path
         ..moveTo(0, 0)
-        ..lineTo(size.width - dx, 0)
+        ..lineTo(size.width - slant, 0)
         ..lineTo(size.width, size.height)
-        ..lineTo(dx, size.height)
+        ..lineTo(slant, size.height)
         ..close();
-    }
-    return path;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = _buildPath(size);
-    if (drawShadow) {
-      final shadowPaint = Paint()
-        ..color = Colors.black.withAlpha(25)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-      canvas.save();
-      canvas.translate(0, 2);
-      canvas.drawPath(path, shadowPaint);
-      canvas.restore();
     }
     canvas.drawPath(path, Paint()..color = fillColor);
     canvas.drawPath(
@@ -304,6 +300,5 @@ class ParallelogramPainter extends CustomPainter {
       old.fillColor != fillColor ||
           old.borderColor != borderColor ||
           old.strokeWidth != strokeWidth ||
-          old.reversed != reversed ||
-          old.drawShadow != drawShadow;
+          old.reversed != reversed;
 }

@@ -1,9 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 
 Future<Map<String, dynamic>?> showInputNodeDialog(BuildContext context) {
-  // --- REFACTOR: Utilizzo di showDialog per un controllo completo sul layout. ---
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
@@ -29,6 +29,13 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Inizia con una variabile di default per comodità dell'utente
+    _addVar();
+  }
+
+  @override
   void dispose() {
     _labelController.dispose();
     for (final v in _vars) {
@@ -49,36 +56,25 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
   bool _validateValue(String type, String value) {
     if (value.isEmpty) return false;
     switch (type) {
-      case 'int':
-        return int.tryParse(value) != null;
-      case 'float':
-      case 'double':
-        return double.tryParse(value) != null;
-      case 'bool':
-        return ['true', 'false', '0', '1'].contains(value.toLowerCase());
-      case 'char':
-        return value.length == 1;
-      case 'string':
-        return true;
-      default:
-        return false;
+      case 'int': return int.tryParse(value) != null;
+      case 'float': case 'double': return double.tryParse(value) != null;
+      case 'bool': return ['true', 'false', '0', '1'].contains(value.toLowerCase());
+      case 'char': return value.length == 1;
+      case 'string': return true;
+      default: return false;
     }
   }
 
-  // --- REFACTOR: Sistema di validazione granulare che assegna errori specifici a ogni campo. ---
   bool _validateForm() {
     if (_vars.isEmpty) return false;
-
     final names = <String, List<int>>{};
     bool isFormValid = true;
 
-    // Primo passaggio: validazione dei singoli campi e raccolta dei nomi
     for (var i = 0; i < _vars.length; i++) {
       final v = _vars[i];
       final name = v.name.text.trim();
       final idRe = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');
 
-      // Validazione nome
       if (name.isEmpty) {
         v.nameError = 'Obbligatorio';
       } else if (!idRe.hasMatch(name)) {
@@ -88,7 +84,6 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
         names.putIfAbsent(name, () => []).add(i);
       }
 
-      // Validazione valore iniziale
       if (v.hasInit) {
         final val = v.init.text.trim();
         if (val.isEmpty) {
@@ -107,7 +102,6 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
       }
     }
 
-    // Secondo passaggio: gestione dei nomi duplicati
     names.forEach((name, indices) {
       if (indices.length > 1) {
         isFormValid = false;
@@ -116,37 +110,46 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
         }
       }
     });
-
     return isFormValid;
   }
 
-  void _confirm() {
-    setState(() {
-      _attemptedSubmit = true;
-    });
-
-    if (!_validateForm()) {
-      return;
+  /// **FIX**: Converte il valore di default da stringa al suo tipo corretto (int, double, bool, etc.)
+  dynamic _parseValue(String type, String value) {
+    if (value.isEmpty) return null;
+    switch (type) {
+      case 'int': return int.tryParse(value) ?? 0;
+      case 'float': case 'double': return double.tryParse(value) ?? 0.0;
+      case 'bool': return ['true', '1'].contains(value.toLowerCase());
+      case 'char': return value.length == 1 ? value : null;
+      default: return value;
     }
+  }
+
+  void _confirm() {
+    setState(() => _attemptedSubmit = true);
+    if (!_validateForm()) return;
 
     Navigator.of(context).pop({
-      'text': _labelController.text.trim().isEmpty
-          ? 'Input'
-          : _labelController.text.trim(),
-      'declarations': _vars
-          .map((v) => {
-        'name': v.name.text.trim(),
-        'dataType': v.type,
-        'initialValue': v.hasInit ? v.init.text.trim() : null,
-      })
-          .toList(),
+      'text': _labelController.text.trim().isEmpty ? 'Input' : _labelController.text.trim(),
+      // La lista 'declarations' viene passata al FlowNodeFactory, che si aspetta
+      // una lista di mappe JSON per creare gli oggetti VariableDeclaration.
+      'declarations': _vars.map((v) {
+        // **FIX**: Viene usato 'defaultValue' e il valore viene parsato correttamente.
+        final dynamic defaultValue = v.hasInit ? _parseValue(v.type, v.init.text.trim()) : null;
+
+        return {
+          'name': v.name.text.trim(),
+          'dataType': v.type,
+          'defaultValue': defaultValue,
+        };
+      }).toList(),
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
       child: Container(
@@ -158,18 +161,15 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
           children: [
             Row(
               children: [
-                FaIcon(FontAwesomeIcons.keyboard,
-                    color: theme.colorScheme.primary, size: 24),
+                FaIcon(FontAwesomeIcons.keyboard, color: theme.colorScheme.primary, size: 24),
                 const SizedBox(width: 12),
-                Text('Configura Nodo Input',
-                    style: theme.textTheme.headlineSmall),
+                Text('Configura Nodo Input', style: theme.textTheme.headlineSmall),
               ],
             ),
             const SizedBox(height: 8),
             Text(
               'Definisci le variabili che il programma richiederà in input.',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 24),
             TextField(
@@ -182,13 +182,11 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
             const SizedBox(height: 24),
             Row(
               children: [
-                Text('Variabili da Dichiarare',
-                    style: theme.textTheme.titleLarge),
+                Text('Variabili da Dichiarare', style: theme.textTheme.titleLarge),
                 const Spacer(),
                 CupertinoButton.filled(
                   onPressed: _addVar,
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Row(
                     children: const [
                       FaIcon(FontAwesomeIcons.plus, size: 14),
@@ -220,9 +218,7 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
               children: [
                 CupertinoButton(
                   onPressed: () => Navigator.of(context).pop(null),
-                  child: Text('Annulla',
-                      style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant)),
+                  child: Text('Annulla', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
                 ),
                 const SizedBox(width: 8),
                 CupertinoButton.filled(
@@ -237,12 +233,10 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
     );
   }
 
-  // --- UI/UX: La riga della variabile è stata ridisegnata per chiarezza e per un miglior feedback sugli errori. ---
   Widget _buildVarRow(int index) {
     final v = _vars[index];
     final theme = Theme.of(context);
 
-    // Esegui la validazione a ogni build se è stato tentato l'invio
     if (_attemptedSubmit) _validateForm();
 
     return Padding(
@@ -271,9 +265,7 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
                 flex: 2,
                 child: DropdownButtonFormField<String>(
                   value: v.type,
-                  items: _cTypes
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
+                  items: _cTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                   onChanged: (val) => setState(() {
                     v.type = val!;
                     v.init.clear();
@@ -287,13 +279,11 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
                     padding: const EdgeInsets.all(10),
                     minSize: 0,
                     onPressed: () => _removeVar(index),
-                    child: FaIcon(FontAwesomeIcons.trash,
-                        size: 18, color: theme.colorScheme.error)),
+                    child: FaIcon(FontAwesomeIcons.trash, size: 18, color: theme.colorScheme.error)),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          // --- UI/UX: Il checkbox per l'inizializzazione è stato sostituito con un componente più integrato. ---
           SwitchListTile(
             title: const Text('Inizializza con un valore'),
             value: v.hasInit,
@@ -324,7 +314,6 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
   }
 }
 
-// --- REFACTOR: La classe dati ora include campi specifici per gli errori. ---
 class _VarRowData {
   final TextEditingController name = TextEditingController();
   final TextEditingController init = TextEditingController();

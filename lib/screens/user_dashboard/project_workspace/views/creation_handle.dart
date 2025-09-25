@@ -7,7 +7,6 @@ import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:file_repository/file_repository.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
-
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
@@ -40,21 +39,20 @@ class _CreationHandleState extends State<CreationHandle>
   late Animation<double> _panelAnimation;
 
   static const double handleSize = 24.0;
-  static const double _buttonHeight = 44.0; // altezza più compatta per ogni voce
-  static const double panelHeight = (_buttonHeight * 5) + (4 * 1.0); // 5 bottoni + 4 divisori (linee da 1px)
   static const double panelWidth = 180.0;
   static const double panelGap = 12.0;
+  static const double panelHeight = (NodeCreationPanel.buttonHeight * 5) + (4 * 1.0);
 
   @override
   void initState() {
     super.initState();
     _panelAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 220),
       vsync: this,
     );
     _panelAnimation = CurvedAnimation(
       parent: _panelAnimationController,
-      curve: Curves.easeOut,
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -76,7 +74,7 @@ class _CreationHandleState extends State<CreationHandle>
     });
   }
 
-  void _closePanel() {
+  void _closePanelOnAction() {
     if (_showPanel) {
       _togglePanel();
     }
@@ -85,84 +83,54 @@ class _CreationHandleState extends State<CreationHandle>
   @override
   Widget build(BuildContext context) {
     final handleCenter = _getHandleCenter();
+    final handleTopLeft = Offset(
+      handleCenter.dx - (handleSize / 2),
+      handleCenter.dy - (handleSize / 2),
+    );
 
-    // --- NUOVA LOGICA DI LAYOUT ---
+    final bool opensUpwards = widget.direction == HandleDirection.bottom &&
+        (widget.canvasConstraints.maxHeight - (handleTopLeft.dy + handleSize) < panelHeight + panelGap);
 
-    // 1. Determina se il pannello deve aprirsi verso l'alto
-    final spaceBelow = widget.canvasConstraints.maxHeight - (handleCenter.dy + handleSize / 2 + panelGap);
-    final opensUpwards = spaceBelow < panelHeight && widget.direction == HandleDirection.bottom;
+    final double panelTop = opensUpwards
+        ? handleTopLeft.dy - panelHeight - panelGap
+        : handleTopLeft.dy + handleSize + panelGap;
 
-    // 2. Calcola la dimensione e la posizione di un'area di interazione che contenga
-    //    sia l'handle che il pannello, per garantire che tutto sia cliccabile.
-    final double areaWidth = panelWidth;
-    final double areaHeight = panelHeight + handleSize + panelGap;
+    final double panelLeft = handleCenter.dx - (panelWidth / 2);
 
-    double areaLeft = handleCenter.dx - (areaWidth / 2);
-    double areaTop = opensUpwards
-        ? handleCenter.dy + handleSize / 2 - areaHeight
-        : handleCenter.dy - handleSize / 2;
-
-    // 3. Calcola le posizioni RELATIVE dell'handle e del pannello dentro questa area
-    final double handleTopRelative = opensUpwards ? areaHeight - handleSize : 0;
-    final double handleLeftRelative = (areaWidth / 2) - (handleSize / 2);
-    final double panelTopRelative = opensUpwards ? 0 : handleSize + panelGap;
     final Alignment transitionAlignment = opensUpwards ? Alignment.bottomCenter : Alignment.topCenter;
 
-    return Positioned(
-      left: areaLeft,
-      top: areaTop,
-      width: areaWidth,
-      height: areaHeight,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Pannello
-          if (_showPanel)
-            Positioned(
-              top: panelTopRelative,
-              left: 0,
-              width: panelWidth,
-              child: _buildPanel(transitionAlignment),
-            ),
-
-          // Handle "+"
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        if (_showPanel)
           Positioned(
-            left: handleLeftRelative,
-            top: handleTopRelative,
-            child: GestureDetector(
-              onTap: _togglePanel,
-              child: Container(
-                width: handleSize,
-                height: handleSize,
-                decoration: BoxDecoration(
-                  color: _showPanel
-                      ? CupertinoColors.systemGrey
-                      : Theme.of(context).colorScheme.primary,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  transitionBuilder: (child, animation) =>
-                      ScaleTransition(scale: animation, child: child),
-                  child: Icon(
-                    _showPanel ? Icons.remove : Icons.add,
-                    key: ValueKey<bool>(_showPanel),
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
+            left: panelLeft,
+            top: panelTop,
+            child: _buildPanel(transitionAlignment),
+          ),
+        Positioned(
+          left: handleTopLeft.dx,
+          top: handleTopLeft.dy,
+          child: GestureDetector(
+            onTap: _togglePanel,
+            child: Container(
+              width: handleSize,
+              height: handleSize,
+              decoration: BoxDecoration(
+                color: _showPanel ? Colors.grey.shade600 : Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+                boxShadow: [ BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6, offset: const Offset(0, 2)) ],
+              ),
+              child: AnimatedRotation(
+                turns: _showPanel ? 0.125 : 0,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                child: const Icon(Icons.add, color: Colors.white, size: 18),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -173,7 +141,7 @@ class _CreationHandleState extends State<CreationHandle>
         scale: _panelAnimation,
         alignment: alignment,
         child: NodeCreationPanel(
-          onNodeCreated: _closePanel,
+          onNodeCreated: _closePanelOnAction,
           sourceNodeId: widget.sourceNode.id,
           canvasConstraints: widget.canvasConstraints,
           fromPort: _resolvePort(),
@@ -186,14 +154,10 @@ class _CreationHandleState extends State<CreationHandle>
     final node = widget.sourceNode;
     const gap = 8.0;
     switch (widget.direction) {
-      case HandleDirection.bottom:
-        return Offset(node.x + node.width / 2, node.y + node.height + gap + (handleSize / 2));
-      case HandleDirection.top:
-        return Offset(node.x + node.width / 2, node.y - gap - (handleSize / 2));
-      case HandleDirection.left:
-        return Offset(node.x - gap - (handleSize / 2), node.y + node.height / 2);
-      case HandleDirection.right:
-        return Offset(node.x + node.width + gap + (handleSize / 2), node.y + node.height / 2);
+      case HandleDirection.bottom: return Offset(node.x + node.width / 2, node.y + node.height + gap + (handleSize / 2));
+      case HandleDirection.top: return Offset(node.x + node.width / 2, node.y - gap - (handleSize / 2));
+      case HandleDirection.left: return Offset(node.x - gap - (handleSize / 2), node.y + node.height / 2);
+      case HandleDirection.right: return Offset(node.x + node.width + gap + (handleSize / 2), node.y + node.height / 2);
     }
   }
 
@@ -209,13 +173,13 @@ class _CreationHandleState extends State<CreationHandle>
   }
 }
 
-
-// La classe NodeCreationPanel rimane invariata
 class NodeCreationPanel extends StatelessWidget {
   final String sourceNodeId;
   final VoidCallback onNodeCreated;
   final BoxConstraints canvasConstraints;
   final String? fromPort;
+
+  static const double buttonHeight = 44.0;
 
   const NodeCreationPanel({
     super.key,
@@ -225,86 +189,35 @@ class NodeCreationPanel extends StatelessWidget {
     this.fromPort,
   });
 
-
-  /// Gestisce la creazione di un nuovo nodo o il collegamento a un nodo 'End' esistente.
+  // **FIX**: Implementata la logica completa per chiamare i dialoghi e il BLoC.
   void _createNode(BuildContext context, FlowNodeKind kind) async {
     try {
       final bloc = context.read<FlowchartBloc>();
       final flowState = bloc.state;
 
       if (kind == FlowNodeKind.end && flowState is FlowchartLoaded) {
-        final bool alreadyHasEndNode = flowState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
-        if (alreadyHasEndNode) {
-          final bool? wantsToLink = await AppDialogs.showConfirmationDialog(
-            context,
-            title: 'Nodo Fine Esistente',
-            message: 'Esiste già un nodo Fine. Vuoi creare un collegamento a quest\'ultimo?',
-            confirmText: 'Collega',
-            cancelText: 'Annulla',
-          );
-          if (wantsToLink == true) {
-            bloc.add(LinkToExistingEnd(fromNodeId: sourceNodeId, fromPort: fromPort));
-          }
-        } else {
-          bloc.add(AddNode(
-            kind: FlowNodeKind.end,
-            fromNodeId: sourceNodeId,
-            fromPort: fromPort,
-            canvasConstraints: canvasConstraints,
-            initialData: const {'text': 'Fine'},
-          ));
+        final hasEndNode = flowState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
+        if (hasEndNode) {
+          bloc.add(LinkToExistingEnd(fromNodeId: sourceNodeId, fromPort: fromPort));
+          return;
         }
-        return;
       }
 
       List<MyFile>? filesForProcess;
-      List<Map<String,String>>? decisionVariables;
+      List<Map<String, String>>? decisionVariables;
+
       if (kind == FlowNodeKind.process) {
         final fsState = context.read<FileSystemBloc>().state;
         if (fsState is FileSystemLoaded) {
-          final activeId = fsState.activeFileId;
-          final filtered = fsState.files.where((f) => f.fileId != activeId).toList();
-          if (filtered.isEmpty) {
-            await AppDialogs.showInfoDialog(
-              context,
-              title: 'Nessun altro file disponibile',
-              message: 'Per creare un nodo di processo devi avere almeno un altro file diverso da quello attivo.',
-            );
-            return;
-          }
-          filesForProcess = filtered;
-        } else {
-          await AppDialogs.showInfoDialog(
-            context,
-            title: 'File non pronti',
-            message: 'Attendi il caricamento dei file prima di creare un nodo di processo.',
-          );
-          return;
+          filesForProcess = fsState.files.where((f) => f.fileId != fsState.activeFileId).toList();
         }
       }
+
       if (kind == FlowNodeKind.decision) {
         if (flowState is FlowchartLoaded) {
-          final vars = <Map<String,String>>[];
-          final seen = <String>{};
-            for (final n in flowState.flowchart.nodes) {
-              if (n.kind == FlowNodeKind.input) {
-                final input = n as InputNode;
-                for (final d in input.declarations) {
-                  if (!seen.contains(d.name)) { // evita duplicati per nome
-                    seen.add(d.name);
-                    vars.add({'name': d.name, 'type': d.dataType});
-                  }
-                }
-              }
-            }
-          decisionVariables = vars;
-        } else {
-          await AppDialogs.showInfoDialog(
-            context,
-            title: 'Diagramma non pronto',
-            message: 'Le variabili non sono ancora disponibili. Riprova fra poco.',
-          );
-          return;
+          decisionVariables = flowState.flowchart.variables
+              .map((v) => {'name': v.name, 'type': v.dataType})
+              .toList();
         }
       }
 
@@ -328,67 +241,33 @@ class NodeCreationPanel extends StatelessWidget {
       onNodeCreated();
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(14.0),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+        filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
         child: Container(
-          width: 180,
+          width: _CreationHandleState.panelWidth,
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withAlpha((0.92 * 255).round()),
+            color: theme.colorScheme.surface.withAlpha(235),
             borderRadius: BorderRadius.circular(14.0),
-            border: Border.all(
-              color: theme.colorScheme.onSurface.withAlpha((0.08 * 255).round()),
-              width: 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(25),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.1)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ShapeButton(
-                icon: FontAwesomeIcons.download,
-                label: 'Input',
-                textColor: theme.colorScheme.onSurface,
-                onPressed: () => _createNode(context, FlowNodeKind.input),
-              ),
+              ShapeButton(icon: FontAwesomeIcons.download, label: 'Input', onPressed: () => _createNode(context, FlowNodeKind.input)),
               const _Divider(),
-              ShapeButton(
-                icon: FontAwesomeIcons.upload,
-                label: 'Output',
-                textColor: theme.colorScheme.onSurface,
-                onPressed: () => _createNode(context, FlowNodeKind.output),
-              ),
+              ShapeButton(icon: FontAwesomeIcons.upload, label: 'Output', onPressed: () => _createNode(context, FlowNodeKind.output)),
               const _Divider(),
-              ShapeButton(
-                icon: FontAwesomeIcons.gear,
-                label: 'Processo',
-                textColor: theme.colorScheme.onSurface,
-                onPressed: () => _createNode(context, FlowNodeKind.process),
-              ),
+              ShapeButton(icon: FontAwesomeIcons.gear, label: 'Processo', onPressed: () => _createNode(context, FlowNodeKind.process)),
               const _Divider(),
-              ShapeButton(
-                icon: FontAwesomeIcons.codeBranch,
-                label: 'Condizione',
-                textColor: theme.colorScheme.onSurface,
-                onPressed: () => _createNode(context, FlowNodeKind.decision),
-              ),
+              ShapeButton(icon: FontAwesomeIcons.codeBranch, label: 'Condizione', onPressed: () => _createNode(context, FlowNodeKind.decision)),
               const _Divider(),
-              ShapeButton(
-                icon: FontAwesomeIcons.flagCheckered,
-                label: 'Fine',
-                textColor: theme.colorScheme.onSurface,
-                onPressed: () => _createNode(context, FlowNodeKind.end),
-              ),
+              ShapeButton(icon: FontAwesomeIcons.flagCheckered, label: 'Fine', onPressed: () => _createNode(context, FlowNodeKind.end)),
             ],
           ),
         ),
@@ -401,14 +280,12 @@ class ShapeButton extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
-  final Color? textColor;
 
   const ShapeButton({
     super.key,
     required this.icon,
     required this.label,
     required this.onPressed,
-    this.textColor,
   });
 
   @override
@@ -416,51 +293,41 @@ class ShapeButton extends StatefulWidget {
 }
 
 class _ShapeButtonState extends State<ShapeButton> {
-  bool _hovering = false;
+  bool _isHovering = false;
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = widget.textColor ?? CupertinoColors.activeBlue;
-    final bgColor = _hovering
-        ? effectiveColor.withOpacity(0.08)
-        : Colors.transparent;
+    final theme = Theme.of(context);
+    final bgColor = _isHovering ? theme.colorScheme.onSurface.withOpacity(0.08) : Colors.transparent;
+
     return SizedBox(
       width: double.infinity,
-      height: _CreationHandleState._buttonHeight,
+      height: NodeCreationPanel.buttonHeight,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovering = true),
-        onExit: (_) => setState(() => _hovering = false),
+        onEnter: (_) => setState(() => _isHovering = true),
+        onExit: (_) => setState(() => _isHovering = false),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-            onTap: widget.onPressed,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              curve: Curves.easeOut,
-              decoration: BoxDecoration(
-                color: bgColor,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.label,
-                      style: TextStyle(
-                        color: effectiveColor,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.1,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            color: bgColor,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface),
                   ),
-                  Icon(widget.icon, size: 18, color: effectiveColor),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Icon(widget.icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+              ],
             ),
           ),
+        ),
       ),
     );
   }
@@ -473,7 +340,7 @@ class _Divider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 1,
-      color: CupertinoColors.systemGrey4.withOpacity(0.5),
+      color: Theme.of(context).dividerColor.withOpacity(0.5),
     );
   }
 }

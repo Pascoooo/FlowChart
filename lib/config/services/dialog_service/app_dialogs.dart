@@ -84,7 +84,6 @@ class AppDialogs {
 
   // --- Dialoghi per Editor Nodi ---
 
-  /// Mostra il dialogo corretto per la creazione dei dati di un nuovo nodo, in base al tipo.
   static Future<Map<String, dynamic>?> showNodeCreationDialog({
     required BuildContext context,
     required FlowNodeKind kind,
@@ -101,22 +100,19 @@ class AppDialogs {
       case FlowNodeKind.decision:
         return showDecisionNodeDialog(context, variables: variables ?? const []);
       case FlowNodeKind.start:
+        return Future.value({'text': 'Inizio'});
       case FlowNodeKind.end:
-        return Future.value({'text': kind.toString().split('.').last});
+        return Future.value({'text': 'Fine'});
     }
   }
 
-  /// Mostra un dialogo con i dettagli di un nodo esistente.
   static Future<void> showNodeDetailsDialog({
     required BuildContext context,
     required FlowNode node,
-  }) {
-    return node_info.showNodeDetailsDialog(context: context, node: node);
+  }) async {
+    // return node_info.showNodeDetailsDialog(context: context, node: node);
   }
 
-  // ... [Le altre sezioni (Condivisione, Recupero, Banner) rimangono invariate] ...
-
-  // --- Dialoghi di Condivisione & Esportazione ---
 
   static Future<void> showExportLocationDialog({
     required BuildContext context,

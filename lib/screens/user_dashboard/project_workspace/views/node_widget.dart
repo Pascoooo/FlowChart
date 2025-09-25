@@ -1,9 +1,6 @@
-// lib/screens/user_dashboard/project_workspace/views/node_widget.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
-
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
@@ -13,20 +10,18 @@ class NodeWidget extends StatefulWidget {
   final FlowNode node;
   final BoxConstraints canvasConstraints;
   final bool isSelected;
-  final bool isReadOnly; // <-- MODIFICA: Aggiunto flag
+  final bool isReadOnly;
 
   const NodeWidget({
+    required Key key,
     required this.node,
     required this.canvasConstraints,
     required this.isSelected,
-    required Key key,
-    this.isReadOnly = false, // <-- MODIFICA: Default a false
+    this.isReadOnly = false,
   }) : super(key: key);
 
   @override
-  State<StatefulWidget> createState() {
-    return _NodeWidgetState();
-  }
+  State<StatefulWidget> createState() => _NodeWidgetState();
 }
 
 class _NodeWidgetState extends State<NodeWidget> {
@@ -49,15 +44,8 @@ class _NodeWidgetState extends State<NodeWidget> {
     }
   }
 
-  double _clampX(double x, double width) {
-    const padding = 10.0;
-    return x.clamp(padding, widget.canvasConstraints.maxWidth - width - padding);
-  }
-
-  double _clampY(double y, double height) {
-    const padding = 10.0;
-    return y.clamp(padding, widget.canvasConstraints.maxHeight - height - padding);
-  }
+  double _clampX(double x) => x.clamp(10.0, widget.canvasConstraints.maxWidth - widget.node.width - 10.0);
+  double _clampY(double y) => y.clamp(10.0, widget.canvasConstraints.maxHeight - widget.node.height - 10.0);
 
   @override
   Widget build(BuildContext context) {
@@ -65,58 +53,51 @@ class _NodeWidgetState extends State<NodeWidget> {
 
     return Positioned(
       left: _dragPosition.dx,
-      top: _dragPosition.dy - topPaddingForButton,
+      top: _dragPosition.dy,
       width: widget.node.width,
-      height: widget.node.height + topPaddingForButton,
+      height: widget.node.height,
       child: Stack(
-        alignment: Alignment.topCenter,
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
         children: [
-          Positioned(
-            bottom: 0,
-            child: GestureDetector(
-              // <-- MODIFICA: Se in sola lettura, l'onTap è disabilitato (null) -->
-              onTap: widget.isReadOnly ? null : () {
-                if (!widget.isSelected) {
-                  context.read<FlowchartBloc>().add(SelectNode(widget.node.id));
-                }
-              },
-              behavior: HitTestBehavior.opaque,
-              // <-- MODIFICA: Se in sola lettura, il trascinamento è disabilitato -->
-              onPanStart: widget.isReadOnly || !widget.isSelected ? null : (details) => setState(() => _isDragging = true),
-              onPanUpdate: widget.isReadOnly || !widget.isSelected ? null : (details) {
-                setState(() {
-                  _dragPosition = Offset(
-                    _clampX(_dragPosition.dx + details.delta.dx, widget.node.width),
-                    _clampY(_dragPosition.dy + details.delta.dy, widget.node.height),
-                  );
-                });
-              },
-              onPanEnd: widget.isReadOnly || !widget.isSelected ? null : (details) {
-                final oldPosition = Offset(widget.node.x, widget.node.y);
-                setState(() => _isDragging = false);
-                context.read<FlowchartBloc>().add(
-                  UpdateNodePosition(
-                    nodeId: widget.node.id,
-                    newX: _dragPosition.dx,
-                    newY: _dragPosition.dy,
-                    oldX: oldPosition.dx,
-                    oldY: oldPosition.dy,
-                  ),
+          GestureDetector(
+            onTap: widget.isReadOnly ? null : () {
+              if (!widget.isSelected) {
+                context.read<FlowchartBloc>().add(SelectNode(widget.node.id));
+              }
+            },
+            behavior: HitTestBehavior.opaque,
+            onPanStart: widget.isReadOnly || !widget.isSelected ? null : (details) => setState(() => _isDragging = true),
+            onPanUpdate: widget.isReadOnly || !widget.isSelected ? null : (details) {
+              setState(() {
+                _dragPosition = Offset(
+                  _clampX(_dragPosition.dx + details.delta.dx),
+                  _clampY(_dragPosition.dy + details.delta.dy),
                 );
-              },
-              child: MouseRegion(
-                // <-- MODIFICA: Il cursore non diventa "move" in sola lettura -->
-                cursor: widget.isReadOnly ? SystemMouseCursors.basic : (widget.isSelected ? SystemMouseCursors.move : SystemMouseCursors.click),
-                child: NodeRenderer(
-                  node: widget.node,
-                  isSelected: widget.isSelected,
+              });
+            },
+            onPanEnd: widget.isReadOnly || !widget.isSelected ? null : (details) {
+              setState(() => _isDragging = false);
+              context.read<FlowchartBloc>().add(
+                UpdateNodePosition(
+                  nodeId: widget.node.id,
+                  newX: _dragPosition.dx,
+                  newY: _dragPosition.dy,
+                  oldX: widget.node.x,
+                  oldY: widget.node.y,
                 ),
+              );
+            },
+            child: MouseRegion(
+              cursor: widget.isReadOnly ? SystemMouseCursors.basic : (widget.isSelected ? SystemMouseCursors.move : SystemMouseCursors.click),
+              child: NodeRenderer(
+                node: widget.node,
+                isSelected: widget.isSelected,
               ),
             ),
           ),
-          // <-- Il pulsante occhio rimane sempre visibile e funzionante -->
           Positioned(
-            top: 0,
+            top: -topPaddingForButton,
             child: AnimatedOpacity(
               opacity: widget.isSelected ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 200),
@@ -124,10 +105,7 @@ class _NodeWidgetState extends State<NodeWidget> {
                 ignoring: !widget.isSelected,
                 child: _EyeButton(
                   onTap: () {
-                    AppDialogs.showNodeDetailsDialog(
-                      context: context,
-                      node: widget.node,
-                    );
+                    AppDialogs.showNodeDetailsDialog(context: context, node: widget.node);
                   },
                 ),
               ),
@@ -138,6 +116,7 @@ class _NodeWidgetState extends State<NodeWidget> {
     );
   }
 }
+
 class _EyeButton extends StatelessWidget {
   final VoidCallback onTap;
   const _EyeButton({required this.onTap});
@@ -145,10 +124,10 @@ class _EyeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+      color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
       shape: const CircleBorder(),
       elevation: 4.0,
-      shadowColor: Colors.black.withOpacity(0.3),
+      shadowColor: Colors.black.withOpacity(0.2),
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
@@ -165,7 +144,6 @@ class _EyeButton extends StatelessWidget {
   }
 }
 
-// La classe NodeRenderer rimane invariata
 class NodeRenderer extends StatelessWidget {
   final FlowNode node;
   final bool isSelected;
@@ -175,68 +153,44 @@ class NodeRenderer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     final textStyle = TextStyle(
-      fontSize: 12,
-      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-      color: Colors.black87,
+      fontSize: 13,
+      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
     );
     final borderColor = isSelected ? theme.colorScheme.primary : Colors.blueGrey.shade300;
     final borderWidth = isSelected ? 2.5 : 1.5;
+    const fillColor = Colors.white;
+
     Widget nodeContent;
 
+    // **FIX**: Ripristinata la struttura corretta. Il testo ora è DENTRO il CustomPaint.
     switch (node.kind) {
       case FlowNodeKind.decision:
         nodeContent = CustomPaint(
-          painter: DiamondPainter(
-            color: Colors.white,
-            borderColor: borderColor,
-            strokeWidth: borderWidth,
-          ),
-          child: SizedBox(
-            width: node.width,
-            height: node.height,
-            child: Center(
-              child: Text(node.text, textAlign: TextAlign.center, style: textStyle),
-            ),
-          ),
-        );
-        break;
-      case FlowNodeKind.input:
-        nodeContent = CustomPaint(
-          painter: ParallelogramPainter(
-            fillColor: Colors.white,
-            borderColor: borderColor,
-            strokeWidth: borderWidth,
-            reversed: false,
-            drawShadow: isSelected,
-          ),
+          painter: DiamondPainter(color: fillColor, borderColor: borderColor, strokeWidth: borderWidth),
           child: SizedBox(
             width: node.width,
             height: node.height,
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Text(node.text, textAlign: TextAlign.center, style: textStyle, maxLines: 3, overflow: TextOverflow.ellipsis),
+                padding: const EdgeInsets.all(8.0),
+                child: Text(node.text, textAlign: TextAlign.center, style: textStyle),
               ),
             ),
           ),
         );
         break;
+      case FlowNodeKind.input:
       case FlowNodeKind.output:
         nodeContent = CustomPaint(
-          painter: ParallelogramPainter(
-            fillColor: Colors.white,
-            borderColor: borderColor,
-            strokeWidth: borderWidth,
-            reversed: true,
-            drawShadow: isSelected,
-          ),
+          painter: ParallelogramPainter(fillColor: fillColor, borderColor: borderColor, strokeWidth: borderWidth, reversed: node.kind == FlowNodeKind.output),
           child: SizedBox(
             width: node.width,
             height: node.height,
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Text(node.text, textAlign: TextAlign.center, style: textStyle, maxLines: 3, overflow: TextOverflow.ellipsis),
               ),
             ),
@@ -248,30 +202,14 @@ class NodeRenderer extends StatelessWidget {
           width: node.width,
           height: node.height,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(
-              (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 8,
-            ),
+            color: fillColor,
+            borderRadius: BorderRadius.circular((node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 8),
             border: Border.all(color: borderColor, width: borderWidth),
-            boxShadow: [
-              BoxShadow(
-                color: isSelected
-                    ? theme.colorScheme.primary.withAlpha(76)
-                    : Colors.black12,
-                blurRadius: isSelected ? 10 : 5,
-                offset: Offset(0, isSelected ? 5 : 3),
-              ),
-            ],
+            boxShadow: [ if (isSelected) BoxShadow(color: theme.colorScheme.primary.withOpacity(0.25), blurRadius: 8) ],
           ),
           alignment: Alignment.center,
           padding: const EdgeInsets.all(8),
-          child: Text(
-            node.text,
-            textAlign: TextAlign.center,
-            style: textStyle,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
+          child: Text(node.text, textAlign: TextAlign.center, style: textStyle, maxLines: 3, overflow: TextOverflow.ellipsis),
         );
     }
     return AnimatedContainer(

@@ -305,7 +305,6 @@ class _StaticNode extends StatelessWidget {
             borderColor: borderColor,
             strokeWidth: borderWidth,
             reversed: false,
-            drawShadow: false,
           ),
           child: SizedBox(
             width: node.width,
@@ -331,7 +330,6 @@ class _StaticNode extends StatelessWidget {
             borderColor: borderColor,
             strokeWidth: borderWidth,
             reversed: true,
-            drawShadow: false,
           ),
           child: SizedBox(
             width: node.width,
