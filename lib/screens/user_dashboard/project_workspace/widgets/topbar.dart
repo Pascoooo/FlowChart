@@ -7,6 +7,7 @@ import 'package:project_repository/project_repository.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
+import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
@@ -79,6 +80,7 @@ class _TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
             if (state is FileSystemLoaded) {
               child = _AdvancedTopBar(
                 state: state,
+                selectedProjectId: widget.selectedProject.projectId,
                 selectedProjectName: widget.selectedProject.name,
                 onEdit: widget.onEdit,
                 onExport: widget.onExport,
@@ -171,15 +173,17 @@ class _SimpleTopBar extends StatelessWidget {
 
 class _AdvancedTopBar extends StatelessWidget {
   final FileSystemLoaded state;
+  final String selectedProjectId;
   final String selectedProjectName;
   final VoidCallback onEdit;
   final VoidCallback onExport;
   final Animation<double> animation;
-  final bool isReadOnly; // <-- già dichiarato sopra ma ora lo manteniamo
+  final bool isReadOnly;
   final VoidCallback? onLeave;
 
   const _AdvancedTopBar({
     required this.state,
+    required this.selectedProjectId,
     required this.selectedProjectName,
     required this.onEdit,
     required this.onExport,
@@ -187,7 +191,6 @@ class _AdvancedTopBar extends StatelessWidget {
     this.isReadOnly = false,
     this.onLeave,
   });
-
 
   Future<void> _resetFlowchart(BuildContext context) async {
     final bool? confirmed = await AppDialogs.showConfirmationDialog(
@@ -221,7 +224,7 @@ class _AdvancedTopBar extends StatelessWidget {
     final theme = Theme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double minWidthForCenterActions = 750.0;
+        const double minWidthForCenterActions = 800.0;
         final bool showCenterActions =
             constraints.maxWidth >= minWidthForCenterActions;
 
@@ -247,7 +250,6 @@ class _AdvancedTopBar extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // BLOCCO SINISTRA: back + breadcrumb
                   Flexible(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -282,10 +284,13 @@ class _AdvancedTopBar extends StatelessWidget {
                       return const SizedBox.shrink();
                     }
 
-                    final selectedNode = flowchartState.getNodeById(flowchartState.selectedNodeId ?? '');
+                    final selectedNode = flowchartState
+                        .getNodeById(flowchartState.selectedNodeId ?? '');
                     final isDeletionEnabled = selectedNode != null &&
                         selectedNode.kind != FlowNodeKind.start &&
-                        flowchartState.getOutgoingEdges(selectedNode.id).isEmpty;
+                        flowchartState
+                            .getOutgoingEdges(selectedNode.id)
+                            .isEmpty;
 
                     return _AnimatedFlowchartActions(
                       animation: animation,
@@ -293,6 +298,8 @@ class _AdvancedTopBar extends StatelessWidget {
                       selectedNodeId: flowchartState.selectedNodeId,
                       isDeletionEnabled: isDeletionEnabled,
                       onDeleteSelected: _deleteSelected,
+                      projectId: selectedProjectId,
+                      activeFileId: state.activeFileId,
                     );
                   },
                 ),
@@ -310,6 +317,8 @@ class _AnimatedFlowchartActions extends StatelessWidget {
   final void Function(BuildContext) onReset;
   final String? selectedNodeId;
   final void Function(BuildContext, String nodeId) onDeleteSelected;
+  final String projectId;
+  final String? activeFileId;
 
   const _AnimatedFlowchartActions({
     required this.isDeletionEnabled,
@@ -317,6 +326,8 @@ class _AnimatedFlowchartActions extends StatelessWidget {
     required this.onReset,
     this.selectedNodeId,
     required this.onDeleteSelected,
+    required this.projectId,
+    this.activeFileId,
   });
 
   @override
@@ -339,15 +350,29 @@ class _AnimatedFlowchartActions extends StatelessWidget {
         onPressed: () => onReset(context),
         interval: const Interval(0.7, 1.0),
       ),
+      // Pulsante Esegui/Play
+      _buildAnimatedButton(
+        context: context,
+        tooltip: 'Esegui Flowchart',
+        icon: Icons.play_arrow_rounded,
+        onPressed: activeFileId != null
+            ? () {
+          context.read<FileSystemBloc>().add(ExecuteActiveFile(
+            projectId: projectId,
+            fileId: activeFileId!,
+          ));
+        }
+            : null, // Disabilitato se nessun file è attivo
+        interval: const Interval(0.8, 1.0),
+      ),
     ];
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(buttons.length, (index) {
-        if (index == 0) return buttons[index];
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [const SizedBox(width: 8), buttons[index]],
+        return Padding(
+          padding: EdgeInsets.only(left: index > 0 ? 8.0 : 0.0),
+          child: buttons[index],
         );
       }),
     );
@@ -460,14 +485,16 @@ class UndoRedoControls extends StatelessWidget {
           icon: Icons.undo_rounded,
           tooltip: 'Annulla',
           enabled: canUndo,
-          onPressed: canUndo ? () => context.read<FlowchartBloc>().add(const Undo()) : null,
+          onPressed:
+          canUndo ? () => context.read<FlowchartBloc>().add(const Undo()) : null,
         ),
         const SizedBox(width: 4),
         _UndoRedoButton(
           icon: Icons.redo_rounded,
           tooltip: 'Ripeti',
           enabled: canRedo,
-          onPressed: canRedo ? () => context.read<FlowchartBloc>().add(const Redo()) : null,
+          onPressed:
+          canRedo ? () => context.read<FlowchartBloc>().add(const Redo()) : null,
         ),
       ],
     );

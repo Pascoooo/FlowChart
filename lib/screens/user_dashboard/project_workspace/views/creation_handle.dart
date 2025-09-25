@@ -204,7 +204,8 @@ class NodeCreationPanel extends StatelessWidget {
       }
 
       List<MyFile>? filesForProcess;
-      List<Map<String, String>>? decisionVariables;
+      // --- MODIFICA: La lista ora è di tipo VariableDeclaration e ha un nome generico ---
+      List<VariableDeclaration>? variablesForDialog;
 
       if (kind == FlowNodeKind.process) {
         final fsState = context.read<FileSystemBloc>().state;
@@ -213,11 +214,11 @@ class NodeCreationPanel extends StatelessWidget {
         }
       }
 
-      if (kind == FlowNodeKind.decision) {
+      // --- MODIFICA: Popoliamo la lista per entrambi i tipi di nodo, Decision e Output ---
+      if (kind == FlowNodeKind.decision || kind == FlowNodeKind.output) {
         if (flowState is FlowchartLoaded) {
-          decisionVariables = flowState.flowchart.variables
-              .map((v) => {'name': v.name, 'type': v.dataType})
-              .toList();
+          // Usiamo direttamente la lista di variabili dal BLoC
+          variablesForDialog = flowState.flowchart.variables;
         }
       }
 
@@ -225,7 +226,7 @@ class NodeCreationPanel extends StatelessWidget {
         context: context,
         kind: kind,
         files: filesForProcess,
-        variables: decisionVariables,
+        variables: variablesForDialog, // Passiamo la lista corretta
       );
 
       if (nodeData != null) {

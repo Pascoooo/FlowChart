@@ -53,3 +53,14 @@ class RenameFile extends FileSystemEvent {
   @override
   List<Object> get props => [projectId, fileId, newName];
 }
+
+/// Richiede l'esecuzione/interpretazione del file attualmente attivo.
+class ExecuteActiveFile extends FileSystemEvent {
+  final String projectId;
+  final String fileId;
+
+  const ExecuteActiveFile({required this.projectId, required this.fileId});
+
+  @override
+  List<Object> get props => [projectId, fileId];
+}

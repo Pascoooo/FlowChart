@@ -88,19 +88,29 @@ class AppDialogs {
     required BuildContext context,
     required FlowNodeKind kind,
     List<MyFile>? files,
-    List<Map<String, String>>? variables,
+    List<VariableDeclaration>? variables, // Tipo di dato aggiornato
   }) {
     switch (kind) {
       case FlowNodeKind.input:
         return showInputNodeDialog(context);
+
       case FlowNodeKind.output:
-        return showOutputNodeDialog(context);
+      // Ora riceve la lista corretta e la passa direttamente
+        return showOutputNodeDialog(context, availableVariables: variables ?? const []);
+
       case FlowNodeKind.process:
         return showProcessNodeDialog(context, files: files ?? const []);
+
       case FlowNodeKind.decision:
-        return showDecisionNodeDialog(context, variables: variables ?? const []);
+      // --- MODIFICA: Convertiamo i dati nel formato richiesto dal Decision Dialog ---
+        final decisionVars = (variables ?? [])
+            .map((v) => {'name': v.name, 'type': v.dataType})
+            .toList();
+        return showDecisionNodeDialog(context, variables: decisionVars);
+
       case FlowNodeKind.start:
         return Future.value({'text': 'Inizio'});
+
       case FlowNodeKind.end:
         return Future.value({'text': 'Fine'});
     }

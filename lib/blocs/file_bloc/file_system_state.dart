@@ -58,3 +58,15 @@ class FileSystemLoaded extends FileSystemState {
   @override
   List<Object?> get props => [files, activeFileId, error, isLoading];
 }
+
+/// Stato "side-effect" per comunicare alla UI di mostrare un dialogo
+/// con il contenuto JSON del flowchart da eseguire.
+class ShowExecutionJsonDialog extends FileSystemState {
+  final String formattedJson;
+  final String fileName;
+
+  const ShowExecutionJsonDialog({required this.formattedJson, required this.fileName});
+
+  @override
+  List<Object?> get props => [formattedJson, fileName];
+}

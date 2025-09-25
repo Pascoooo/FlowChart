@@ -26,13 +26,18 @@ class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
   final bool isReadOnly; // nuovo flag per vista condivisa/sola lettura
   final VoidCallback? onLeave; // callback per tornare ai progetti
-  const ProjectWorkspace({super.key, required this.selectedProject, this.isReadOnly = false, this.onLeave});
+  const ProjectWorkspace(
+      {super.key,
+        required this.selectedProject,
+        this.isReadOnly = false,
+        this.onLeave});
 
   @override
   State<ProjectWorkspace> createState() => _ProjectWorkspaceState();
 }
 
-class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProviderStateMixin {
+class _ProjectWorkspaceState extends State<ProjectWorkspace>
+    with TickerProviderStateMixin {
   final GlobalKey _workareaKey = GlobalKey();
   late AnimationController _slideInController;
   late Animation<Offset> _sidebarSlideAnimation;
@@ -59,16 +64,23 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
-    _sidebarSlideAnimation = Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _slideInController, curve: Curves.easeOutCubic));
-    _topbarSlideAnimation = Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _slideInController, curve: Curves.easeOutCubic));
-    _workareaSlideAnimation = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _slideInController, curve: Curves.easeOutCubic));
-    _workareaScaleAnimation = Tween<double>(begin: 0.9, end: 1.0)
-        .animate(CurvedAnimation(parent: _slideInController, curve: Curves.easeOutCubic));
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0)
-        .animate(CurvedAnimation(parent: _slideInController, curve: const Interval(0.4, 1.0, curve: Curves.easeIn)));
+    _sidebarSlideAnimation = Tween<Offset>(
+        begin: const Offset(-1, 0), end: Offset.zero)
+        .animate(CurvedAnimation(
+        parent: _slideInController, curve: Curves.easeOutCubic));
+    _topbarSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(
+            CurvedAnimation(
+                parent: _slideInController, curve: Curves.easeOutCubic));
+    _workareaSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(
+            CurvedAnimation(
+                parent: _slideInController, curve: Curves.easeOutCubic));
+    _workareaScaleAnimation = Tween<double>(begin: 0.9, end: 1.0).animate(
+        CurvedAnimation(parent: _slideInController, curve: Curves.easeOutCubic));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
+        parent: _slideInController,
+        curve: const Interval(0.4, 1.0, curve: Curves.easeIn)));
   }
 
   @override
@@ -102,9 +114,11 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
     }
     final String path = Uri.base.toString().split('#')[0];
     final Uri url = Uri.parse('$path#/drawing-editor');
-    html.WindowBase popup = html.window.open(url.toString(), 'editor', 'width=1200,height=800');
+    html.WindowBase popup =
+    html.window.open(url.toString(), 'editor', 'width=1200,height=800');
     if (popup.closed ?? true) {
-      BannerService.showError(context, 'Popup bloccati. Abilita i popup per continuare.');
+      BannerService.showError(
+          context, 'Popup bloccati. Abilita i popup per continuare.');
     }
   }
 
@@ -114,7 +128,9 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
       final fileName = _getCurrentFileName(fileState);
       final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
       if (pngBytes == null) {
-        if (mounted) BannerService.showError(context, "Errore durante la creazione dell'immagine.");
+        if (mounted)
+          BannerService.showError(
+              context, "Errore durante la creazione dell'immagine.");
         return;
       }
       final settingsProvider = innerContext.read<SettingsProvider>();
@@ -123,22 +139,29 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
 
       switch (exportPreference) {
         case ExportPreference.local:
-          await ExportService.downloadFileWithDialog(context: innerContext, bytes: pngBytes, fileName: fileName);
+          await ExportService.downloadFileWithDialog(
+              context: innerContext, bytes: pngBytes, fileName: fileName);
           break;
         case ExportPreference.drive:
           if (authState.user.driveConnected) {
-            innerContext.read<AuthenticationBloc>().add(ExportFlowchartToDriveRequested(fileName: '$fileName.png', fileBytes: pngBytes));
+            innerContext.read<AuthenticationBloc>().add(
+                ExportFlowchartToDriveRequested(
+                    fileName: '$fileName.png', fileBytes: pngBytes));
           } else {
-            await AppDialogs.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
+            await AppDialogs.showExportLocationDialog(
+                context: innerContext, pngBytes: pngBytes, fileName: fileName);
           }
           break;
         case ExportPreference.alwaysAsk:
-          await AppDialogs.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
+          await AppDialogs.showExportLocationDialog(
+              context: innerContext, pngBytes: pngBytes, fileName: fileName);
           break;
       }
     } else {
       if (!mounted) return;
-      await AppDialogs.showInfoDialog(innerContext, title: "Nessun File Selezionato", message: "Seleziona un file prima di esportare.");
+      await AppDialogs.showInfoDialog(innerContext,
+          title: "Nessun File Selezionato",
+          message: "Seleziona un file prima di esportare.");
     }
   }
 
@@ -148,7 +171,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
 
   @override
   Widget build(BuildContext outerContext) {
-    return KeyboardShortcuts( // USA I NUOVI EVENTI
+    return KeyboardShortcuts(
+      // USA I NUOVI EVENTI
       child: MultiBlocProvider(
         providers: [
           BlocProvider<FlowchartBloc>(create: (_) => FlowchartBloc()),
@@ -156,7 +180,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
             key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
             create: (context) => FileSystemBloc(
               projectRepository: context.read<ProjectBloc>().projectRepository,
-            )..add(RefreshFileSystem(projectId: widget.selectedProject.projectId)),
+            )..add(
+                RefreshFileSystem(projectId: widget.selectedProject.projectId)),
           ),
         ],
         child: MultiBlocListener(
@@ -165,23 +190,33 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
               listenWhen: (p, c) => p.driveExportStatus != c.driveExportStatus,
               listener: (context, state) {
                 if (state.driveExportStatus == DriveExportStatus.success) {
-                  BannerService.showSuccess(context, "Diagramma esportato con successo su Google Drive!");
-                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
+                  BannerService.showSuccess(context,
+                      "Diagramma esportato con successo su Google Drive!");
+                  context
+                      .read<AuthenticationBloc>()
+                      .add(const ClearDriveExportStatus());
                 } else if (state.driveExportStatus == DriveExportStatus.failure) {
-                  BannerService.showError(context, state.errorMessage ?? "Esportazione fallita.");
-                  context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
-                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
+                  BannerService.showError(
+                      context, state.errorMessage ?? "Esportazione fallita.");
+                  context
+                      .read<AuthenticationBloc>()
+                      .add(const AuthenticationErrorCleared());
+                  context
+                      .read<AuthenticationBloc>()
+                      .add(const ClearDriveExportStatus());
                 }
               },
             ),
             BlocListener<FlowchartBloc, FlowchartState>(
               // CONTROLLA SUL NUOVO OGGETTO FLOWCHART
               listenWhen: (previous, current) {
-                if (previous is FlowchartLoaded && current is FlowchartLoaded) {
+                if (previous is FlowchartLoaded &&
+                    current is FlowchartLoaded) {
                   // Confronta direttamente l'oggetto flowchart
                   return previous.flowchart != current.flowchart;
                 }
-                return previous is! FlowchartLoaded && current is FlowchartLoaded;
+                return previous is! FlowchartLoaded &&
+                    current is FlowchartLoaded;
               },
               listener: (context, state) {
                 if (state is FlowchartLoaded && _currentFileId != null) {
@@ -192,7 +227,10 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
                   _debounce = Timer(const Duration(milliseconds: 400), () {
                     if (mounted) {
                       _lastRtdbContent = jsonContent;
-                      context.read<ProjectBloc>().projectRepository.updateLiveFileContent(
+                      context
+                          .read<ProjectBloc>()
+                          .projectRepository
+                          .updateLiveFileContent(
                         widget.selectedProject.projectId,
                         _currentFileId!,
                         jsonContent,
@@ -204,12 +242,46 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
             ),
             BlocListener<FileSystemBloc, FileSystemState>(
               listener: (context, state) async {
+                // Logica per mostrare il dialogo del JSON
+                if (state is ShowExecutionJsonDialog) {
+                  showDialog(
+                    context: context,
+                    builder: (dialogContext) {
+                      return AlertDialog(
+                        title: Text('JSON Esecuzione: ${state.fileName}'),
+                        content: Container(
+                          width: 600, // Larghezza fissa per il dialogo
+                          child: Scrollbar(
+                            child: SingleChildScrollView(
+                              child: Text(
+                                state.formattedJson,
+                                style: const TextStyle(
+                                    fontFamily: 'monospace', fontSize: 12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            child: const Text('Chiudi'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                  return; // Interrompe l'esecuzione per questo stato
+                }
+
+                // Logica esistente per la gestione dei file
                 if (state is FileSystemLoaded) {
                   _currentFileId = state.activeFileId;
                   await _rtdbSubscription?.cancel();
 
                   if (state.activeFileId == null && state.files.isNotEmpty) {
-                    final mainFile = state.files.firstWhere((f) => f.name == 'main', orElse: () => state.files.first);
+                    final mainFile = state.files.firstWhere(
+                            (f) => f.name == 'main',
+                        orElse: () => state.files.first);
                     context.read<FileSystemBloc>().add(OpenFile(
                       projectId: widget.selectedProject.projectId,
                       fileId: mainFile.fileId,
@@ -219,11 +291,13 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
                   }
 
                   if (state.activeFileId != null) {
-                    final activeFile = state.files.firstWhere((f) => f.fileId == state.activeFileId);
+                    final activeFile = state.files
+                        .firstWhere((f) => f.fileId == state.activeFileId);
                     _rtdbSubscription = context
                         .read<ProjectBloc>()
                         .projectRepository
-                        .liveFileContent(widget.selectedProject.projectId, activeFile.fileId)
+                        .liveFileContent(
+                        widget.selectedProject.projectId, activeFile.fileId)
                         .listen((liveContent) {
                       if (!mounted) return;
 
@@ -231,7 +305,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
                       final currentState = flowchartBloc.state;
                       final contentToLoad = liveContent ?? activeFile.content;
 
-                      if (currentState is FlowchartLoaded && currentState.toJson() == contentToLoad) {
+                      if (currentState is FlowchartLoaded &&
+                          currentState.toJson() == contentToLoad) {
                         return;
                       }
 
@@ -242,8 +317,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> with TickerProvider
                         jsonContent: contentToLoad,
                         fileName: activeFile.name,
                       ));
-
-                      // Logica di ripristino selezione (ora nel BLoC)
                     });
                   }
                 } else if (state is FileSystemError) {
@@ -317,12 +390,14 @@ class _WorkspaceLayout extends StatelessWidget {
           position: sidebarSlideAnimation,
           child: FadeTransition(
             opacity: fadeAnimation,
-            child: ProjectSidebar(selectedProject: selectedProject, isReadOnly: isReadOnly),
+            child: ProjectSidebar(
+                selectedProject: selectedProject, isReadOnly: isReadOnly),
           ),
         ),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(top: 16.0, right: 16.0, bottom: 16.0),
+            padding:
+            const EdgeInsets.only(top: 16.0, right: 16.0, bottom: 16.0),
             child: Column(
               children: [
                 SlideTransition(

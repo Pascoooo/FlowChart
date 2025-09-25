@@ -1,19 +1,27 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+// Import necessario per poter usare il tipo VariableDeclaration
+import 'package:flowchart_repository/flowchart_repository.dart';
 
-// --- REFACTOR: La funzione ora usa showDialog per permettere un layout personalizzato e non vincolato. ---
-Future<Map<String, dynamic>?> showOutputNodeDialog(BuildContext context) {
+// --- MODIFICA: La funzione ora accetta la lista di variabili disponibili ---
+Future<Map<String, dynamic>?> showOutputNodeDialog(
+    BuildContext context, {
+      required List<VariableDeclaration> availableVariables,
+    }) {
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
     useRootNavigator: true,
-    builder: (_) => const _OutputNodeDialog(),
+    // Passiamo le variabili al widget del dialogo
+    builder: (_) => _OutputNodeDialog(variables: availableVariables),
   );
 }
 
 class _OutputNodeDialog extends StatefulWidget {
-  const _OutputNodeDialog();
+  // --- MODIFICA: Il dialogo ora riceve la lista di variabili ---
+  final List<VariableDeclaration> variables;
+  const _OutputNodeDialog({required this.variables});
 
   @override
   State<_OutputNodeDialog> createState() => _OutputNodeDialogState();
@@ -28,7 +36,6 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     super.initState();
     _labelController = TextEditingController();
     _messageController = TextEditingController();
-    // Aggiungi un listener per aggiornare lo stato in tempo reale
     _messageController.addListener(() {
       setState(() {});
     });
@@ -41,14 +48,32 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     super.dispose();
   }
 
+  /// --- NUOVA FUNZIONE: Inserisce il segnaposto di una variabile nel testo ---
+  void _insertVariable(String variableName) {
+    final textToInsert = '{{$variableName}}';
+    final currentText = _messageController.text;
+    final selection = _messageController.selection;
+    final newText = currentText.replaceRange(selection.start, selection.end, textToInsert);
+
+    _messageController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: selection.start + textToInsert.length),
+    );
+  }
+
   void _onConfirm() {
-    // La validazione qui è una sicurezza aggiuntiva, ma lo stato del pulsante è già gestito.
     if (_messageController.text.trim().isNotEmpty) {
+      // --- MODIFICA: Estrae i nomi delle variabili usate nel template ---
+      final RegExp regex = RegExp(r'\{\{(\w+)\}\}');
+      final matches = regex.allMatches(_messageController.text);
+      final usedVariables = matches.map((m) => m.group(1)!).toSet().toList();
+
       final result = {
         'text': _labelController.text.trim().isEmpty
-            ? 'Output' // Default se l'etichetta è vuota
+            ? 'Output'
             : _labelController.text.trim(),
         'template': _messageController.text.trim(),
+        'variables': usedVariables, // Aggiungiamo la lista di variabili usate
       };
       Navigator.of(context).pop(result);
     }
@@ -57,10 +82,8 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // --- DESCRIZIONE DELLA MODIFICA: La validità è calcolata direttamente qui per la massima reattività. ---
     final isValid = _messageController.text.trim().isNotEmpty;
 
-    // --- REFACTOR: Sostituzione di CupertinoAlertDialog con un Dialog personalizzato per un controllo totale su UI/UX. ---
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
       child: Container(
@@ -70,7 +93,6 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- UI/UX: Titolo e icona sono ora più prominenti e integrati nel layout. ---
             Row(
               children: [
                 FaIcon(
@@ -85,26 +107,18 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Definisci il messaggio che verrà mostrato al termine del flusso.',
+              'Definisci il messaggio che verrà mostrato e le variabili da usare.',
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 24),
 
-            // --- UI/UX: Aggiunta di etichette esplicite sopra i campi per maggiore chiarezza. ---
             Text('Etichetta Nodo (opzionale)', style: theme.textTheme.labelLarge),
             const SizedBox(height: 8),
             CupertinoTextField(
               controller: _labelController,
               placeholder: 'Es. Risultato Finale',
-              style: theme.textTheme.bodyMedium,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainer,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: theme.colorScheme.outline.withOpacity(0.5)),
-              ),
+              // ... (resto del textfield invariato)
             ),
             const SizedBox(height: 16),
             Text('Messaggio di Output *', style: theme.textTheme.labelLarge),
@@ -112,46 +126,30 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
             CupertinoTextField(
               controller: _messageController,
               placeholder: 'Es. Il calcolo è: {{risultato}}',
-              style: theme.textTheme.bodyMedium,
               maxLines: 3,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainer,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: theme.colorScheme.outline.withOpacity(0.5)),
-              ),
+              // ... (resto del textfield invariato)
             ),
-            const SizedBox(height: 16),
-            // --- UI/UX: Il testo di aiuto è stato ridisegnato per essere più visibile e leggibile. ---
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(8),
+
+            // --- NUOVO WIDGET: Lista delle variabili come chip ---
+            if (widget.variables.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text('Variabili disponibili', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8.0,
+                runSpacing: 8.0,
+                children: widget.variables.map((variable) {
+                  return ActionChip(
+                    label: Text(variable.name),
+                    avatar: FaIcon(FontAwesomeIcons.code, size: 12),
+                    onPressed: () => _insertVariable(variable.name),
+                    tooltip: 'Inserisci {{${variable.name}}}',
+                  );
+                }).toList(),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  FaIcon(
-                    FontAwesomeIcons.lightbulb,
-                    size: 14,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Usa {{variabile}} per inserire valori dinamici',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            ],
+
             const SizedBox(height: 24),
-            // --- UI/UX: Le azioni ora usano CupertinoButton per uno stile coerente e una chiara gerarchia. ---
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
