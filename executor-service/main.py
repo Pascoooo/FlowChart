@@ -3,13 +3,12 @@ import subprocess
 import threading
 import uuid
 from flask import Flask
-from flask_sockets import Sockets
-from gevent import pywsgi
-from geventwebsocket.handler import WebSocketHandler
+from flask_sock import Sock
+import select  # Per polling non-blocking
 
-# Inizializza l'applicazione Flask e l'estensione Sockets
+# Inizializza l'applicazione Flask e l'estensione Sock
 app = Flask(__name__)
-sockets = Sockets(app)
+sock = Sock(app)
 
 def execute_c_code(ws, code):
     """
@@ -44,16 +43,27 @@ def execute_c_code(ws, code):
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,  # Line-buffered
-            universal_newlines=True
+            bufsize=0  # Unbuffered
         )
 
-        # Funzione per leggere l'output (stdout) del programma C in un thread separato
+        # Funzione per leggere l'output (stdout) non line-based, per partial output
         def read_output():
-            for line in iter(proc.stdout.readline, ''):
-                # Invia ogni riga di output immediatamente al client Flutter
-                ws.send(line.strip())
+            buffer = b''
+            while True:
+                ready = select.select([proc.stdout.fileno()], [], [], 1.0)[0]
+                if ready:
+                    chunk = os.read(proc.stdout.fileno(), 1024)
+                    if not chunk:
+                        break
+                    buffer += chunk
+                    # Invia se c'è newline o flush
+                    while b'\n' in buffer:
+                        line, buffer = buffer.split(b'\n', 1)
+                        ws.send(line.decode('utf-8').strip())
+                    # Invia partial se no \n ma flushato
+                    if buffer:
+                        ws.send(buffer.decode('utf-8').strip())
+                        buffer = b''
             proc.stdout.close()
 
         output_thread = threading.Thread(target=read_output)
@@ -66,7 +76,8 @@ def execute_c_code(ws, code):
             if message:
                 try:
                     # Invia l'input ricevuto al programma C in esecuzione
-                    proc.stdin.write(message + '\n')
+            # Riga corretta
+                    proc.stdin.write((message + '\n').encode('utf-8'))
                     proc.stdin.flush()
                 except (IOError, BrokenPipeError):
                     # Il processo potrebbe essere terminato mentre attendevamo l'input
@@ -89,7 +100,7 @@ def execute_c_code(ws, code):
         ws.send("[ESECUZIONE TERMINATA]")
         ws.close()
 
-@sockets.route('/console')
+@sock.route('/console')
 def console_socket(ws):
     """
     Endpoint WebSocket. Attende il codice C, poi avvia l'esecuzione.
@@ -105,8 +116,7 @@ def console_socket(ws):
         app.logger.error(f"Errore nel WebSocket: {e}")
     finally:
         # Assicura che il socket sia chiuso se non lo è già
-        if not ws.closed:
-            ws.close()
+        ws.close()
 
 @app.route('/')
 def health_check():
@@ -118,5 +128,4 @@ def health_check():
 # Questo blocco non è strettamente necessario per Cloud Run, ma utile per test locali
 if __name__ == "__main__":
     print("Avvio del server su http://127.0.0.1:8080")
-    server = pywsgi.WSGIServer(('0.0.0.0', 8080), app, handler_class=WebSocketHandler)
-    server.serve_forever()
+    app.run(host='0.0.0.0', port=8080, debug=True)

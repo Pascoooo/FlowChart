@@ -54,16 +54,24 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
             if (message == "[ESECUZIONE AVVIATA]") {
               _isConnected = true;
               _outputLines.add('--- Esecuzione avviata ---');
-              // Controlla se la prima riga richiede un input
-              _awaitingInput = _outputLines.last.contains('Inserisci valore');
             } else if (message == "[ESECUZIONE TERMINATA]") {
               _isExecutionFinished = true;
-              _awaitingInput = false; // L'esecuzione è finita, non si attende più input
+              _awaitingInput = false;
               _outputLines.add('--- Esecuzione terminata ---');
             } else {
               _outputLines.add(message);
-              // Controlla se l'ultima riga ricevuta è una richiesta di input
-              _awaitingInput = message.contains('Inserisci valore');
+              // Rilevamento intelligente del prompt di input con trim
+              final trimmedMessage = message.trim();
+              final lowerMessage = trimmedMessage.toLowerCase();
+              if (lowerMessage.contains('inserisci') ||
+                  lowerMessage.contains('digita') ||
+                  lowerMessage.contains('enter') ||
+                  lowerMessage.endsWith(':') ||
+                  lowerMessage.endsWith('?')) {
+                _awaitingInput = true;  // Abilita input per prompt imperativi
+              } else {
+                _awaitingInput = false;
+              }
             }
           });
           _scrollToBottom();
@@ -103,7 +111,7 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
       _channel.sink.add(textToSend);
       setState(() {
         _outputLines.add('> $textToSend'); // Mostra l'input inviato
-        _awaitingInput = false; // Assume che l'input sia stato consumato
+        _awaitingInput = false; // Disabilita fino al prossimo prompt
       });
       _inputController.clear();
       _scrollToBottom();
@@ -179,17 +187,31 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
               ),
             ),
             const SizedBox(height: 12),
+            // Sempre mostra il TextField durante l'esecuzione, ma disabilitalo se non awaiting input
             if (!_isExecutionFinished)
-              TextField(
-                controller: _inputController,
-                autofocus: true,
-                enabled: _awaitingInput, // Abilitato solo quando serve un input
-                decoration: InputDecoration(
-                  hintText: _awaitingInput ? 'Inserisci un valore e premi Invio...' : 'In attesa di output...',
-                  border: const OutlineInputBorder(),
-                  filled: true,
-                ),
-                onSubmitted: (_) => _sendInput(),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _inputController,
+                      autofocus: true,
+                      enabled: _awaitingInput, // Abilitato solo per prompt
+                      decoration: InputDecoration(
+                        hintText: _awaitingInput
+                            ? 'Inserisci il valore e premi Invio...'
+                            : 'In attesa del prossimo output...',
+                        border: const OutlineInputBorder(),
+                        filled: true,
+                      ),
+                      onSubmitted: (_) => _sendInput(),
+                    ),
+                  ),
+                  if (_awaitingInput) // Icona per indicare pronto per input
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8.0),
+                      child: Icon(Icons.keyboard_arrow_right, color: Colors.green),
+                    ),
+                ],
               ),
           ],
         ),
