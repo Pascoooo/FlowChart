@@ -3,17 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 
-Future<Map<String, dynamic>?> showInputNodeDialog(BuildContext context) {
+// --- MODIFICA: La funzione ora accetta la lista dei nomi esistenti ---
+Future<Map<String, dynamic>?> showInputNodeDialog(
+    BuildContext context, {
+      // Usiamo un Set per ricerche più veloci
+      required Set<String> existingVariableNames,
+    }) {
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
     useRootNavigator: true,
-    builder: (_) => const _InputNodeDialog(),
+    builder: (_) => _InputNodeDialog(existingVariableNames: existingVariableNames),
   );
 }
 
 class _InputNodeDialog extends StatefulWidget {
-  const _InputNodeDialog();
+  // --- MODIFICA: Il dialogo ora conosce i nomi delle variabili già presenti nel flowchart ---
+  final Set<String> existingVariableNames;
+  const _InputNodeDialog({required this.existingVariableNames});
 
   @override
   State<_InputNodeDialog> createState() => _InputNodeDialogState();
@@ -79,6 +86,9 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
         v.nameError = 'Obbligatorio';
       } else if (!idRe.hasMatch(name)) {
         v.nameError = 'Formato non valido';
+        // --- MODIFICA: Aggiunto controllo sui nomi già esistenti nel flowchart ---
+      } else if (widget.existingVariableNames.contains(name)) {
+        v.nameError = 'Nome già in uso';
       } else {
         v.nameError = null;
         names.putIfAbsent(name, () => []).add(i);
@@ -102,18 +112,18 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
       }
     }
 
+    // Questa parte, già presente, gestisce i duplicati all'interno del dialogo stesso
     names.forEach((name, indices) {
       if (indices.length > 1) {
         isFormValid = false;
         for (var index in indices) {
-          _vars[index].nameError = 'Nome duplicato';
+          _vars[index].nameError = 'Nome già usato';
         }
       }
     });
     return isFormValid;
   }
 
-  /// **FIX**: Converte il valore di default da stringa al suo tipo corretto (int, double, bool, etc.)
   dynamic _parseValue(String type, String value) {
     if (value.isEmpty) return null;
     switch (type) {
@@ -127,14 +137,12 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
 
   void _confirm() {
     setState(() => _attemptedSubmit = true);
+    // La validazione ora controlla entrambi i tipi di duplicati
     if (!_validateForm()) return;
 
     Navigator.of(context).pop({
       'text': _labelController.text.trim().isEmpty ? 'Input' : _labelController.text.trim(),
-      // La lista 'declarations' viene passata al FlowNodeFactory, che si aspetta
-      // una lista di mappe JSON per creare gli oggetti VariableDeclaration.
       'declarations': _vars.map((v) {
-        // **FIX**: Viene usato 'defaultValue' e il valore viene parsato correttamente.
         final dynamic defaultValue = v.hasInit ? _parseValue(v.type, v.init.text.trim()) : null;
 
         return {
