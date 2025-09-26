@@ -26,7 +26,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<ExecuteActiveFile>(_onExecuteActiveFile);
   }
 
-  /// **GENERATORE DI CODICE C STRUTTURATO (CORRETTO)**
+  /// **GENERATORE DI CODICE C CON LOGICA AGGIORNATA**
   String _generateCCode(String jsonContent) {
     try {
       final flowchart = FlowchartEntity.fromDocument(jsonDecode(jsonContent));
@@ -38,6 +38,8 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         switch (type) {
           case 'float': return 'float';
           case 'string': return 'char';
+        // --- MODIFICA: Aggiunto caso per char ---
+          case 'char': return 'char';
           default: return 'int';
         }
       }
@@ -46,6 +48,8 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         switch (type) {
           case 'float': return '%f';
           case 'string': return '%s';
+        // --- MODIFICA: Aggiunto caso per char ---
+          case 'char': return '%c';
           default: return '%d';
         }
       }
@@ -62,9 +66,12 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
           case FlowNodeKind.input:
             final varName = (node.data?['targetVariables'] as List).first;
             final variable = flowchart.variables.firstWhere((v) => v.name == varName);
-            code.writeln('${indent}// Nodo: ${node.text}');
-            code.writeln('${indent}printf("Inserisci valore per ${variable.name}: ");');
-            code.writeln('${indent}scanf("${mapTypeToFormatSpecifier(variable.dataType)}", &${variable.name});');
+
+            if (variable.defaultValue == null) {
+              code.writeln('${indent}// Nodo: ${node.text} - Richiesta input');
+              code.writeln('${indent}printf("Inserisci valore per ${variable.name}: ");');
+              code.writeln('${indent}scanf("${mapTypeToFormatSpecifier(variable.dataType)}", &${variable.name});');
+            }
             break;
 
           case FlowNodeKind.output:
@@ -74,12 +81,10 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
             String cTemplate = template;
             if (varNames.isNotEmpty) {
               for (final varName in varNames) {
-                // Trova la variabile per dedurne il tipo
                 final variable = flowchart.variables.firstWhere(
                       (v) => v.name == varName,
                   orElse: () => VariableDeclaration(name: '', dataType: 'unknown', defaultValue: null),
                 );
-                // Sostituisce {nomeVar} con lo specificatore di formato corretto (%d, %f, %s)
                 if (variable.dataType != 'unknown') {
                   cTemplate = cTemplate.replaceAll(
                       '{${variable.name}}', mapTypeToFormatSpecifier(variable.dataType));
@@ -89,32 +94,19 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
             code.writeln('${indent}// Nodo: ${node.text}');
             if (varNames.isEmpty) {
-              // Se non ci sono variabili, stampa la stringa così com'è
               code.writeln('${indent}printf("$cTemplate\\n");');
             } else {
-              // Altrimenti, costruisce il printf con la stringa di formato e gli argomenti
               code.writeln('${indent}printf("$cTemplate\\n", ${varNames.join(', ')});');
             }
             break;
 
           case FlowNodeKind.decision:
-            final condition = node.data?['condition'] as String? ?? "1";
-            final trueEdge = flowchart.edges.firstWhere((e) => e.from == node.id && e.port == 'true');
-            final falseEdge = flowchart.edges.firstWhere((e) => e.from == node.id && e.port == 'false');
-
-            code.writeln('${indent}// Nodo: ${node.text}');
-            code.writeln('${indent}if ($condition) {');
-            generateCodeForNode(trueEdge.to, indentation + 1);
-            code.writeln('$indent} else {');
-            generateCodeForNode(falseEdge.to, indentation + 1);
-            code.writeln('$indent}');
-            return;
+            code.writeln('${indent}// Nodo Decisione non gestito in questa fase.');
+            break;
 
           case FlowNodeKind.end:
             if (flowchart.name == 'main') {
               code.writeln('${indent}return 0;');
-            } else if (flowchart.signature.returnType != 'void') {
-              code.writeln('${indent}return 0; // Valore di ritorno di default');
             } else {
               code.writeln('${indent}return;');
             }
@@ -124,7 +116,10 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
             code.writeln('${indent}// Nodo ${node.kind.name}: ${node.text}');
         }
 
-        final nextEdge = flowchart.edges.firstWhere((e) => e.from == node.id, orElse: () => const EdgeEntity(from: '', to: '', port: null));
+        final nextEdge = flowchart.edges.firstWhere(
+                (e) => e.from == node.id && e.port == null,
+            orElse: () => const EdgeEntity(from: '', to: '', port: null)
+        );
         generateCodeForNode(nextEdge.to, indentation);
       }
 
@@ -144,7 +139,11 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
           if (variable.dataType == 'string') {
             code.writeln('    char ${variable.name}[256];');
           } else {
-            code.writeln('    ${mapDataType(variable.dataType)} ${variable.name} = ${variable.defaultValue};');
+            if (variable.defaultValue != null) {
+              code.writeln('    ${mapDataType(variable.dataType)} ${variable.name} = ${variable.defaultValue};');
+            } else {
+              code.writeln('    ${mapDataType(variable.dataType)} ${variable.name};');
+            }
           }
         }
         code.writeln();
@@ -154,6 +153,10 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       final firstEdge = flowchart.edges.firstWhere((e) => e.from == startNode.id, orElse: () => const EdgeEntity(from: '', to: '', port: null));
       generateCodeForNode(firstEdge.to, 1);
 
+      if (flowchart.name == 'main' && !code.toString().contains('return 0;')) {
+        code.writeln('    return 0;');
+      }
+
       code.writeln('}');
 
       return code.toString();
@@ -162,8 +165,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     }
   }
 
-
-  /// **HANDLER**
   Future<void> _onExecuteActiveFile(
       ExecuteActiveFile event, Emitter<FileSystemState> emit) async {
     if (state is! FileSystemLoaded) return;
@@ -190,7 +191,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     }
   }
 
-  // ... (tutti gli altri metodi del BLoC rimangono invariati)
   Future<void> _onRefreshFileSystem(
       RefreshFileSystem event, Emitter<FileSystemState> emit) async {
     emit(const FileSystemLoading());
