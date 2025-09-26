@@ -38,7 +38,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         switch (type) {
           case 'float': return 'float';
           case 'string': return 'char';
-        // --- MODIFICA: Aggiunto caso per char ---
           case 'char': return 'char';
           default: return 'int';
         }
@@ -48,7 +47,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         switch (type) {
           case 'float': return '%f';
           case 'string': return '%s';
-        // --- MODIFICA: Aggiunto caso per char ---
           case 'char': return '%c';
           default: return '%d';
         }
@@ -170,6 +168,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     if (state is! FileSystemLoaded) return;
     final currentState = state as FileSystemLoaded;
 
+    // Questa parte rimane invariata
     emit(currentState.copyWith(isLoading: true));
     try {
       final liveContentStream =
@@ -181,9 +180,13 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
       final generatedCode = _generateCCode(content);
 
-      emit(ShowExecutionJsonDialog(
-          formattedJson: generatedCode, fileName: file.name));
+      // --- MODIFICA CHIAVE QUI ---
+      // Emettiamo il nostro nuovo stato invece del vecchio dialogo
+      emit(ShowExecutionConsole(cCode: generatedCode, fileName: file.name));
+
+      // Emettiamo di nuovo lo stato precedente per "resettare" lo stato principale
       emit(currentState.copyWith(isLoading: false));
+
     } catch (e) {
       emit(currentState.copyWith(
           isLoading: false,

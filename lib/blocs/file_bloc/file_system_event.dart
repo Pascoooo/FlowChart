@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 
+import 'file_system_state.dart';
+
 @immutable
 abstract class FileSystemEvent extends Equatable {
   const FileSystemEvent();
@@ -63,4 +65,14 @@ class ExecuteActiveFile extends FileSystemEvent {
 
   @override
   List<Object> get props => [projectId, fileId];
+}
+
+class ShowExecutionConsole extends FileSystemState {
+  final String cCode;
+  final String fileName;
+
+  const ShowExecutionConsole({required this.cCode, required this.fileName});
+
+  @override
+  List<Object?> get props => [cCode, fileName];
 }

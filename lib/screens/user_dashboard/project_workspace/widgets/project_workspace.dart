@@ -6,6 +6,7 @@ import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/sidebar.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/topbar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:universal_html/html.dart' as html;
@@ -20,17 +21,20 @@ import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/export_service.dart';
 import '../../../settings/widgets/settings_provider.dart';
+import '../views/InteractiveConsoleView.dart';
 import '../views/workarea.dart';
 
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
-  final bool isReadOnly; // nuovo flag per vista condivisa/sola lettura
-  final VoidCallback? onLeave; // callback per tornare ai progetti
-  const ProjectWorkspace(
-      {super.key,
-        required this.selectedProject,
-        this.isReadOnly = false,
-        this.onLeave});
+  final bool isReadOnly;
+  final VoidCallback? onLeave;
+
+  const ProjectWorkspace({
+    super.key,
+    required this.selectedProject,
+    this.isReadOnly = false,
+    this.onLeave,
+  });
 
   @override
   State<ProjectWorkspace> createState() => _ProjectWorkspaceState();
@@ -128,9 +132,10 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       final fileName = _getCurrentFileName(fileState);
       final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
       if (pngBytes == null) {
-        if (mounted)
+        if (mounted) {
           BannerService.showError(
               context, "Errore durante la creazione dell'immagine.");
+        }
         return;
       }
       final settingsProvider = innerContext.read<SettingsProvider>();
@@ -172,7 +177,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   @override
   Widget build(BuildContext outerContext) {
     return KeyboardShortcuts(
-      // USA I NUOVI EVENTI
       child: MultiBlocProvider(
         providers: [
           BlocProvider<FlowchartBloc>(create: (_) => FlowchartBloc()),
@@ -195,7 +199,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                   context
                       .read<AuthenticationBloc>()
                       .add(const ClearDriveExportStatus());
-                } else if (state.driveExportStatus == DriveExportStatus.failure) {
+                } else if (state.driveExportStatus ==
+                    DriveExportStatus.failure) {
                   BannerService.showError(
                       context, state.errorMessage ?? "Esportazione fallita.");
                   context
@@ -208,11 +213,9 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
               },
             ),
             BlocListener<FlowchartBloc, FlowchartState>(
-              // CONTROLLA SUL NUOVO OGGETTO FLOWCHART
               listenWhen: (previous, current) {
                 if (previous is FlowchartLoaded &&
                     current is FlowchartLoaded) {
-                  // Confronta direttamente l'oggetto flowchart
                   return previous.flowchart != current.flowchart;
                 }
                 return previous is! FlowchartLoaded &&
@@ -240,40 +243,30 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
               },
             ),
+            // Listener per aprire la console
             BlocListener<FileSystemBloc, FileSystemState>(
-              listener: (context, state) async {
-                // Logica per mostrare il dialogo del JSON
-                if (state is ShowExecutionJsonDialog) {
+              listenWhen: (previous, current) => current is ShowExecutionConsole,
+              listener: (context, state) {
+                if (state is ShowExecutionConsole) {
+                  // !!! SOSTITUISCI CON IL TUO URL REALE !!!
+                  const serviceUrl = 'https://interactive-console-641983601905.europe-west8.run.app/';
+
                   showDialog(
                     context: context,
-                    builder: (dialogContext) {
-                      return AlertDialog(
-                        title: Text('JSON Esecuzione: ${state.fileName}'),
-                        content: Container(
-                          width: 600, // Larghezza fissa per il dialogo
-                          child: Scrollbar(
-                            child: SingleChildScrollView(
-                              child: Text(
-                                state.formattedJson,
-                                style: const TextStyle(
-                                    fontFamily: 'monospace', fontSize: 12),
-                              ),
-                            ),
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            child: const Text('Chiudi'),
-                          ),
-                        ],
-                      );
-                    },
+                    barrierDismissible: false,
+                    builder: (_) => InteractiveConsoleDialog(
+                      serviceUrl: serviceUrl,
+                      cCode: state.cCode,
+                      fileName: state.fileName,
+                    ),
                   );
-                  return; // Interrompe l'esecuzione per questo stato
                 }
-
-                // Logica esistente per la gestione dei file
+              },
+            ),
+            // Listener per la gestione dei file
+            BlocListener<FileSystemBloc, FileSystemState>(
+              listenWhen: (previous, current) => current is! ShowExecutionConsole,
+              listener: (context, state) async {
                 if (state is FileSystemLoaded) {
                   _currentFileId = state.activeFileId;
                   await _rtdbSubscription?.cancel();
@@ -296,8 +289,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                     _rtdbSubscription = context
                         .read<ProjectBloc>()
                         .projectRepository
-                        .liveFileContent(
-                        widget.selectedProject.projectId, activeFile.fileId)
+                        .liveFileContent(widget.selectedProject.projectId,
+                        activeFile.fileId)
                         .listen((liveContent) {
                       if (!mounted) return;
 
@@ -312,7 +305,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
                       _lastRtdbContent = contentToLoad;
 
-                      // USA IL NUOVO EVENTO E PASSA IL NOME DEL FILE
                       flowchartBloc.add(LoadFlowchart(
                         jsonContent: contentToLoad,
                         fileName: activeFile.name,
