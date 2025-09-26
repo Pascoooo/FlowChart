@@ -189,7 +189,6 @@ class NodeCreationPanel extends StatelessWidget {
     this.fromPort,
   });
 
-  // **FIX**: Implementata la logica completa per chiamare i dialoghi e il BLoC.
   void _createNode(BuildContext context, FlowNodeKind kind) async {
     try {
       final bloc = context.read<FlowchartBloc>();
@@ -204,8 +203,9 @@ class NodeCreationPanel extends StatelessWidget {
       }
 
       List<MyFile>? filesForProcess;
-      // --- MODIFICA: La lista ora è di tipo VariableDeclaration e ha un nome generico ---
       List<VariableDeclaration>? variablesForDialog;
+      // --- NUOVA VARIABILE: per i nomi già esistenti ---
+      Set<String>? existingVariableNames;
 
       if (kind == FlowNodeKind.process) {
         final fsState = context.read<FileSystemBloc>().state;
@@ -214,11 +214,16 @@ class NodeCreationPanel extends StatelessWidget {
         }
       }
 
-      // --- MODIFICA: Popoliamo la lista per entrambi i tipi di nodo, Decision e Output ---
       if (kind == FlowNodeKind.decision || kind == FlowNodeKind.output) {
         if (flowState is FlowchartLoaded) {
-          // Usiamo direttamente la lista di variabili dal BLoC
           variablesForDialog = flowState.flowchart.variables;
+        }
+      }
+
+      // --- NUOVA LOGICA: Raccoglie i nomi per il nodo di Input ---
+      if (kind == FlowNodeKind.input) {
+        if (flowState is FlowchartLoaded) {
+          existingVariableNames = flowState.flowchart.variables.map((v) => v.name).toSet();
         }
       }
 
@@ -226,7 +231,9 @@ class NodeCreationPanel extends StatelessWidget {
         context: context,
         kind: kind,
         files: filesForProcess,
-        variables: variablesForDialog, // Passiamo la lista corretta
+        variables: variablesForDialog,
+        // --- Passa il nuovo parametro al dialogo ---
+        existingVariableNames: existingVariableNames,
       );
 
       if (nodeData != null) {

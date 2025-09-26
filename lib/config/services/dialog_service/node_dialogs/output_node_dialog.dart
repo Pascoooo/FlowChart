@@ -50,7 +50,7 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
 
   /// --- NUOVA FUNZIONE: Inserisce il segnaposto di una variabile nel testo ---
   void _insertVariable(String variableName) {
-    final textToInsert = '{{$variableName}}';
+    final textToInsert = '{$variableName}';
     final currentText = _messageController.text;
     final selection = _messageController.selection;
     final newText = currentText.replaceRange(selection.start, selection.end, textToInsert);
@@ -64,7 +64,7 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
   void _onConfirm() {
     if (_messageController.text.trim().isNotEmpty) {
       // --- MODIFICA: Estrae i nomi delle variabili usate nel template ---
-      final RegExp regex = RegExp(r'\{\{(\w+)\}\}');
+      final RegExp regex = RegExp(r'\{(\w+)\}');
       final matches = regex.allMatches(_messageController.text);
       final usedVariables = matches.map((m) => m.group(1)!).toSet().toList();
 

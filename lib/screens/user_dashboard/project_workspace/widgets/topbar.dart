@@ -17,8 +17,8 @@ class TopBar extends StatefulWidget {
   final MyProject selectedProject;
   final VoidCallback onEdit;
   final VoidCallback onExport;
-  final bool isReadOnly; // nuovo flag
-  final VoidCallback? onLeave; // callback uscita
+  final bool isReadOnly;
+  final VoidCallback? onLeave;
 
   const TopBar({
     super.key,
@@ -284,6 +284,13 @@ class _AdvancedTopBar extends StatelessWidget {
                       return const SizedBox.shrink();
                     }
 
+                    // --- NUOVA LOGICA DI CONTROLLO ---
+                    // Controlla se esiste un nodo "Fine" nel flowchart.
+                    final bool hasEndNode = flowchartState.flowchart.nodes
+                        .any((node) => node.kind == FlowNodeKind.end);
+                    // Il pulsante "Play" è attivo solo se c'è un file attivo E un nodo "Fine".
+                    final bool isPlayEnabled = state.activeFileId != null && hasEndNode;
+
                     final selectedNode = flowchartState
                         .getNodeById(flowchartState.selectedNodeId ?? '');
                     final isDeletionEnabled = selectedNode != null &&
@@ -300,6 +307,7 @@ class _AdvancedTopBar extends StatelessWidget {
                       onDeleteSelected: _deleteSelected,
                       projectId: selectedProjectId,
                       activeFileId: state.activeFileId,
+                      isPlayEnabled: isPlayEnabled, // Passa il nuovo flag al widget
                     );
                   },
                 ),
@@ -319,6 +327,8 @@ class _AnimatedFlowchartActions extends StatelessWidget {
   final void Function(BuildContext, String nodeId) onDeleteSelected;
   final String projectId;
   final String? activeFileId;
+  // --- MODIFICA: Aggiunto nuovo parametro ---
+  final bool isPlayEnabled;
 
   const _AnimatedFlowchartActions({
     required this.isDeletionEnabled,
@@ -328,6 +338,7 @@ class _AnimatedFlowchartActions extends StatelessWidget {
     required this.onDeleteSelected,
     required this.projectId,
     this.activeFileId,
+    required this.isPlayEnabled, // Richiesto nel costruttore
   });
 
   @override
@@ -350,19 +361,19 @@ class _AnimatedFlowchartActions extends StatelessWidget {
         onPressed: () => onReset(context),
         interval: const Interval(0.7, 1.0),
       ),
-      // Pulsante Esegui/Play
       _buildAnimatedButton(
         context: context,
         tooltip: 'Esegui Flowchart',
         icon: Icons.play_arrow_rounded,
-        onPressed: activeFileId != null
+        // --- MODIFICA: L'onPressed ora dipende dal nuovo flag isPlayEnabled ---
+        onPressed: isPlayEnabled
             ? () {
           context.read<FileSystemBloc>().add(ExecuteActiveFile(
             projectId: projectId,
             fileId: activeFileId!,
           ));
         }
-            : null, // Disabilitato se nessun file è attivo
+            : null,
         interval: const Interval(0.8, 1.0),
       ),
     ];
@@ -473,8 +484,6 @@ class UndoRedoControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Ora usiamo context.select per rebuildare solo questo widget
-    // quando canUndo o canRedo cambiano. È più efficiente.
     final canUndo = context.select((FlowchartBloc bloc) => bloc.canUndo);
     final canRedo = context.select((FlowchartBloc bloc) => bloc.canRedo);
 

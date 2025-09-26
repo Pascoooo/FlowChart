@@ -19,12 +19,10 @@ import 'node_dialogs/process_node_dialog.dart';
 class AppDialogs {
   // --- Dialoghi Generici ---
 
-  /// Mostra un dialogo di conferma generico (Sì/No).
   static Future<bool?> showConfirmationDialog(
       BuildContext context, {
         required String title,
         required String message,
-        // --- FIX: Ripristinati i parametri opzionali che erano stati omessi ---
         String confirmText = 'Conferma',
         String cancelText = 'Annulla',
         bool isDestructive = false,
@@ -33,20 +31,17 @@ class AppDialogs {
       context,
       title: title,
       message: message,
-      // --- FIX: I parametri ora vengono passati correttamente al metodo sottostante ---
       confirmText: confirmText,
       cancelText: cancelText,
       isDestructive: isDestructive,
     );
   }
 
-  /// Mostra un dialogo per l'inserimento di testo.
   static Future<String?> showInputDialog(
       BuildContext context, {
         required String title,
         String? message,
         String? initialValue,
-        // --- FIX: Ripristinati i parametri opzionali che erano stati omessi ---
         String hintText = '',
         String confirmText = 'Conferma',
         String cancelText = 'Annulla',
@@ -57,7 +52,6 @@ class AppDialogs {
       title: title,
       message: message,
       initialValue: initialValue,
-      // --- FIX: I parametri ora vengono passati correttamente al metodo sottostante ---
       hintText: hintText,
       confirmText: confirmText,
       cancelText: cancelText,
@@ -65,7 +59,6 @@ class AppDialogs {
     );
   }
 
-  /// Mostra un dialogo informativo usando un tipo predefinito per stile e icona.
   static Future<void> showInfoDialog(
       BuildContext context, {
         required String title,
@@ -88,21 +81,25 @@ class AppDialogs {
     required BuildContext context,
     required FlowNodeKind kind,
     List<MyFile>? files,
-    List<VariableDeclaration>? variables, // Tipo di dato aggiornato
+    List<VariableDeclaration>? variables,
+    // --- Aggiungi questo nuovo parametro alla firma della funzione ---
+    Set<String>? existingVariableNames,
   }) {
     switch (kind) {
       case FlowNodeKind.input:
-        return showInputNodeDialog(context);
+      // --- Passa i nomi esistenti al dialogo di input ---
+        return showInputNodeDialog(
+          context,
+          existingVariableNames: existingVariableNames ?? const {},
+        );
 
       case FlowNodeKind.output:
-      // Ora riceve la lista corretta e la passa direttamente
         return showOutputNodeDialog(context, availableVariables: variables ?? const []);
 
       case FlowNodeKind.process:
         return showProcessNodeDialog(context, files: files ?? const []);
 
       case FlowNodeKind.decision:
-      // --- MODIFICA: Convertiamo i dati nel formato richiesto dal Decision Dialog ---
         final decisionVars = (variables ?? [])
             .map((v) => {'name': v.name, 'type': v.dataType})
             .toList();
