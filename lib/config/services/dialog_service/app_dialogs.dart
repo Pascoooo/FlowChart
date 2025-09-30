@@ -14,10 +14,10 @@ import 'node_dialogs/info_node_dialog.dart' as node_info;
 import 'node_dialogs/input_node_dialog.dart';
 import 'node_dialogs/output_node_dialog.dart';
 import 'node_dialogs/process_node_dialog.dart';
+import 'docker_dialog.dart';
 
 
 class AppDialogs {
-  // --- Dialoghi Generici ---
 
   static Future<bool?> showConfirmationDialog(
       BuildContext context, {
@@ -75,6 +75,15 @@ class AppDialogs {
       type: type,
       closeText: closeText,
     );
+  }
+
+  // --- Dialoghi per Setup Docker ---
+  static Future<void> showDockerInfoDialog(
+      BuildContext context, {
+        DialogType type = DialogType.info,
+        String closeText = 'Ho capito',
+      }) {
+    return showDockerSetupDialog(context);
   }
 
   // --- Dialoghi per Editor Nodi ---

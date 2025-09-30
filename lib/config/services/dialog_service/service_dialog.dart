@@ -65,9 +65,9 @@ class GenericDialogs {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: iconColor.withOpacity(0.1),
+                    color: iconColor.withValues(alpha: 0.1),
                     border: Border.all(
-                      color: iconColor.withOpacity(0.2),
+                      color: iconColor.withValues(alpha: 0.2),
                       width: 2,
                     ),
                   ),
@@ -99,7 +99,7 @@ class GenericDialogs {
                   child: Text(
                     message,
                     style: theme.typography.body?.copyWith(
-                      color: theme.typography.body?.color?.withOpacity(0.8),
+                      color: theme.typography.body?.color?.withValues(alpha: 0.8),
                       height: 1.5,
                     ),
                     textAlign: TextAlign.center,
@@ -180,9 +180,9 @@ class GenericDialogs {
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: iconColor.withOpacity(0.1),
+                          color: iconColor.withValues(alpha: 0.1),
                           border: Border.all(
-                            color: iconColor.withOpacity(0.2),
+                            color: iconColor.withValues(alpha: 0.2),
                             width: 2,
                           ),
                         ),
@@ -226,7 +226,7 @@ class GenericDialogs {
                     child: Text(
                       message,
                       style: theme.typography.body?.copyWith(
-                        color: theme.typography.body?.color?.withOpacity(0.8),
+                        color: theme.typography.body?.color?.withValues(alpha: 0.8),
                         height: 1.5,
                       ),
                       textAlign: TextAlign.center,
@@ -259,19 +259,19 @@ class GenericDialogs {
                       onPressed: () => Navigator.of(dialogContext).pop(true),
                       style: isDestructive
                           ? ButtonStyle(
-                        backgroundColor: ButtonState.resolveWith((states) {
-                          if (states.contains(ButtonStates.disabled)) {
+                        backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+                          if (states.contains(WidgetState.disabled)) {
                             return theme.resources.controlFillColorDisabled;
                           }
-                          if (states.contains(ButtonStates.pressed)) {
-                            return getDestructiveColor().withOpacity(0.9);
+                          if (states.contains(WidgetState.pressed)) {
+                            return getDestructiveColor().withValues(alpha: 0.9);
                           }
-                          if (states.contains(ButtonStates.hovered)) {
-                            return getDestructiveColor().withOpacity(0.8);
+                          if (states.contains(WidgetState.hovered)) {
+                            return getDestructiveColor().withValues(alpha: 0.8);
                           }
                           return getDestructiveColor();
                         }),
-                        foregroundColor: ButtonState.all(
+                        foregroundColor: WidgetStateProperty.all(
                             theme.brightness == Brightness.light
                                 ? Colors.white
                                 : Colors.black
@@ -358,9 +358,9 @@ class GenericDialogs {
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
+                              color: theme.accentColor.defaultBrushFor(theme.brightness).withValues(alpha: 0.1),
                               border: Border.all(
-                                color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.2),
+                                color: theme.accentColor.defaultBrushFor(theme.brightness).withValues(alpha: 0.2),
                                 width: 2,
                               ),
                             ),
@@ -405,7 +405,7 @@ class GenericDialogs {
                           child: Text(
                             message,
                             style: theme.typography.body?.copyWith(
-                              color: theme.typography.body?.color?.withOpacity(0.8),
+                              color: theme.typography.body?.color?.withValues(alpha: 0.8),
                               height: 1.5,
                             ),
                             textAlign: TextAlign.center,
@@ -530,72 +530,5 @@ class GenericDialogs {
       },
     );
   }
-
-  /// 💡 Recommendation Dialog - With "Don't show again" option
-  static Future<bool?> showGridRecommendationDialog(
-      BuildContext context, {
-        required String title,
-        required String message,
-        String confirmText = 'Disattiva Griglia',
-        String cancelText = 'Mantieni',
-        required Function(bool) onRememberPreference,
-      }) {
-    final theme = FluentTheme.of(context);
-    bool rememberPreference = false;
-
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return ContentDialog(
-              constraints: const BoxConstraints(
-                minWidth: 520,
-                maxWidth: 600,
-              ),
-              title: Text(title, style: theme.typography.title),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    message,
-                    style: theme.typography.body,
-                  ),
-                  const SizedBox(height: 24),
-                  Checkbox(
-                    content: const Text('Non mostrare più questo messaggio'),
-                    checked: rememberPreference,
-                    onChanged: (checked) {
-                      if (checked != null) {
-                        setState(() => rememberPreference = checked);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                Button(
-                  onPressed: () {
-                    onRememberPreference(rememberPreference);
-                    Navigator.of(dialogContext).pop(false); // Non disattivare
-                  },
-                  child: Text(cancelText),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    onRememberPreference(rememberPreference);
-                    Navigator.of(dialogContext).pop(true); // Disattiva
-                  },
-                  child: Text(confirmText),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
 }
+
