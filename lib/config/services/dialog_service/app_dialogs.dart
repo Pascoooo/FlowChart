@@ -49,15 +49,15 @@ class AppDialogs {
         required String inputLabel,
       }) {
     return GenericDialogs.showInputDialog(
-      context,
-      title: title,
-      message: message,
-      initialValue: initialValue,
-      hintText: hintText,
-      confirmText: confirmText,
-      cancelText: cancelText,
-      validator: validator,
-      inputLabel: inputLabel
+        context,
+        title: title,
+        message: message,
+        initialValue: initialValue,
+        hintText: hintText,
+        confirmText: confirmText,
+        cancelText: cancelText,
+        validator: validator,
+        inputLabel: inputLabel
     );
   }
 
@@ -88,10 +88,12 @@ class AppDialogs {
   }) {
     switch (kind) {
       case FlowNodeKind.input:
-      // --- Passa i nomi esistenti al dialogo di input ---
+      // --- MODIFICA QUI ---
+      // Aggiunto il parametro 'existingDeclarations' mancante alla chiamata.
         return showInputNodeDialog(
           context,
           existingVariableNames: existingVariableNames ?? const {},
+          existingDeclarations: variables ?? const [],
         );
 
       case FlowNodeKind.output:
@@ -124,7 +126,7 @@ class AppDialogs {
             context,
             title: 'Nessuna variabile disponibile',
             message:
-                'Non è possibile creare una condizione perché non ci sono variabili nel programma.\n'
+            'Non è possibile creare una condizione perché non ci sono variabili nel programma.\n'
                 'Aggiungi prima una variabile (es. con un nodo Input o Processo) e riprova.',
             type: DialogType.warning,
           ).then((_) => null);
@@ -146,7 +148,7 @@ class AppDialogs {
     required BuildContext context,
     required FlowNode node,
   }) {
-     return node_info.showNodeDetailsDialog(context: context, node: node);
+    return node_info.showNodeDetailsDialog(context: context, node: node);
   }
 
 

@@ -233,11 +233,13 @@ class _NodeWidgetState extends State<NodeWidget> {
           filesForProcess = fsState.files.where((f) => f.fileId != fsState.activeFileId).toList();
         }
       }
-      if (kind == FlowNodeKind.decision || kind == FlowNodeKind.output) {
+      if (kind == FlowNodeKind.input || kind == FlowNodeKind.decision || kind == FlowNodeKind.output) {
         if (flowState is FlowchartLoaded) {
           variablesForDialog = flowState.flowchart.variables;
         }
       }
+
+
 
       final Map<String, dynamic>? nodeData = await AppDialogs.showNodeCreationDialog(
         context: context,

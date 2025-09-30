@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:project_repository/project_repository.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:project_repository/src/services/firestore_storage_service.dart';
 import 'package:project_repository/src/services/rtdb_session_service.dart';
 
@@ -215,6 +216,7 @@ class FirebaseProjectRepo implements ProjectRepo {
   Future<void> updateProjectVisibility({required String projectId, required bool isPublic}) {
     return _storage.updateProjectVisibility(projectId: projectId, isPublic: isPublic);
   }
+
   @override
   Future<MyProject?> getPublicProjectById(String projectId) async {
     return _storage.getPublicProjectById(projectId);
@@ -222,8 +224,53 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<Map<String, dynamic>?> getPublicProjectWithFiles(String projectId) {
-    // Questa chiamata è volutamente diretta solo allo storage (Firestore)
-    // e non avvia alcuna sessione live (RTDB).
     return _storage.getPublicProjectWithFiles(projectId);
+  }
+
+  // ==========================================================
+  // IMPLEMENTAZIONE SEZIONE DEBUG (aggiunta)
+  // ==========================================================
+  @override
+  @override
+  Future<void> startDebugSession({required String projectId, required Flowchart flowchart}) async {
+    // MODIFICA 1:
+    // Inizializza la sessione di debug con una mappa di variabili VUOTA.
+    // Le variabili verranno aggiunte passo dopo passo da advanceDebugStep.
+    await _session.initializeDebugSession(projectId, {});
+  }
+
+  @override
+  Future<void> endDebugSession({required String projectId}) async {
+    await _session.clearDebugSession(projectId);
+  }
+
+  @override
+  Stream<Map<String, dynamic>> watchDebugVariables({required String projectId}) {
+    return _session.watchDebugVariables(projectId);
+  }
+
+  @override
+  Future<void> advanceDebugStep({required String projectId, required FlowNode? currentNode}) async {
+    if (currentNode == null) return;
+
+    final Map<String, dynamic> updates = {};
+
+    // MODIFICA 2:
+    // Questa logica ora è responsabile per la "nascita" delle variabili.
+    // Quando l'esecuzione passa su un InputNode, le sue variabili vengono
+    // create e aggiunte alla mappa `updates`, che verrà poi scritta su RTDB.
+    if (currentNode is InputNode) {
+      for (final decl in currentNode.declarations) {
+        updates[decl.name] = decl.defaultValue ?? 'null';
+      }
+    } else if (currentNode is ProcessNode) {
+      if (currentNode.resultTarget != null && currentNode.resultTarget!.isNotEmpty) {
+        updates[currentNode.resultTarget!] = 'valore_simulato_da_processo';
+      }
+    }
+
+    if (updates.isNotEmpty) {
+      await _session.updateDebugVariables(projectId, updates);
+    }
   }
 }

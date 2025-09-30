@@ -530,4 +530,72 @@ class GenericDialogs {
       },
     );
   }
+
+  /// 💡 Recommendation Dialog - With "Don't show again" option
+  static Future<bool?> showGridRecommendationDialog(
+      BuildContext context, {
+        required String title,
+        required String message,
+        String confirmText = 'Disattiva Griglia',
+        String cancelText = 'Mantieni',
+        required Function(bool) onRememberPreference,
+      }) {
+    final theme = FluentTheme.of(context);
+    bool rememberPreference = false;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return ContentDialog(
+              constraints: const BoxConstraints(
+                minWidth: 520,
+                maxWidth: 600,
+              ),
+              title: Text(title, style: theme.typography.title),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    message,
+                    style: theme.typography.body,
+                  ),
+                  const SizedBox(height: 24),
+                  Checkbox(
+                    content: const Text('Non mostrare più questo messaggio'),
+                    checked: rememberPreference,
+                    onChanged: (checked) {
+                      if (checked != null) {
+                        setState(() => rememberPreference = checked);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                Button(
+                  onPressed: () {
+                    onRememberPreference(rememberPreference);
+                    Navigator.of(dialogContext).pop(false); // Non disattivare
+                  },
+                  child: Text(cancelText),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    onRememberPreference(rememberPreference);
+                    Navigator.of(dialogContext).pop(true); // Disattiva
+                  },
+                  child: Text(confirmText),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
 }

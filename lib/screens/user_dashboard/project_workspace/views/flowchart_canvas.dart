@@ -74,33 +74,50 @@ class FlowchartCanvas extends StatelessWidget {
                 ),
               );
 
-              // Se siamo in modalità debug, applichiamo zoom + pan animati verso il nodo selezionato
+              // =========================================================================
+              // NUOVA LOGICA DI ANIMAZIONE PER IL DEBUG MODE
+              // =========================================================================
               if (state.isDebugMode && state.selectedNodeId != null) {
                 final node = state.getNodeById(state.selectedNodeId!);
                 if (node != null) {
                   final viewportW = constraints.maxWidth;
                   final viewportH = constraints.maxHeight;
                   const double targetScale = 1.8;
-                  final double nodeCenterX = node.x + node.width / 2;
-                  final double nodeCenterY = node.y + (node.height + 42.0) / 2; // include top padding per button
-                  final double targetTx = (viewportW / 2) - nodeCenterX * targetScale;
-                  final double targetTy = (viewportH / 2) - nodeCenterY * targetScale;
 
-                  // Due TweenAnimationBuilder annidati per animare offset e scala in modo fluido
+                  final double nodeCenterX = node.x + node.width / 2;
+                  final double nodeCenterY =
+                      node.y + (node.height + 42.0) / 2; // include top padding
+                  final double targetTx =
+                      (viewportW / 2) - nodeCenterX * targetScale;
+                  final double targetTy =
+                      (viewportH / 2) - nodeCenterY * targetScale;
+
+                  // Determina se è il primo step per animare lo zoom solo una volta
+                  final bool isFirstStep = state.debugIndex == 0;
+
+                  // Se non è il primo step, lo zoom parte dalla scala target per evitare animazioni
+                  final double initialScale = isFirstStep ? 1.0 : targetScale;
+
                   content = ClipRect(
                     child: TweenAnimationBuilder<Offset>(
-                      tween: Tween<Offset>(begin: const Offset(0, 0), end: Offset(targetTx, targetTy)),
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      key: ValueKey('dbg-offset-${state.selectedNodeId}-${state.debugIndex}'),
+                      // 1. ANIMA IL PAN (scorrimento) ad ogni cambio di nodo
+                      tween: Tween<Offset>(end: Offset(targetTx, targetTy)),
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeOutCubic,
+                      key: ValueKey('dbg-offset-${state.selectedNodeId}'),
                       builder: (context, offset, child) {
                         return Transform.translate(
                           offset: offset,
                           child: TweenAnimationBuilder<double>(
-                            tween: Tween<double>(begin: 1.0, end: targetScale),
-                            duration: const Duration(milliseconds: 300),
+                            // 2. ANIMA LO ZOOM solo al primo step
+                            tween: Tween<double>(
+                                begin: initialScale, end: targetScale),
+                            duration: isFirstStep
+                                ? const Duration(milliseconds: 400)
+                                : Duration.zero,
                             curve: Curves.easeInOut,
-                            key: ValueKey('dbg-scale-${state.selectedNodeId}-${state.debugIndex}'),
+                            key: ValueKey(
+                                'dbg-scale-${state.flowchart.flowchartId}'),
                             builder: (context, scale, grandChild) {
                               return Transform.scale(
                                 scale: scale,
@@ -117,7 +134,6 @@ class FlowchartCanvas extends StatelessWidget {
                   );
                 }
               }
-
               return content;
             },
           );

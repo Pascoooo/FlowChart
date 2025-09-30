@@ -7,6 +7,7 @@ import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/sidebar.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/topbar.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:universal_html/html.dart' as html;
@@ -22,7 +23,8 @@ import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/export_service.dart';
 import '../../../settings/widgets/settings_provider.dart';
 import '../views/workarea.dart';
-import 'package:flutter/services.dart';
+import '../../../../config/services/dialog_service/service_dialog.dart';
+
 
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
@@ -48,6 +50,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   late Animation<double> _workareaScaleAnimation;
   late Animation<double> _fadeAnimation;
   bool _showGrid = true;
+  bool _dontShowGridDialogAgain = false;
 
   Timer? _debounce;
   StreamSubscription? _rtdbSubscription;
@@ -62,7 +65,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   }
 
   void _initAnimations() {
-    // Logic unchanged
     _slideInController = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
@@ -89,7 +91,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
   @override
   void dispose() {
-    // Logic unchanged
     _debounce?.cancel();
     _rtdbSubscription?.cancel();
     _slideInController.dispose();
@@ -97,7 +98,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   }
 
   String _getCurrentFileName(FileSystemLoaded state) {
-    // Logic unchanged
     if (state.activeFileId != null && state.files.isNotEmpty) {
       final matchingFile = state.files.firstWhere(
             (f) => f.fileId == state.activeFileId,
@@ -109,7 +109,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   }
 
   void _onEdit() async {
-    // Logic unchanged
     try {
       final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
       if (pngBytes != null) {
@@ -128,15 +127,13 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   }
 
   Future<void> _handleExport(BuildContext innerContext) async {
-    // Logic unchanged
     final fileState = innerContext.read<FileSystemBloc>().state;
     if (fileState is FileSystemLoaded && fileState.activeFileId != null) {
       final fileName = _getCurrentFileName(fileState);
       final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
       if (pngBytes == null) {
         if (mounted) {
-          BannerService.showError(
-              context, "Errore durante la creazione dell'immagine.");
+          BannerService.showError(context, "Errore durante la creazione dell'immagine.");
         }
         return;
       }
@@ -146,29 +143,22 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
       switch (exportPreference) {
         case ExportPreference.local:
-          await ExportService.downloadFileWithDialog(
-              context: innerContext, bytes: pngBytes, fileName: fileName);
+          await ExportService.downloadFileWithDialog(context: innerContext, bytes: pngBytes, fileName: fileName);
           break;
         case ExportPreference.drive:
           if (authState.user.driveConnected) {
-            innerContext.read<AuthenticationBloc>().add(
-                ExportFlowchartToDriveRequested(
-                    fileName: '$fileName.png', fileBytes: pngBytes));
+            innerContext.read<AuthenticationBloc>().add(ExportFlowchartToDriveRequested(fileName: '$fileName.png', fileBytes: pngBytes));
           } else {
-            await AppDialogs.showExportLocationDialog(
-                context: innerContext, pngBytes: pngBytes, fileName: fileName);
+            await AppDialogs.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
           }
           break;
         case ExportPreference.alwaysAsk:
-          await AppDialogs.showExportLocationDialog(
-              context: innerContext, pngBytes: pngBytes, fileName: fileName);
+          await AppDialogs.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
           break;
       }
     } else {
       if (!mounted) return;
-      await AppDialogs.showInfoDialog(innerContext,
-          title: "Nessun File Selezionato",
-          message: "Seleziona un file prima di esportare.");
+      await AppDialogs.showInfoDialog(innerContext, title: "Nessun File Selezionato", message: "Seleziona un file prima di esportare.");
     }
   }
 
@@ -182,52 +172,74 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       padding: EdgeInsets.zero,
       content: MultiBlocProvider(
         providers: [
-          BlocProvider<FlowchartBloc>(create: (_) => FlowchartBloc()),
+          BlocProvider<FlowchartBloc>(
+            create: (context) => FlowchartBloc(
+              projectRepo: context.read<ProjectBloc>().projectRepository,
+            ),
+          ),
           BlocProvider<FileSystemBloc>(
             key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
             create: (context) => FileSystemBloc(
               projectRepository: context.read<ProjectBloc>().projectRepository,
-            )..add(
-                RefreshFileSystem(projectId: widget.selectedProject.projectId)),
+            )..add(RefreshFileSystem(projectId: widget.selectedProject.projectId)),
           ),
         ],
         child: MultiBlocListener(
           listeners: [
+            BlocListener<FlowchartBloc, FlowchartState>(
+              listenWhen: (prev, curr) {
+                if (prev is FlowchartLoaded && curr is FlowchartLoaded) {
+                  return !prev.isDebugMode && curr.isDebugMode;
+                }
+                return false;
+              },
+              listener: (context, state) async {
+                if (_showGrid && !_dontShowGridDialogAgain) {
+                  final bool? shouldDisableGrid =
+                  await GenericDialogs.showGridRecommendationDialog(
+                    context,
+                    title: 'Migliora Visualizzazione Debug',
+                    message:
+                    'Per un\'esperienza di debug ottimale, si consiglia di disattivare la griglia. Vuoi disattivarla ora?',
+                    onRememberPreference: (remember) {
+                      if (remember) {
+                        setState(() {
+                          _dontShowGridDialogAgain = true;
+                        });
+                      }
+                    },
+                  );
+
+                  if (shouldDisableGrid == true && mounted) {
+                    setState(() {
+                      _showGrid = false;
+                    });
+                  }
+                }
+              },
+            ),
             BlocListener<AuthenticationBloc, AuthenticationState>(
               listenWhen: (p, c) => p.driveExportStatus != c.driveExportStatus,
               listener: (context, state) {
-                // Logic unchanged
                 if (state.driveExportStatus == DriveExportStatus.success) {
-                  BannerService.showSuccess(context,
-                      "Diagramma esportato con successo su Google Drive!");
-                  context
-                      .read<AuthenticationBloc>()
-                      .add(const ClearDriveExportStatus());
+                  BannerService.showSuccess(context, "Diagramma esportato con successo su Google Drive!");
+                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
                 } else if (state.driveExportStatus == DriveExportStatus.failure) {
-                  BannerService.showError(
-                      context, state.errorMessage ?? "Esportazione fallita.");
-                  context
-                      .read<AuthenticationBloc>()
-                      .add(const AuthenticationErrorCleared());
-                  context
-                      .read<AuthenticationBloc>()
-                      .add(const ClearDriveExportStatus());
+                  BannerService.showError(context, state.errorMessage ?? "Esportazione fallita.");
+                  context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
+                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
                 }
               },
             ),
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (previous, current) {
-                // Logic unchanged
-                if (previous is FlowchartLoaded &&
-                    current is FlowchartLoaded) {
+                if (previous is FlowchartLoaded && current is FlowchartLoaded) {
                   return previous.flowchart != current.flowchart;
                 }
-                return previous is! FlowchartLoaded &&
-                    current is FlowchartLoaded;
+                return previous is! FlowchartLoaded && current is FlowchartLoaded;
               },
               listener: (context, state) {
-                // Logic unchanged
-                if (state is FlowchartLoaded && _currentFileId != null) {
+                if (state is FlowchartLoaded && _currentFileId != null && !widget.isReadOnly) {
                   final jsonContent = state.toJson();
                   if (jsonContent == _lastRtdbContent) return;
 
@@ -235,10 +247,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                   _debounce = Timer(const Duration(milliseconds: 400), () {
                     if (mounted) {
                       _lastRtdbContent = jsonContent;
-                      context
-                          .read<ProjectBloc>()
-                          .projectRepository
-                          .updateLiveFileContent(
+                      context.read<ProjectBloc>().projectRepository.updateLiveFileContent(
                         widget.selectedProject.projectId,
                         _currentFileId!,
                         jsonContent,
@@ -248,9 +257,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
               },
             ),
-// Ecco il BlocListener aggiornato.
             BlocListener<FileSystemBloc, FileSystemState>(
-              // La condizione 'listenWhen' è corretta, reagiamo solo a questo stato specifico.
               listenWhen: (previous, current) => current is ShowExecutionJsonDialog,
               listener: (context, state) {
                 if (state is ShowExecutionJsonDialog) {
@@ -282,7 +289,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
               },
             ),
-            // Listener per la gestione dei file
             BlocListener<FileSystemBloc, FileSystemState>(
               listenWhen: (previous, current) => current is! ShowExecutionJsonDialog,
               listener: (context, state) async {
@@ -291,9 +297,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                   await _rtdbSubscription?.cancel();
 
                   if (state.activeFileId == null && state.files.isNotEmpty) {
-                    final mainFile = state.files.firstWhere(
-                            (f) => f.name == 'main',
-                        orElse: () => state.files.first);
+                    final mainFile = state.files.firstWhere((f) => f.name == 'main', orElse: () => state.files.first);
                     context.read<FileSystemBloc>().add(OpenFile(
                       projectId: widget.selectedProject.projectId,
                       fileId: mainFile.fileId,
@@ -303,54 +307,29 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                   }
 
                   if (state.activeFileId != null) {
-                    final activeFile = state.files
-                        .firstWhere((f) => f.fileId == state.activeFileId);
-                    _rtdbSubscription = context
-                        .read<ProjectBloc>()
-                        .projectRepository
-                        .liveFileContent(widget.selectedProject.projectId,
-                        activeFile.fileId)
-                        .listen((liveContent) {
-                      if (!mounted) return;
-
-                      final flowchartBloc = context.read<FlowchartBloc>();
-                      final currentState = flowchartBloc.state;
-                      final contentToLoad = liveContent ?? activeFile.content;
-
-                      if (currentState is FlowchartLoaded &&
-                          currentState.toJson() == contentToLoad) {
-                        return;
-                      }
-
-                      _lastRtdbContent = contentToLoad;
-
-                      flowchartBloc.add(LoadFlowchart(
-                        jsonContent: contentToLoad,
+                    final activeFile = state.files.firstWhere((f) => f.fileId == state.activeFileId);
+                    if (widget.isReadOnly) {
+                      context.read<FlowchartBloc>().add(LoadFlowchart(
+                        jsonContent: activeFile.content,
                         fileName: activeFile.name,
                       ));
-                    });
+                    } else {
+                      _rtdbSubscription = context.read<ProjectBloc>().projectRepository.liveFileContent(widget.selectedProject.projectId, activeFile.fileId).listen((liveContent) {
+                        if (!mounted) return;
+                        final flowchartBloc = context.read<FlowchartBloc>();
+                        final currentState = flowchartBloc.state;
+                        final contentToLoad = liveContent ?? activeFile.content;
+                        if (currentState is FlowchartLoaded && currentState.toJson() == contentToLoad) return;
+                        _lastRtdbContent = contentToLoad;
+                        flowchartBloc.add(LoadFlowchart(
+                          jsonContent: contentToLoad,
+                          fileName: activeFile.name,
+                        ));
+                      });
+                    }
                   }
                 } else if (state is FileSystemError) {
                   BannerService.showError(context, state.message);
-                }
-              },
-            ),
-            BlocListener<FlowchartBloc, FlowchartState>(
-              listenWhen: (prev, curr) {
-                if (prev is FlowchartLoaded && curr is FlowchartLoaded) {
-                  final entered = !prev.isDebugMode && curr.isDebugMode;
-                  final moved = curr.isDebugMode && prev.selectedNodeId != curr.selectedNodeId;
-                  return entered || moved;
-                }
-                return false;
-              },
-              listener: (context, state) async {
-                if (state is FlowchartLoaded && state.isDebugMode) {
-                  final nodeId = state.selectedNodeId;
-                  if (nodeId == null) return;
-                  final node = state.getNodeById(nodeId);
-                  if (node == null) return;
-                  //await AppDialogs.showNodeDetailsDialog(context: context, node: node);
                 }
               },
             ),
@@ -437,8 +416,7 @@ class _WorkspaceLayout extends StatelessWidget {
         ),
         Expanded(
           child: Padding(
-            padding:
-            const EdgeInsets.only(right: 16.0, bottom: 16.0),
+            padding: const EdgeInsets.only(right: 16.0, bottom: 16.0),
             child: Column(
               children: [
                 SlideTransition(
@@ -485,20 +463,26 @@ class _DebugModeView extends StatefulWidget {
   final GlobalKey workareaKey;
   final bool showGrid;
   final VoidCallback onToggleGrid;
-  const _DebugModeView({required this.workareaKey, required this.showGrid, required this.onToggleGrid});
+  const _DebugModeView(
+      {required this.workareaKey,
+        required this.showGrid,
+        required this.onToggleGrid});
 
   @override
   State<_DebugModeView> createState() => _DebugModeViewState();
 }
 
-class _DebugModeViewState extends State<_DebugModeView> with SingleTickerProviderStateMixin {
+class _DebugModeViewState extends State<_DebugModeView>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fade;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 300))..forward();
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 300))
+      ..forward();
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
   }
 
@@ -513,94 +497,89 @@ class _DebugModeViewState extends State<_DebugModeView> with SingleTickerProvide
     final theme = FluentTheme.of(context);
     return FadeTransition(
       opacity: _fade,
-      child: Stack(
+      child: Row(
         children: [
-          // Solo WorkArea, in sola lettura
-          Positioned.fill(
+          Expanded(
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: WorkArea(
+                    repaintKey: widget.workareaKey,
+                    showGrid: widget.showGrid,
+                    onToggleGrid: widget.onToggleGrid,
+                    isReadOnly: true,
+                    allowDragInReadOnly: true,
+                  ),
+                ),
+                Positioned(
+                  top: 24,
+                  right: 24,
+                  child: BlocBuilder<FlowchartBloc, FlowchartState>(
+                    builder: (context, state) {
+                      bool canPrev = false;
+                      bool canNext = false;
+                      if (state is FlowchartLoaded && state.isDebugMode) {
+                        canPrev = state.debugIndex > 0;
+                        canNext =
+                            state.debugIndex < (state.debugPath.length - 1);
+                      }
+                      return Row(
+                        children: [
+                          Tooltip(
+                            message: 'Passo precedente',
+                            child: FilledButton(
+                              onPressed: canPrev ? () => context.read<FlowchartBloc>().add(const DebugPrevNode()) : null,
+                              child: const Icon(FluentIcons.up, size: 16),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Tooltip(
+                            message: 'Passo successivo',
+                            child: FilledButton(
+                              onPressed: canNext ? () => context.read<FlowchartBloc>().add(const DebugNextNode()) : null,
+                              child: const Icon(FluentIcons.down, size: 16),
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          Tooltip(
+                            message: 'Esci dalla modalità debug',
+                            child: Button(
+                              style: ButtonStyle(
+                                  backgroundColor:
+                                  WidgetStatePropertyAll(theme.accentColor)),
+                              onPressed: () => context.read<FlowchartBloc>().add(const DebugExit()),
+                              child: const Icon(FluentIcons.cancel, size: 18, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                Positioned(
+                  bottom: 24,
+                  right: 24,
+                  child: BlocBuilder<FlowchartBloc, FlowchartState>(
+                    builder: (context, state) {
+                      if (state is FlowchartLoaded && state.isDebugMode) {
+                        return InfoLabel(
+                          label: 'Step',
+                          child: Text('${state.debugIndex + 1} / ${state.debugPath.length}'),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 1, child: Container(color: theme.resources.dividerStrokeColorDefault)),
+          Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: WorkArea(
-                repaintKey: widget.workareaKey,
-                showGrid: widget.showGrid,
-                onToggleGrid: widget.onToggleGrid,
-                isReadOnly: true,
-              ),
-            ),
-          ),
-          // Pannello dettagli non modale
-          Positioned(
-            left: 24,
-            top: 24,
-            bottom: 24,
-            child: SizedBox(
-              width: 360,
               child: _DebugDetailsPanel(),
-            ),
-          ),
-          // Controlli laterali: su, giù, uscita
-          Positioned(
-            right: 24,
-            top: 24,
-            bottom: 24,
-            child: BlocBuilder<FlowchartBloc, FlowchartState>(
-              builder: (context, state) {
-                bool canPrev = false;
-                bool canNext = false;
-                if (state is FlowchartLoaded && state.isDebugMode) {
-                  canPrev = state.debugIndex > 0;
-                  canNext = state.debugIndex < (state.debugPath.length - 1);
-                }
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Tooltip(
-                      message: 'Esci dalla modalità debug',
-                      child: FilledButton(
-                        style: ButtonStyle(
-                          backgroundColor: WidgetStatePropertyAll(theme.accentColor),
-                        ),
-                        onPressed: () => context.read<FlowchartBloc>().add(const DebugExit()),
-                        child: const Icon(FluentIcons.cancel, size: 18),
-                      ),
-                    ),
-                    Column(
-                      children: [
-                        Tooltip(
-                          message: 'Passo precedente',
-                          child: FilledButton(
-                            onPressed: canPrev ? () => context.read<FlowchartBloc>().add(const DebugPrevNode()) : null,
-                            child: const Icon(FluentIcons.up, size: 16),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Tooltip(
-                          message: 'Passo successivo',
-                          child: FilledButton(
-                            onPressed: canNext ? () => context.read<FlowchartBloc>().add(const DebugNextNode()) : null,
-                            child: const Icon(FluentIcons.down, size: 16),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          // Indicatore di posizione
-          Positioned(
-            right: 24,
-            bottom: 24,
-            child: BlocBuilder<FlowchartBloc, FlowchartState>(
-              builder: (context, state) {
-                if (state is FlowchartLoaded && state.isDebugMode) {
-                  return InfoLabel(
-                    label: 'Posizione',
-                    child: Text('${state.debugIndex + 1} / ${state.debugPath.length}'),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
             ),
           ),
         ],
@@ -609,152 +588,235 @@ class _DebugModeViewState extends State<_DebugModeView> with SingleTickerProvide
   }
 }
 
-class _DebugDetailsPanel extends StatelessWidget {
+class _DebugDetailsPanel extends StatefulWidget {
+  @override
+  State<_DebugDetailsPanel> createState() => _DebugDetailsPanelState();
+}
+
+class _DebugDetailsPanelState extends State<_DebugDetailsPanel> {
+  int _selectedTab = 0;
+
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+
     return BlocBuilder<FlowchartBloc, FlowchartState>(
       builder: (context, state) {
         if (state is! FlowchartLoaded || !state.isDebugMode) {
           return const SizedBox.shrink();
         }
-        final nodeId = state.selectedNodeId;
-        if (nodeId == null) return const SizedBox.shrink();
-        final node = state.getNodeById(nodeId);
-        if (node == null) return const SizedBox.shrink();
 
-        Widget buildRow(String label, String value, {bool code = false}) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 120,
-                  child: Text(label, style: theme.typography.caption),
-                ),
-                Expanded(
-                  child: SelectableText(
-                    value.isNotEmpty ? value : '–',
-                    style: TextStyle(
-                      fontFamily: code ? 'monospace' : null,
-                      fontSize: 13,
-                      color: theme.typography.body?.color,
-                    ),
-                  ),
-                ),
-              ],
+        final currentNodeId = state.selectedNodeId;
+        if (currentNodeId == null) return const SizedBox.shrink();
+
+        final currentNode = state.getNodeById(currentNodeId);
+        if (currentNode == null) return const SizedBox.shrink();
+
+        return TabView(
+          currentIndex: _selectedTab,
+          onChanged: (index) => setState(() => _selectedTab = index),
+          tabs: [
+            Tab(
+              text: const Text('Stato Attuale'),
+              icon: const Icon(FluentIcons.clipboard_list),
+              body: _buildStateTab(context, theme, state, currentNode),
             ),
-          );
-        }
-
-        List<Widget> buildSpecific(FlowNode n) {
-          switch (n.kind) {
-            case FlowNodeKind.input:
-              final input = n as InputNode;
-              return [
-                if (input.declarations.isEmpty)
-                  Text('Nessuna variabile dichiarata', style: theme.typography.caption)
-                else ...input.declarations.map((v) => buildRow('Var', '${v.dataType} ${v.name}${v.defaultValue != null ? ' = ${v.defaultValue}' : ''}', code: true)),
-              ];
-            case FlowNodeKind.output:
-              final out = n as OutputNode;
-              return [
-                buildRow('Template', out.template, code: true),
-                buildRow('Variabili', out.variables.join(', '), code: true),
-              ];
-            case FlowNodeKind.process:
-              final p = n as ProcessNode;
-              return [
-                buildRow('Call', p.flowchartToCall, code: true),
-                buildRow('Args', p.arguments.join(', '), code: true),
-                buildRow('Result', p.resultTarget ?? 'Nessuno', code: true),
-              ];
-            case FlowNodeKind.decision:
-              final d = n as DecisionNode;
-              return [
-                buildRow('Condizione', d.condition, code: true),
-              ];
-            default:
-              return [buildRow('Testo', n.text)];
-          }
-        }
-
-        final title = switch (node.kind) {
-          FlowNodeKind.input => 'Nodo Input',
-          FlowNodeKind.output => 'Nodo Output',
-          FlowNodeKind.process => 'Nodo Processo',
-          FlowNodeKind.decision => 'Nodo Condizione',
-          FlowNodeKind.start => 'Nodo Inizio',
-          FlowNodeKind.end => 'Nodo Fine',
-        };
-
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: theme.cardColor,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: theme.shadowColor.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: theme.typography.title),
-              const SizedBox(height: 12),
-              Container(height: 1, color: theme.resources.dividerStrokeColorDefault),
-              const SizedBox(height: 12),
-              ...buildSpecific(node),
-              const Spacer(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  FilledButton(
-                    onPressed: () {
-                      final map = _serializeNode(node);
-                      Clipboard.setData(ClipboardData(text: jsonEncode(map)));
-                    },
-                    child: const Text('Copia JSON'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            Tab(
+              text: const Text('Percorso Esecuzione'),
+              icon: const Icon(FluentIcons.timeline),
+              body: _buildTraceTab(context, theme, state),
+            ),
+          ],
         );
       },
     );
   }
 
-  Map<String, dynamic> _serializeNode(FlowNode node) {
-    final map = <String, dynamic>{
-      'id': node.id,
-      'kind': node.kind.name,
-      'text': node.text,
-    };
-    if (node is InputNode) {
-      map['declarations'] = [
-        for (final d in node.declarations)
-          {
-            'name': d.name,
-            'dataType': d.dataType,
-            if (d.defaultValue != null) 'defaultValue': d.defaultValue,
-          }
-      ];
-    } else if (node is OutputNode) {
-      map['template'] = node.template;
-      map['variables'] = node.variables;
-    } else if (node is ProcessNode) {
-      map['flowchartToCall'] = node.flowchartToCall;
-      map['arguments'] = node.arguments;
-      map['resultTarget'] = node.resultTarget;
-    } else if (node is DecisionNode) {
-      map['condition'] = node.condition;
+  Widget _buildStateTab(BuildContext context, FluentThemeData theme,
+      FlowchartLoaded state, FlowNode currentNode) {
+    Widget buildRow(String label, String value,
+        {bool code = false, bool canCopy = false}) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 110,
+              child: Text(label, style: theme.typography.caption),
+            ),
+            Expanded(
+              child: SelectableText(
+                value.isNotEmpty ? value : '–',
+                style: TextStyle(
+                  fontFamily: code ? 'monospace' : null,
+                  fontSize: 13,
+                  color: theme.typography.body?.color,
+                ),
+              ),
+            ),
+            if (canCopy) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(FluentIcons.copy, size: 12),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: value));
+                },
+              )
+            ]
+          ],
+        ),
+      );
     }
-    return map;
+
+    List<Widget> buildSpecificDetails(FlowNode n) {
+      switch (n.kind) {
+        case FlowNodeKind.input:
+          final input = n as InputNode;
+          return [
+            if (input.declarations.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text('Nessuna variabile dichiarata in questo nodo.',
+                    style: theme.typography.caption),
+              )
+            else
+              ...input.declarations.map((v) => buildRow('Dichiara',
+                  '${v.dataType} ${v.name}${v.defaultValue != null ? ' = ${v.defaultValue}' : ''}',
+                  code: true)),
+          ];
+        case FlowNodeKind.output:
+          final out = n as OutputNode;
+          return [
+            buildRow('Template', out.template, code: true),
+            buildRow('Variabili', out.variables.join(', '), code: true),
+          ];
+        case FlowNodeKind.process:
+          final p = n as ProcessNode;
+          return [
+            buildRow('Chiama', p.flowchartToCall, code: true),
+            buildRow('Argomenti', p.arguments.join(', '), code: true),
+            buildRow('Risultato', p.resultTarget ?? 'Nessuno', code: true),
+          ];
+        case FlowNodeKind.decision:
+          final d = n as DecisionNode;
+          return [
+            buildRow('Condizione', d.condition, code: true),
+          ];
+        default:
+          return [buildRow('Testo', n.text)];
+      }
+    }
+
+    return ScaffoldPage(
+      header: PageHeader(
+        title: Text(
+          'Step ${state.debugIndex + 1}: ${currentNode.text}',
+          style: theme.typography.title,
+        ),
+      ),
+      content: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        children: [
+          Expander(
+            header: const Text('Dettagli Nodo'),
+            initiallyExpanded: true,
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: buildSpecificDetails(currentNode),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expander(
+            header: const Text('Variabili di Sessione'),
+            initiallyExpanded: true,
+            content: StreamBuilder<Map<String, dynamic>>(
+              stream: context.read<FlowchartBloc>().debugVariablesStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
+                  return const Center(child: ProgressRing());
+                }
+                if (snapshot.hasError) {
+                  return SelectableText('Errore: ${snapshot.error}',
+                      style: TextStyle(
+                          color: theme.resources.systemFillColorCritical));
+                }
+                final variables = snapshot.data ?? {};
+                if (variables.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(
+                        child: Text('Nessuna variabile in questo scope.')),
+                  );
+                }
+                return Column(
+                  children: variables.entries.map((entry) {
+                    return buildRow(entry.key, entry.value.toString(),
+                        code: true, canCopy: true);
+                  }).toList(),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTraceTab(
+      BuildContext context, FluentThemeData theme, FlowchartLoaded state) {
+    return ScaffoldPage(
+      header: PageHeader(
+        title: Text('Traccia Esecuzione (${state.debugPath.length} steps)',
+            style: theme.typography.title),
+      ),
+      content: ListView.builder(
+        itemCount: state.debugPath.length,
+        itemBuilder: (context, index) {
+          final nodeId = state.debugPath[index];
+          final node = state.getNodeById(nodeId);
+          if (node == null) return const SizedBox.shrink();
+
+          final bool isCurrent = index == state.debugIndex;
+          final bool isPast = index < state.debugIndex;
+
+          IconData icon;
+          Color iconColor;
+          FontWeight fontWeight;
+
+          if (isCurrent) {
+            icon = FluentIcons.play_solid;
+            iconColor = theme.accentColor;
+            fontWeight = FontWeight.bold;
+          } else if (isPast) {
+            icon = FluentIcons.completed_solid;
+            iconColor = theme.resources.textFillColorSecondary;
+            fontWeight = FontWeight.normal;
+          } else {
+            icon = FluentIcons.circle_ring;
+            iconColor = theme.resources.textFillColorTertiary;
+            fontWeight = FontWeight.normal;
+          }
+
+          return ListTile(
+            leading: Icon(icon, color: iconColor, size: 16),
+            title: Text(
+              'Step ${index + 1}: ${node.text}',
+              style: TextStyle(
+                fontWeight: fontWeight,
+                color: isCurrent
+                    ? theme.accentColor
+                    : theme.typography.body?.color,
+              ),
+            ),
+            subtitle:
+            Text('Tipo: ${node.kind.name}', style: theme.typography.caption),
+            tileColor:
+            isCurrent ? ButtonState.all(theme.accentColor.withOpacity(0.1)) : null,
+          );
+        },
+      ),
+    );
   }
 }
