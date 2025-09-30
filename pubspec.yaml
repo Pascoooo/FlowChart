@@ -22,6 +22,7 @@ dependencies:
   popover: ^0.2.8+2
   file_picker:
   web_socket_channel:
+  url_launcher:
 
   # == FIREBASE ==
   firebase_core: ^3.1.1

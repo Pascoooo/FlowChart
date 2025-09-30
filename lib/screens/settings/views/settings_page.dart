@@ -1,3 +1,5 @@
+// pascoooo/flowchart/FlowChart-rework-flowchart/lib/screens/settings/views/settings_page.dart
+
 import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
@@ -5,6 +7,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image/image.dart' as img;
+import 'package:flutter/services.dart'; // NECESSARIO PER FilteringTextInputFormatter
 
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
@@ -26,6 +29,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
+  // ... (codice initState, dispose, build principale invariato) ...
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
@@ -69,7 +73,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                         Header(),
                         SizedBox(height: 16),
                         Expanded(
-                          // --- MODIFICA APPLICATA: Layout a due colonne riorganizzato ---
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -81,7 +84,7 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
                                     children: [
                                       ProfileSettings(),
                                       SizedBox(height: 16),
-                                      CloudIntegrationSettings(),
+                                      IntegrationSettings(),
                                       SizedBox(height: 16),
                                       AccountManagementSettings(),
                                     ],
@@ -118,10 +121,8 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   }
 }
 
-// ============================================================================
-// WIDGETS PRINCIPALI (Nessuna modifica qui)
-// ============================================================================
 
+// ... (widget Header, ProfileSettings invariati) ...
 class Header extends StatelessWidget {
   const Header({super.key});
 
@@ -423,75 +424,128 @@ class _ProfileSettingsState extends State<ProfileSettings> {
     );
   }
 }
+// in pascoooo/flowchart/FlowChart-rework-flowchart/lib/screens/settings/views/settings_page.dart
 
-// ============================================================================
-// WIDGETS DELLE SEZIONI DI IMPOSTAZIONI (Refactoring)
-// ============================================================================
+// ... (widget Header, ProfileSettings e altri import restano invariati) ...
 
-class CloudIntegrationSettings extends StatelessWidget {
-  const CloudIntegrationSettings({super.key});
+class IntegrationSettings extends StatelessWidget {
+  const IntegrationSettings({super.key});
 
   void _connectToGoogleDrive(BuildContext context) {
-    context
-        .read<AuthenticationBloc>()
-        .add(const AuthenticationDrivePermissionRequested());
+    context.read<AuthenticationBloc>().add(const AuthenticationDrivePermissionRequested());
   }
 
   void _disconnectFromGoogleDrive(BuildContext context) async {
-    final bool? confirmed = await AppDialogs.showConfirmationDialog(
+    final confirmed = await AppDialogs.showConfirmationDialog(
       context,
       title: 'Disconnetti Google Drive',
-      message:
-      'Sei sicuro di voler revocare i permessi? Non potrai più salvare i tuoi file su Drive.',
+      message: 'Sei sicuro di voler revocare i permessi? Non potrai più salvare i tuoi file su Drive.',
       confirmText: 'Disconnetti',
-      cancelText: 'Annulla',
       isDestructive: true,
     );
     if (confirmed == true && context.mounted) {
-      context
-          .read<AuthenticationBloc>()
-          .add(const AuthenticationDrivePermissionRevoked());
+      context.read<AuthenticationBloc>().add(const AuthenticationDrivePermissionRevoked());
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AuthenticationBloc, AuthenticationState>(
-      builder: (context, state) {
-        final isDriveConnected = state.user.driveConnected;
-        final isLoading = state.isLoading;
-        return SettingsSection(
-          title: 'Integrazioni Cloud',
-          status: _StatusLabel(isConnected: isDriveConnected),
-          children: [
+    final theme = FluentTheme.of(context);
+    final settingsProvider = context.watch<SettingsProvider>();
+    final isDriveConnected = context.select<AuthenticationBloc, bool>((bloc) => bloc.state.user.driveConnected);
+    final isLoading = context.select<AuthenticationBloc, bool>((bloc) => bloc.state.isLoading);
+
+    final executorController = TextEditingController(text: settingsProvider.localExecutorPort);
+
+    return SettingsSection(
+      title: 'Integrazioni & Esecuzione',
+      status: _StatusLabel(isConnected: isDriveConnected),
+      children: [
+        // Tile di Google Drive (invariata)
+        SettingsTile(
+          title: 'Google Drive',
+          subtitle: isDriveConnected ? 'Account collegato per l\'esportazione' : 'Collega il tuo account per salvare i file',
+          icon: FontAwesomeIcons.googleDrive,
+          iconColor: isDriveConnected ? theme.resources.systemFillColorSuccess : null,
+          trailing: OutlinedButton(
+            onPressed: isLoading ? null : (isDriveConnected ? () => _disconnectFromGoogleDrive(context) : () => _connectToGoogleDrive(context)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(isDriveConnected ? 'Disconnetti' : 'Connetti'),
+            ),
+          ),
+        ),
+
+        // MODIFICA: Logica di visualizzazione progressiva per Docker
+        if (!settingsProvider.hasClickedDockerInfo)
+        // Stato Iniziale: Mostra solo la guida
+          SettingsTile(
+            title: 'Esecutore Docker Locale',
+            subtitle: 'Esegui il codice C direttamente sul tuo PC',
+            icon: FontAwesomeIcons.docker,
+            onTap: () => AppDialogs.showDockerInfoDialog(context),
+            trailing: HyperlinkButton(
+              onPressed: () => AppDialogs.showDockerInfoDialog(context),
+              child: const Text('Scopri come'),
+            ),
+          )
+        else ...[
+          // Stato Avanzato: Mostra i controlli
+          // TILE 1: Attivazione
+          SettingsTile(
+            title: 'Abilita Esecutore Locale',
+            subtitle: settingsProvider.useLocalExecutor ? 'Attivo' : 'Disabilitato',
+            icon: FontAwesomeIcons.docker,
+            onTap: () => settingsProvider.updateUseLocalExecutor(!settingsProvider.useLocalExecutor),
+            trailing: ToggleSwitch(
+              checked: settingsProvider.useLocalExecutor,
+              onChanged: (value) => settingsProvider.updateUseLocalExecutor(value),
+            ),
+          ),
+
+          // TILE 2: Configurazione (visibile solo se la levetta è ON)
+          if (settingsProvider.useLocalExecutor)
             SettingsTile(
-              title: 'Google Drive',
-              subtitle: isDriveConnected
-                  ? 'Account collegato e sincronizzato'
-                  : 'Collega il tuo account per salvare i file',
-              icon: FontAwesomeIcons.googleDrive,
-              iconColor: isDriveConnected
-                  ? FluentTheme.of(context).resources.systemFillColorSuccess
-                  : null,
-              trailing: OutlinedButton(
-                onPressed: isLoading
-                    ? null
-                    : isDriveConnected
-                    ? () => _disconnectFromGoogleDrive(context)
-                    : () => _connectToGoogleDrive(context),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(isDriveConnected ? 'Disconnetti' : 'Connetti'),
-                ),
+              title: 'Configurazione Esecutore',
+              subtitle: 'Indirizzo: ${settingsProvider.localExecutorUrl}',
+              icon: FontAwesomeIcons.networkWired,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Porta:', style: theme.typography.caption),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 70,
+                    child: TextBox(
+                      controller: executorController,
+                      placeholder: '8080',
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onSubmitted: (value) {
+                        settingsProvider.updateLocalExecutorPort(value);
+                        BannerService.showSuccess(context, "Porta salvata!");
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Tasto Guida più piccolo
+                  Tooltip(
+                    message: 'Mostra guida di configurazione',
+                    child: IconButton(
+                      icon: const FaIcon(FontAwesomeIcons.circleQuestion, size: 16),
+                      onPressed: () => AppDialogs.showDockerInfoDialog(context),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        );
-      },
+        ],
+      ],
     );
   }
 }
+// ... (tutto il codice successivo del file rimane invariato)
 
+// ... (widget ExportPreferencesSettings, SystemAndInfoSettings, AccountManagementSettings e _StatusLabel invariati) ...
 class ExportPreferencesSettings extends StatelessWidget {
   const ExportPreferencesSettings({super.key});
 
@@ -499,14 +553,11 @@ class ExportPreferencesSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     final settingsProvider = context.watch<SettingsProvider>();
 
-    // --- MODIFICA APPLICATA: Aggiunto BlocConsumer per ripristinare la logica ---
     return BlocConsumer<AuthenticationBloc, AuthenticationState>(
       listenWhen: (previous, current) {
-        // Ascolta solo quando lo stato di connessione a Drive cambia da connesso a disconnesso.
         return previous.user.driveConnected && !current.user.driveConnected;
       },
       listener: (context, state) {
-        // Se la preferenza era Drive, mostra il dialogo e reimposta.
         if (settingsProvider.exportPreference == ExportPreference.drive) {
           settingsProvider.updateExportPreference(ExportPreference.alwaysAsk);
           AppDialogs.showInfoDialog(
@@ -551,11 +602,11 @@ class SystemAndInfoSettings extends StatelessWidget {
 
   void _confirmResetSettings(BuildContext context) async {
     final bool? confirmed = await AppDialogs.showConfirmationDialog(
-      context,
-      title: 'Conferma Ripristino',
-      message: 'Ripristinare tutte le impostazioni ai valori predefiniti?',
-      confirmText: 'Ripristina',
-      isDestructive: true
+        context,
+        title: 'Conferma Ripristino',
+        message: 'Ripristinare tutte le impostazioni ai valori predefiniti?',
+        confirmText: 'Ripristina',
+        isDestructive: true
     );
     if (confirmed == true && context.mounted) {
       // Logic for reset settings would go here
@@ -600,12 +651,12 @@ class AccountManagementSettings extends StatelessWidget {
 
   void _confirmLogout(BuildContext context) async {
     final bool? confirmed = await AppDialogs.showConfirmationDialog(
-      context,
-      title: 'Conferma Logout',
-      message: 'Sei sicuro di voler uscire?',
-      confirmText: 'Logout',
-      cancelText: 'Annulla',
-      isDestructive: true
+        context,
+        title: 'Conferma Logout',
+        message: 'Sei sicuro di voler uscire?',
+        confirmText: 'Logout',
+        cancelText: 'Annulla',
+        isDestructive: true
     );
     if (confirmed == true && context.mounted) {
       context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
@@ -614,12 +665,12 @@ class AccountManagementSettings extends StatelessWidget {
 
   void _confirmAccountDeletion(BuildContext context) async {
     final bool? confermation = await AppDialogs.showConfirmationDialog(
-      context,
-      title: 'Eliminazione Account',
-      message: 'Questa azione eliminerà definitivamente il tuo account e tutti i dati associati.',
-      confirmText: 'Elimina',
-      cancelText: 'Annulla',
-      isDestructive: true
+        context,
+        title: 'Eliminazione Account',
+        message: 'Questa azione eliminerà definitivamente il tuo account e tutti i dati associati.',
+        confirmText: 'Elimina',
+        cancelText: 'Annulla',
+        isDestructive: true
     );
     if (confermation == true && context.mounted) {
       context
@@ -651,11 +702,6 @@ class AccountManagementSettings extends StatelessWidget {
     );
   }
 }
-
-
-// ============================================================================
-// STATUS LABEL - Widget di stato per le integrazioni
-// ============================================================================
 
 class _StatusLabel extends StatelessWidget {
   final bool isConnected;
@@ -705,4 +751,3 @@ class _StatusLabel extends StatelessWidget {
     );
   }
 }
-

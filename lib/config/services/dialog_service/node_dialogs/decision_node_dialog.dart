@@ -36,8 +36,8 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   final List<_ComparisonRow> _advancedRows = [];
   final List<String> _connectors = [];
 
-  static const _opsNumeric = ['==', '!=', '<', '<=', '>', '>='];
-  static const _opsGeneric = ['==', '!='];
+  static const _opsNumeric = ['=', '!=', '<', '<=', '>', '>='];
+  static const _opsGeneric = ['=', '!='];
 
   @override
   void initState() {
