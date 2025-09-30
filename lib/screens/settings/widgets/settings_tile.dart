@@ -1,12 +1,15 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 class SettingsTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
   final VoidCallback? onTap;
+  final Widget? trailing;
   final Color? iconColor;
   final Color? titleColor;
-  final Widget? trailing;
+  final bool isDestructive;
 
   const SettingsTile({
     super.key,
@@ -14,66 +17,116 @@ class SettingsTile extends StatelessWidget {
     required this.subtitle,
     required this.icon,
     this.onTap,
+    this.trailing,
     this.iconColor,
     this.titleColor,
-    this.trailing,
+    this.isDestructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final finalIconColor = iconColor ?? cs.onSurfaceVariant;
-    final finalTitleColor = titleColor ?? cs.onSurface;
+    final theme = FluentTheme.of(context);
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        splashColor: cs.primary.withOpacity(0.1),
-        highlightColor: cs.primary.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    final destructiveColor = theme.resources.systemFillColorCritical;
+    final finalIconColor = isDestructive
+        ? destructiveColor
+        : (iconColor ?? theme.accentColor);
+    final finalTitleColor = isDestructive
+        ? destructiveColor
+        : titleColor;
+
+    return HoverButton(
+      onPressed: onTap,
+      builder: (context, states) {
+        return Container(
+          padding: const EdgeInsets.all(12.0), // Padding ridotto
+          decoration: BoxDecoration(
+            color: _getBackgroundColor(theme, states, isDestructive),
+          ),
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: finalIconColor, size: 22),
-              ),
-              const SizedBox(width: 16),
+              _buildIconContainer(context, finalIconColor, states),
+              const SizedBox(width: 12), // Spaziatura ridotta
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
-                      style: theme.textTheme.bodyLarge?.copyWith(
+                      style: theme.typography.body?.copyWith( // Typography ridotta
+                        color: finalTitleColor ?? theme.typography.body?.color,
                         fontWeight: FontWeight.w600,
-                        color: finalTitleColor,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 2), // Spazio ridotto
                     Text(
                       subtitle,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant.withOpacity(0.8),
+                      style: theme.typography.caption?.copyWith( // Caption invece di body
+                        color: theme.typography.caption?.color?.withValues(alpha: 0.7),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
-              // Il trailing può essere il pulsante o nient'altro
-              if (trailing != null) trailing!,
+
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                trailing!,
+              ] else if (onTap != null) ...[
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.all(6), // Padding ridotto
+                  decoration: BoxDecoration(
+                    color: theme.accentColor.withValues(
+                        alpha: states.isHovered ? 0.1 : 0.05
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const FaIcon(
+                    FontAwesomeIcons.chevronRight,
+                    size: 12, // Icona più piccola
+                  ),
+                ),
+              ],
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildIconContainer(BuildContext context, Color iconColor, Set<WidgetState> states) {
+    return Container(
+      width: 40, // Dimensione ridotta
+      height: 40,
+      decoration: BoxDecoration(
+        color: iconColor.withValues(alpha: states.isHovered ? 0.15 : 0.1),
+        borderRadius: BorderRadius.circular(10), // Bordi più piccoli
+        border: states.isHovered
+            ? Border.all(color: iconColor.withValues(alpha: 0.3), width: 1.0)
+            : null,
+      ),
+      child: Center(
+        child: FaIcon(
+          icon,
+          color: iconColor,
+          size: 18, // Icona più piccola
         ),
       ),
     );
+  }
+
+  Color _getBackgroundColor(FluentThemeData theme, Set<WidgetState> states, bool isDestructive) {
+    if (isDestructive) {
+      final destructiveColor = theme.resources.systemFillColorCritical;
+      if (states.isPressed) return destructiveColor.withValues(alpha: 0.1);
+      if (states.isHovered) return destructiveColor.withValues(alpha: 0.05);
+      return theme.cardColor;
+    }
+
+    if (states.isPressed) return theme.accentColor.withValues(alpha: 0.1);
+    if (states.isHovered) return theme.accentColor.withValues(alpha: 0.05);
+    return theme.cardColor;
   }
 }

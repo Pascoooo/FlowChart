@@ -1,8 +1,8 @@
 import 'dart:math';
-import 'package:flowchart_thesis/screens/user_dashboard/project_selection/widgets/project_card.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
-import '../../../../config/widgets/buttons.dart';
+import 'project_card.dart';
 
 class ProjectCarousel extends StatefulWidget {
   final List<MyProject> projects;
@@ -22,11 +22,12 @@ class ProjectCarousel extends StatefulWidget {
   State<ProjectCarousel> createState() => _ProjectCarouselState();
 }
 
-class _ProjectCarouselState extends State<ProjectCarousel> with TickerProviderStateMixin {
+class _ProjectCarouselState extends State<ProjectCarousel>
+    with TickerProviderStateMixin {
   late final PageController _pageController;
   late final AnimationController _staggerController;
   int _currentPage = 0;
-  int _projectsPerPage = 3; // Valore di default, verrà aggiornato dal LayoutBuilder
+  int _projectsPerPage = 3;
 
   @override
   void initState() {
@@ -86,11 +87,9 @@ class _ProjectCarouselState extends State<ProjectCarousel> with TickerProviderSt
       return const SizedBox.shrink();
     }
 
-    // MODIFICA: LayoutBuilder per rendere il carosello responsivo
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Aggiorniamo dinamicamente il numero di progetti per pagina
-        if (constraints.maxWidth > 900) {
+        if (constraints.maxWidth >= 880) {
           _projectsPerPage = 3;
         } else if (constraints.maxWidth > 650) {
           _projectsPerPage = 2;
@@ -109,8 +108,10 @@ class _ProjectCarouselState extends State<ProjectCarousel> with TickerProviderSt
                 itemCount: _totalPages,
                 itemBuilder: (context, pageIndex) {
                   final startIndex = pageIndex * _projectsPerPage;
-                  final endIndex = min(startIndex + _projectsPerPage, widget.projects.length);
-                  final pageProjects = widget.projects.sublist(startIndex, endIndex);
+                  final endIndex =
+                  min(startIndex + _projectsPerPage, widget.projects.length);
+                  final pageProjects =
+                  widget.projects.sublist(startIndex, endIndex);
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 60),
@@ -132,8 +133,10 @@ class _ProjectCarouselState extends State<ProjectCarousel> with TickerProviderSt
                               project: project,
                               projects: widget.projects,
                               onTap: () => widget.onProjectSelected(project),
-                              onDeleted: () => widget.onProjectDeleted(project.projectId),
-                              onRenamed: (newName) => widget.onProjectRenamed(project.projectId, newName),
+                              onDeleted: () =>
+                                  widget.onProjectDeleted(project.projectId),
+                              onRenamed: (newName) => widget
+                                  .onProjectRenamed(project.projectId, newName),
                             ),
                           ),
                         );
@@ -145,16 +148,16 @@ class _ProjectCarouselState extends State<ProjectCarousel> with TickerProviderSt
               if (_currentPage > 0)
                 Positioned(
                   left: 16,
-                  child: NavigationButton(
-                    icon: Icons.arrow_back_ios,
+                  child: _NavigationButton(
+                    icon: FontAwesomeIcons.chevronLeft,
                     onTap: () => _navigateToPage(_currentPage - 1),
                   ),
                 ),
               if (_currentPage < _totalPages - 1)
                 Positioned(
                   right: 16,
-                  child: NavigationButton(
-                    icon: Icons.arrow_forward_ios,
+                  child: _NavigationButton(
+                    icon: FontAwesomeIcons.chevronRight,
                     onTap: () => _navigateToPage(_currentPage + 1),
                   ),
                 ),
@@ -162,6 +165,36 @@ class _ProjectCarouselState extends State<ProjectCarousel> with TickerProviderSt
           ),
         );
       },
+    );
+  }
+}
+
+// Widget di navigazione personalizzato e migrato a Fluent UI
+class _NavigationButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _NavigationButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Button(
+      onPressed: onTap,
+      style: ButtonStyle(
+        shape: ButtonState.all(const CircleBorder()),
+        padding: ButtonState.all(const EdgeInsets.all(12)),
+        backgroundColor: ButtonState.resolveWith((states) {
+          final theme = FluentTheme.of(context);
+          if (states.isPressing) {
+            return theme.accentColor.withOpacity(0.2);
+          }
+          if (states.isHovering) {
+            return theme.accentColor.withOpacity(0.1);
+          }
+          return Colors.transparent;
+        }),
+      ),
+      child: Icon(icon, size: 20),
     );
   }
 }

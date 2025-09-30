@@ -1,10 +1,11 @@
-import 'package:flowchart_thesis/config/services/validation_service.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:provider/provider.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
+import '../../../../config/services/validation_service.dart';
 import '../../../../config/widgets/buttons.dart';
 import '../widgets/profile_picture.dart';
 import '../widgets/project_container.dart';
@@ -32,12 +33,14 @@ class ProjectSelector extends StatelessWidget {
         hintText: "es. Flowchart",
         confirmText: "Crea Progetto",
         cancelText: "Annulla",
+        inputLabel: "Nome Progetto",
         validator: (v) => ValidationService.validateProjectName(v, projects),
       );
       if (projectName != null) {
         onCreateProject(projectName);
       }
     }
+
     return Stack(
       children: [
         Center(
@@ -53,10 +56,13 @@ class ProjectSelector extends StatelessWidget {
                   projects: projects,
                   onProjectSelected: onProjectSelected,
                   onProjectDeleted: (projectId) {
-                    context.read<ProjectBloc>().add(DeleteProject(projectId: projectId));
+                    context
+                        .read<ProjectBloc>()
+                        .add(DeleteProject(projectId: projectId));
                   },
                   onProjectRenamed: (projectId, newName) {
-                    context.read<ProjectBloc>().add(RenameProject(projectId: projectId, newName: newName));
+                    context.read<ProjectBloc>().add(
+                        RenameProject(projectId: projectId, newName: newName));
                   },
                 ),
                 const SizedBox(height: 32),
@@ -69,17 +75,17 @@ class ProjectSelector extends StatelessWidget {
           ),
         ),
         const Positioned(
-          top: 24,
-          right: 24,
+          right: 20,
           child: ProfileMenu(),
         ),
         const Positioned(
-          bottom: 24,
-          right: 24,
+          height: 48,
+          width: 48,
+          bottom: 20,
+          right: 20,
           child: ThemeToggleButton(),
         ),
       ],
     );
   }
 }
-

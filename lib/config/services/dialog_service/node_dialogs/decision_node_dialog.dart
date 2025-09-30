@@ -1,20 +1,20 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+// La logica di business e la firma della funzione rimangono invariate.
 Future<Map<String, dynamic>?> showDecisionNodeDialog(
     BuildContext context, {
-      required List<Map<String, String>> variables, // each: {name, type}
+      required List<Map<String, String>> variables,
     }) {
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
-    useRootNavigator: true,
+    // Il redesign si concentra sul widget del dialogo stesso.
     builder: (_) => _DecisionNodeDialog(variables: variables),
   );
 }
 
-// --- ENUM PER MODALITÀ E STATO ---
 enum _ConditionMode { simple, advanced }
 enum _RightHandMode { literal, variable }
 
@@ -27,16 +27,14 @@ class _DecisionNodeDialog extends StatefulWidget {
 }
 
 class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
+  // --- STATO E LOGICA INVARIATI ---
   _ConditionMode _mode = _ConditionMode.simple;
   final TextEditingController _labelController = TextEditingController();
   bool _attemptedSubmit = false;
 
-  // Stato per la modalità Semplice
-  _ComparisonRow _simpleRow = _ComparisonRow();
-
-  // Stato per la modalità Avanzata
+  late _ComparisonRow _simpleRow;
   final List<_ComparisonRow> _advancedRows = [];
-  final List<String> _connectors = []; // AND / OR
+  final List<String> _connectors = [];
 
   static const _opsNumeric = ['==', '!=', '<', '<=', '>', '>='];
   static const _opsGeneric = ['==', '!='];
@@ -44,10 +42,10 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   @override
   void initState() {
     super.initState();
-    // Inizializza la riga semplice con la prima variabile, se disponibile
-    if (widget.variables.isNotEmpty) {
-      _simpleRow.leftVariable = widget.variables.first['name'];
-    }
+    _simpleRow = _ComparisonRow(
+      leftVariable:
+      widget.variables.isNotEmpty ? widget.variables.first['name'] : null,
+    );
   }
 
   @override
@@ -60,6 +58,7 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
     super.dispose();
   }
 
+  // --- METODI DI LOGICA E VALIDAZIONE (NON MODIFICATI) ---
   List<String> _opsForType(String? type) {
     switch (type) {
       case 'int':
@@ -74,22 +73,16 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   Map<String, String>? _varMeta(String? name) =>
       widget.variables.firstWhere((v) => v['name'] == name, orElse: () => {});
 
-  // --- REFACTOR: Sistema di validazione unificato e granulare ---
   bool _validateForm() {
     bool isFormValid = true;
-
     if (_mode == _ConditionMode.simple) {
       isFormValid = _validateRow(_simpleRow);
     } else {
       if (_advancedRows.isEmpty) return false;
       for (var row in _advancedRows) {
-        if (!_validateRow(row)) {
-          isFormValid = false;
-        }
+        if (!_validateRow(row)) isFormValid = false;
       }
-      if (!_areParenthesesBalanced()) {
-        isFormValid = false;
-      }
+      if (!_areParenthesesBalanced()) isFormValid = false;
     }
     return isFormValid;
   }
@@ -97,16 +90,12 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   bool _validateRow(_ComparisonRow row) {
     bool isRowValid = true;
     final leftType = _varMeta(row.leftVariable)?['type'];
-
-    // Validazione operando sinistro
     if (row.leftVariable == null) {
       row.leftError = 'Scegli una variabile';
       isRowValid = false;
     } else {
       row.leftError = null;
     }
-
-    // Validazione operando destro
     if (row.rightMode == _RightHandMode.literal) {
       final literal = row.literalController.text.trim();
       if (literal.isEmpty) {
@@ -138,13 +127,22 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   bool _validateLiteral(String type, String value) {
     if (value.isEmpty) return false;
     switch (type) {
-      case 'int': return int.tryParse(value) != null;
+      case 'int':
+        return int.tryParse(value) != null;
       case 'float':
-      case 'double': return double.tryParse(value) != null;
-      case 'bool': return ['true', 'false', '0', '1'].contains(value.toLowerCase());
-      case 'char': return value.length == 1 || (value.length == 3 && value.startsWith("'") && value.endsWith("'"));
-      case 'string': return true;
-      default: return true;
+      case 'double':
+        return double.tryParse(value) != null;
+      case 'bool':
+        return ['true', 'false', '0', '1'].contains(value.toLowerCase());
+      case 'char':
+        return value.length == 1 ||
+            (value.length == 3 &&
+                value.startsWith("'") &&
+                value.endsWith("'"));
+      case 'string':
+        return true;
+      default:
+        return true;
     }
   }
 
@@ -157,7 +155,7 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
       for (final char in row.rightParenController.text.trim().split('')) {
         if (char == ')') balance--;
       }
-      if (balance < 0) return false; // Chiusura prima di apertura
+      if (balance < 0) return false;
     }
     return balance == 0;
   }
@@ -200,7 +198,6 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
     final rowsToBuild =
     _mode == _ConditionMode.simple ? [_simpleRow] : _advancedRows;
     if (rowsToBuild.isEmpty) return '';
-
     List<String> parts = [];
     for (int i = 0; i < rowsToBuild.length; i++) {
       final row = rowsToBuild[i];
@@ -213,12 +210,9 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
       } else {
         right = row.rightVariable ?? '?';
       }
-
       final leftParen = row.leftParenController.text.trim();
       final rightParen = row.rightParenController.text.trim();
-
       parts.add('$leftParen$left $op $right$rightParen');
-
       if (_mode == _ConditionMode.advanced && i < _connectors.length) {
         parts.add(_connectors[i]);
       }
@@ -229,255 +223,397 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   String _normalizedLiteral(String type, String raw) {
     var v = raw.trim();
     switch (type) {
-      case 'char': return v.length == 1 ? "'$v'" : v;
-      case 'string': return (v.startsWith('"') && v.endsWith('"')) ? v : '"${v.replaceAll('"', '\\"')}"';
-      default: return v;
+      case 'char':
+        return v.length == 1 ? "'$v'" : v;
+      case 'string':
+        return (v.startsWith('"') && v.endsWith('"'))
+            ? v
+            : '"${v.replaceAll('"', '\\"')}"';
+      default:
+        return v;
     }
   }
 
   void _confirm() {
     setState(() => _attemptedSubmit = true);
     if (!_validateForm()) return;
-
     Navigator.of(context).pop({
-      'text': _labelController.text.trim().isEmpty ? 'Condizione' : _labelController.text.trim(),
+      'text': _labelController.text.trim().isEmpty
+          ? 'Condizione'
+          : _labelController.text.trim(),
       'condition': _buildExpression(),
     });
   }
 
+  // --- METODO BUILD (COMPLETAMENTE RIPROGETTATO) ---
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final expressionPreview = _buildExpression();
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
-      child: Container(
-        width: 700,
-        padding: const EdgeInsets.all(24.0),
-        child: widget.variables.isEmpty
-            ? Center(child: Text('Nessuna variabile definita.', style: TextStyle(color: theme.hintColor)))
-            : Column(
+    return ContentDialog(
+      // DESIGN: Aumentata la larghezza per un layout web più arioso.
+      constraints: const BoxConstraints(maxWidth: 800),
+      title: Row(children: [
+        FaIcon(FontAwesomeIcons.codeBranch,
+            color: theme.accentColor.defaultBrushFor(theme.brightness), size: 24),
+        const SizedBox(width: 16),
+        const Text('Configura Nodo Condizione'),
+      ]),
+      content: widget.variables.isEmpty
+          ? Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 48.0),
+            child: Text('Nessuna variabile definita per creare una condizione.',
+                style: theme.typography.body),
+          ))
+          : SingleChildScrollView(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              FaIcon(FontAwesomeIcons.codeBranch, color: theme.colorScheme.primary, size: 24),
-              const SizedBox(width: 12),
-              Text('Configura Nodo Condizione', style: theme.textTheme.headlineSmall),
-            ]),
-            const SizedBox(height: 24),
-            Row(children: [
-              Expanded(child: TextField(controller: _labelController, decoration: const InputDecoration(labelText: 'Etichetta Nodo (opzionale)'))),
-              const SizedBox(width: 24),
-              Expanded(
-                child: CupertinoSlidingSegmentedControl<_ConditionMode>(
-                  groupValue: _mode,
-                  onValueChanged: (value) {
-                    if (value == _ConditionMode.advanced) _switchToAdvanced();
-                    else setState(() => _mode = value!);
-                  },
-                  children: const {
-                    _ConditionMode.simple: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Semplice')),
-                    _ConditionMode.advanced: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Avanzato')),
-                  },
+            // DESIGN: Layout a due colonne per dare equilibrio visivo.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: InfoLabel(
+                    label: 'Etichetta Nodo (opzionale)',
+                    child: TextBox(
+                      controller: _labelController,
+                      placeholder: 'Es: Controllo età utente',
+                    ),
+                  ),
                 ),
-              ),
-            ]),
-            const SizedBox(height: 24),
-            // --- UI/UX: Transizione animata tra modalità semplice e avanzata ---
+                const SizedBox(width: 32),
+                InfoLabel(
+                  label: 'Modalità di Costruzione',
+                  child: Row(
+                    children: [
+                      RadioButton(
+                        checked: _mode == _ConditionMode.simple,
+                        content: const Text('Semplice'),
+                        onChanged: (v) {
+                          if (v) {
+                            setState(() => _mode = _ConditionMode.simple);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 16),
+                      RadioButton(
+                        checked: _mode == _ConditionMode.advanced,
+                        content: const Text('Avanzata'),
+                        onChanged: (v) {
+                          if (v) _switchToAdvanced();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            // DESIGN: L'AnimatedSwitcher gestisce la transizione tra le UI.
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
               child: _mode == _ConditionMode.simple
                   ? _buildSimpleUI(theme)
                   : _buildAdvancedUI(theme),
             ),
-            const SizedBox(height: 16),
-            _buildPreview(theme, expressionPreview),
             const SizedBox(height: 24),
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              CupertinoButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annulla')),
-              const SizedBox(width: 8),
-              CupertinoButton.filled(onPressed: _confirm, child: const Text('Conferma')),
-            ]),
+            _buildPreview(theme, expressionPreview),
           ],
         ),
       ),
+      actions: [
+      Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Button(
+          onPressed: () => Navigator.of(context).pop(null),
+          style: ButtonStyle(
+            padding: ButtonState.all(
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+          ),
+          child: const Text('Annulla'),
+        ),
+        const SizedBox(width: 12),
+        FilledButton(
+          onPressed: _confirm,
+          style: ButtonStyle(
+            padding: ButtonState.all(
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+          ),
+          child: const Text('Conferma'),
+        ),
+      ],
+    ),
+      ],
     );
   }
 
-  // --- UI/UX: Interfaccia per la modalità semplice, pulita e guidata. ---
-  Widget _buildSimpleUI(ThemeData theme) {
+  Widget _buildSimpleUI(FluentThemeData theme) {
     return _buildComparisonRow(_simpleRow, 0, theme, isSimpleMode: true);
   }
 
-  // --- UI/UX: Interfaccia per la modalità avanzata con lista di condizioni. ---
-  Widget _buildAdvancedUI(ThemeData theme) {
-    return Flexible(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 350),
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _advancedRows.length,
-                itemBuilder: (context, index) {
-                  final row = _advancedRows[index];
-                  return Column(
-                    children: [
-                      _buildComparisonRow(row, index, theme),
-                      if (index < _connectors.length)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: DropdownButtonFormField<String>(
-                            value: _connectors[index],
-                            items: const [
-                              DropdownMenuItem(value: 'AND', child: Text('AND (entrambe vere)')),
-                              DropdownMenuItem(value: 'OR', child: Text('OR (almeno una vera)')),
-                            ],
-                            onChanged: (val) => setState(() => _connectors[index] = val!),
-                          ),
-                        ),
+  Widget _buildAdvancedUI(FluentThemeData theme) {
+    return Column(
+      key: const ValueKey('advanced-ui'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // DESIGN: Box con altezza massima per evitare dialoghi troppo estesi.
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 350),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: _advancedRows.length,
+            itemBuilder: (context, index) {
+              final row = _advancedRows[index];
+              return _buildComparisonRow(row, index, theme);
+            },
+            separatorBuilder: (context, index) {
+              if (index < _connectors.length) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 60.0),
+                  child: ComboBox<String>(
+                    value: _connectors[index],
+                    isExpanded: true,
+                    items: const [
+                      ComboBoxItem(value: 'AND', child: Text('AND (entrambe vere)')),
+                      ComboBoxItem(value: 'OR', child: Text('OR (almeno una vera)')),
                     ],
-                  );
-                },
-              ),
-            ),
-            if (_attemptedSubmit && !_areParenthesesBalanced())
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text('Errore: le parentesi non sono bilanciate.', style: TextStyle(color: theme.colorScheme.error)),
-              ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: CupertinoButton(
-                onPressed: _addRow,
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  FaIcon(FontAwesomeIcons.plus, size: 14),
-                  SizedBox(width: 8),
-                  Text('Aggiungi Condizione'),
-                ]),
-              ),
-            ),
-          ],
+                    onChanged: (val) => setState(() => _connectors[index] = val!),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
         ),
-      ),
+        if (_attemptedSubmit && !_areParenthesesBalanced())
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            // DESIGN: Utilizzo del colore di errore standard del tema Fluent.
+            child: Text('Errore: le parentesi non sono bilanciate.',
+                style: theme.typography.caption?.copyWith(
+                  color: theme.resources.systemFillColorCritical,
+                )),
+          ),
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Button(
+            onPressed: _addRow,
+            child: Row(mainAxisSize: MainAxisSize.min, children: const [
+              FaIcon(FontAwesomeIcons.plus, size: 16),
+              SizedBox(width: 10),
+              Text('Aggiungi Condizione'),
+            ]),
+          ),
+        ),
+      ],
     );
   }
 
-  // --- UI/UX: Widget unificato per costruire una riga di comparazione, con UI ridisegnata. ---
-  Widget _buildComparisonRow(_ComparisonRow row, int index, ThemeData theme, {bool isSimpleMode = false}) {
+  Widget _buildComparisonRow(_ComparisonRow row, int index, FluentThemeData theme,
+      {bool isSimpleMode = false}) {
     final leftType = _varMeta(row.leftVariable)?['type'];
     final availableOps = _opsForType(leftType);
     if (!availableOps.contains(row.operator)) row.operator = availableOps.first;
 
+    // DESIGN: L'intera riga è stata riprogettata per essere più robusta.
+    // Ogni campo è in una Column con il proprio messaggio di errore,
+    // evitando layout disallineati e fragili.
     return Column(
-      key: ValueKey(row), // Chiave per animazioni corrette
-      crossAxisAlignment: CrossAxisAlignment.start,
+      key: ValueKey(row),
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!isSimpleMode)
-              SizedBox(width: 50, child: TextField(controller: row.leftParenController, decoration: const InputDecoration(labelText: '('))),
+              SizedBox(
+                width: 60,
+                child: TextBox(
+                    controller: row.leftParenController, placeholder: '('),
+              ),
+            if (!isSimpleMode) const SizedBox(width: 8),
 
+            // --- CAMPO 1: VARIABILE SINISTRA ---
             Expanded(
               flex: 3,
-              child: DropdownButtonFormField<String>(
-                value: row.leftVariable,
-                items: widget.variables.map((v) => DropdownMenuItem(value: v['name'], child: Text(v['name']!))).toList(),
-                onChanged: (val) => setState(() {
-                  row.leftVariable = val;
-                  row.rightVariable = null;
-                }),
-                decoration: InputDecoration(labelText: 'Variabile', errorText: _attemptedSubmit ? row.leftError : null),
+              child: _FormField(
+                errorText: _attemptedSubmit ? row.leftError : null,
+                child: ComboBox<String>(
+                  value: row.leftVariable,
+                  isExpanded: true,
+                  items: widget.variables
+                      .map((v) =>
+                      ComboBoxItem(value: v['name'], child: Text(v['name']!)))
+                      .toList(),
+                  onChanged: (val) => setState(() {
+                    row.leftVariable = val;
+                    row.rightVariable = null;
+                    if (_attemptedSubmit) _validateRow(row);
+                  }),
+                  placeholder: const Text('Variabile'),
+                ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
+
+            // --- CAMPO 2: OPERATORE ---
             Expanded(
               flex: 2,
-              child: DropdownButtonFormField<String>(
+              child: ComboBox<String>(
                 value: row.operator,
-                items: availableOps.map((op) => DropdownMenuItem(value: op, child: Center(child: Text(op)))).toList(),
+                isExpanded: true,
+                items: availableOps
+                    .map((op) =>
+                    ComboBoxItem(value: op, child: Center(child: Text(op))))
+                    .toList(),
                 onChanged: (val) => setState(() => row.operator = val!),
-                decoration: const InputDecoration(labelText: 'Operatore'),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
+
+            // --- CAMPO 3: VALORE DESTRO (LITERAL/VARIABLE) ---
             Expanded(
               flex: 3,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: row.rightMode == _RightHandMode.variable
-                    ? DropdownButtonFormField<String>(
-                  key: const ValueKey('variable'),
-                  value: row.rightVariable,
-                  items: widget.variables
-                      .where((v) => v['name'] != row.leftVariable)
-                      .map((v) => DropdownMenuItem(value: v['name'], child: Text(v['name']!)))
-                      .toList(),
-                  onChanged: (val) => setState(() => row.rightVariable = val),
-                  decoration: InputDecoration(labelText: 'Variabile', errorText: _attemptedSubmit ? row.rightError : null),
-                )
-                    : TextField(
-                  key: const ValueKey('literal'),
-                  controller: row.literalController,
-                  decoration: InputDecoration(labelText: 'Valore', errorText: _attemptedSubmit ? row.rightError : null),
-                  onChanged: (_) { if (_attemptedSubmit) setState(_validateForm); },
+              child: _FormField(
+                errorText: _attemptedSubmit ? row.rightError : null,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: row.rightMode == _RightHandMode.variable
+                      ? ComboBox<String>(
+                    key: const ValueKey('variable'),
+                    value: row.rightVariable,
+                    isExpanded: true,
+                    items: widget.variables
+                        .where((v) => v['name'] != row.leftVariable)
+                        .map((v) => ComboBoxItem(
+                        value: v['name'], child: Text(v['name']!)))
+                        .toList(),
+                    onChanged: (val) => setState(() {
+                      row.rightVariable = val;
+                      if (_attemptedSubmit) _validateRow(row);
+                    }),
+                    placeholder: const Text('Variabile'),
+                  )
+                      : TextBox(
+                    key: const ValueKey('literal'),
+                    controller: row.literalController,
+                    placeholder: 'Valore',
+                    onChanged: (_) {
+                      if (_attemptedSubmit) setState(() => _validateRow(row));
+                    },
+                  ),
                 ),
               ),
             ),
-            if (!isSimpleMode)
-              SizedBox(width: 50, child: TextField(controller: row.rightParenController, decoration: const InputDecoration(labelText: ')'))),
+            const SizedBox(width: 8),
 
-            Column(
-              children: [
-                CupertinoSlidingSegmentedControl<_RightHandMode>(
-                  groupValue: row.rightMode,
-                  onValueChanged: (val) => setState(() => row.rightMode = val!),
-                  children: const {
-                    _RightHandMode.literal: FaIcon(FontAwesomeIcons.quoteLeft, size: 12),
-                    _RightHandMode.variable: FaIcon(FontAwesomeIcons.at, size: 12),
-                  },
-                ),
-                if (!isSimpleMode)
-                  IconButton(
-                    icon: FaIcon(FontAwesomeIcons.trashCan, color: theme.colorScheme.error, size: 16),
-                    onPressed: () => _removeRow(index),
-                  ),
-              ],
+            if (!isSimpleMode)
+              SizedBox(
+                width: 60,
+                child: TextBox(
+                    controller: row.rightParenController, placeholder: ')'),
+              ),
+
+            const SizedBox(width: 8),
+            ToggleSwitch(
+              checked: row.rightMode == _RightHandMode.variable,
+              onChanged: (v) => setState(() {
+                row.rightMode = v ? _RightHandMode.variable : _RightHandMode.literal;
+                if (_attemptedSubmit) _validateRow(row);
+              }),
+              content: FaIcon(
+                row.rightMode == _RightHandMode.variable
+                    ? FontAwesomeIcons.at
+                    : FontAwesomeIcons.quoteLeft,
+                size: 14,
+              ),
             ),
+
+            if (!isSimpleMode) ...[
+              const SizedBox(width: 8),
+              HoverButton(
+                onPressed: () => _removeRow(index),
+                builder: (context, states) => Container(
+                  padding: const EdgeInsets.all(8.0),
+                  color: ButtonThemeData.buttonColor(context, states),
+                  child: FaIcon(
+                    FontAwesomeIcons.trashCan,
+                    color: theme.resources.systemFillColorCritical,
+                    size: 16,
+                  ),
+                ),
+              ),
+            ]
           ],
         ),
       ],
     );
   }
 
-  Widget _buildPreview(ThemeData theme, String expr) {
+  Widget _buildPreview(FluentThemeData theme, String expr) {
     if (expr.trim().isEmpty) return const SizedBox.shrink();
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(8),
+        color: theme.resources.cardStrokeColorDefaultSolid,
+        borderRadius:  BorderRadius.circular(6),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Anteprima Espressione', style: theme.textTheme.labelMedium),
-          const SizedBox(height: 4),
-          Text(expr, style: theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace')),
+          Text('Anteprima Espressione',
+              style: theme.typography.caption
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(expr,
+              style:
+              theme.typography.body?.copyWith(fontFamily: 'monospace')),
         ],
       ),
     );
   }
 }
 
-// --- REFACTOR: Classe dati ora include controller per le parentesi e campi specifici per gli errori. ---
+/// Widget di utilità per incapsulare un campo e il suo testo di errore.
+class _FormField extends StatelessWidget {
+  final Widget child;
+  final String? errorText;
+
+  const _FormField({required this.child, this.errorText});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        child,
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0, left: 2.0),
+            child: Text(
+              errorText!,
+              style: theme.typography.caption?.copyWith(
+                color: theme.resources.systemFillColorCritical
+              ),
+            ),
+          )
+      ],
+    );
+  }
+}
+
+
+// La classe di stato per la riga rimane invariata nella sua logica.
 class _ComparisonRow {
   String? leftVariable;
   String operator;
@@ -498,14 +634,17 @@ class _ComparisonRow {
         leftParenController = TextEditingController(),
         rightParenController = TextEditingController();
 
-  _ComparisonRow._clone(_ComparisonRow original) :
-        leftVariable = original.leftVariable,
+  _ComparisonRow._clone(_ComparisonRow original)
+      : leftVariable = original.leftVariable,
         operator = original.operator,
         rightMode = original.rightMode,
         rightVariable = original.rightVariable,
-        literalController = TextEditingController(text: original.literalController.text),
-        leftParenController = TextEditingController(text: original.leftParenController.text),
-        rightParenController = TextEditingController(text: original.rightParenController.text);
+        literalController =
+        TextEditingController(text: original.literalController.text),
+        leftParenController =
+        TextEditingController(text: original.leftParenController.text),
+        rightParenController =
+        TextEditingController(text: original.rightParenController.text);
 
   _ComparisonRow clone() => _ComparisonRow._clone(this);
 

@@ -25,14 +25,20 @@ class FlowchartActionFailure extends FlowchartState {
 class FlowchartLoaded extends FlowchartState {
   final Flowchart flowchart;
   final String? selectedNodeId;
+  // Debug mode
+  final bool isDebugMode;
+  final List<String> debugPath; // lista di nodeId in ordine di visita
+  final int debugIndex; // indice del nodo corrente dentro debugPath
+
   static const _uuid = Uuid();
 
   const FlowchartLoaded({
     required this.flowchart,
     this.selectedNodeId,
+    this.isDebugMode = false,
+    this.debugPath = const [],
+    this.debugIndex = 0,
   });
-
-// All'interno della classe FlowchartLoaded in flowchart_state.dart
 
   factory FlowchartLoaded.empty({String? fileName}) {
     return FlowchartLoaded(
@@ -98,11 +104,17 @@ class FlowchartLoaded extends FlowchartState {
     Flowchart? flowchart,
     String? selectedNodeId,
     bool clearSelection = false,
+    bool? isDebugMode,
+    List<String>? debugPath,
+    int? debugIndex,
   }) {
     return FlowchartLoaded(
       flowchart: flowchart ?? this.flowchart,
       selectedNodeId:
-      clearSelection ? null : (selectedNodeId ?? this.selectedNodeId),
+          clearSelection ? null : (selectedNodeId ?? this.selectedNodeId),
+      isDebugMode: isDebugMode ?? this.isDebugMode,
+      debugPath: debugPath ?? this.debugPath,
+      debugIndex: debugIndex ?? this.debugIndex,
     );
   }
 
@@ -111,5 +123,5 @@ class FlowchartLoaded extends FlowchartState {
   }
 
   @override
-  List<Object?> get props => [flowchart, selectedNodeId];
+  List<Object?> get props => [flowchart, selectedNodeId, isDebugMode, debugPath, debugIndex];
 }

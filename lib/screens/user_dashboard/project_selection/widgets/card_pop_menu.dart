@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:project_repository/project_repository.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:project_repository/project_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../../blocs/project_bloc/project_bloc.dart';
@@ -25,117 +25,129 @@ class CardPopupMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final projectBloc = context.read<ProjectBloc>();
     final bool isCurrentlyPublic = project.isPublic;
+    final flyoutController = FlyoutController();
 
-    return PopupMenuButton<String>(
-      tooltip: "Opzioni",
-      color: theme.colorScheme.surfaceContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (value) async {
-        // --- REFACTOR: Tutte le chiamate ora usano la facciata AppDialogs ---
-        if (value == 'rename') {
-          final newName = await AppDialogs.showInputDialog(context,
-              title: "Rinomina progetto",
-              message: "Inserisci un nuovo nome per il progetto",
-              initialValue: project.name,
-              confirmText: "Rinomina",
-              validator: (v) => ValidationService.validateProjectName(v, projects, project.projectId));
-          if (newName != null) {
-            onRenamed(newName);
-          }
-        } else if (value == 'delete') {
-          final confirm = await AppDialogs.showConfirmationDialog(context,
-              title: "Elimina progetto",
-              message: "Sei sicuro di voler eliminare '${project.name}'?",
-              confirmText: "Elimina",
-              isDestructive: true); // --- MODIFICA: Aggiunto flag per azione distruttiva ---
-          if (confirm == true) {
-            onDeleted();
-          }
-        } else if (value == 'share') {
-          await AppDialogs.showAdvancedShareDialog(
-            context: context,
-            project: project,
-            onMakePublic: () {
-              projectBloc.add(UpdateProjectVisibility(
-                projectId: project.projectId,
-                isPublic: true,
-              ));
-              BannerService.showSuccess(context, 'Progetto reso pubblico!');
+    // Salvo il contesto esterno per usarlo dopo aver chiuso il flyout
+    final outerContext = context;
+
+    return FlyoutTarget(
+      controller: flyoutController,
+      child: Button(
+        style: ButtonStyle(
+          backgroundColor:
+          ButtonState.all(theme.cardColor.withOpacity(0.8)),
+          padding: ButtonState.all(const EdgeInsets.all(4)),
+          shape: ButtonState.all(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          ),
+        ),
+        onPressed: () {
+          flyoutController.showFlyout(
+            builder: (flyoutContext) {
+              return MenuFlyout(
+                items: [
+                  MenuFlyoutItem(
+                    onPressed: () async {
+                      Navigator.pop(flyoutContext); // Chiude il flyout
+                      final newName = await AppDialogs.showInputDialog(
+                          outerContext,
+                          title: "Rinomina progetto",
+                          message: "Inserisci un nuovo nome per il progetto",
+                          initialValue: project.name,
+                          inputLabel: "Nome Progetto",
+                          confirmText: "Rinomina",
+                          validator: (v) => ValidationService.validateProjectName(
+                              v, projects, project.projectId));
+                      if (newName != null) {
+                        onRenamed(newName);
+                      }
+                    },
+                    leading: const FaIcon(FontAwesomeIcons.penToSquare, size: 16),
+                    text: const Text("Rinomina"),
+                  ),
+                  const MenuFlyoutSeparator(),
+                  if (isCurrentlyPublic) ...[
+                    MenuFlyoutItem(
+                      onPressed: () async {
+                        Navigator.pop(flyoutContext);
+                        await AppDialogs.showShareInfoDialog(
+                          context: outerContext,
+                          title: 'ID Progetto Pubblico',
+                          message:
+                          'Questo è l\'ID del tuo progetto pubblico. Chiunque lo possegga può visualizzarlo.',
+                          copyableText: project.projectId,
+                        );
+                      },
+                      leading: FaIcon(FontAwesomeIcons.copy,
+                          size: 16, color: theme.accentColor),
+                      text: Text("Copia ID Pubblico",
+                          style: TextStyle(color: theme.accentColor)),
+                    ),
+                    MenuFlyoutItem(
+                      onPressed: () {
+                        Navigator.pop(flyoutContext);
+                        projectBloc.add(UpdateProjectVisibility(
+                            projectId: project.projectId, isPublic: false));
+                        BannerService.showInfo(
+                            outerContext, 'Il progetto è di nuovo privato.');
+                      },
+                      leading: FaIcon(FontAwesomeIcons.lock,
+                          size: 16, color: theme.accentColor),
+                      text: Text("Rendi Privato",
+                          style: TextStyle(color: theme.accentColor)),
+                    ),
+                  ] else ...[
+                    MenuFlyoutItem(
+                      onPressed: () async {
+                        Navigator.pop(flyoutContext);
+                        await AppDialogs.showAdvancedShareDialog(
+                          context: outerContext,
+                          project: project,
+                          onMakePublic: () {
+                            projectBloc.add(UpdateProjectVisibility(
+                              projectId: project.projectId,
+                              isPublic: true,
+                            ));
+                            BannerService.showSuccess(
+                                outerContext, 'Progetto reso pubblico!');
+                          },
+                        );
+                      },
+                      leading: FaIcon(FontAwesomeIcons.shareNodes,
+                          size: 16, color: theme.accentColor),
+                      text: Text("Condividi",
+                          style: TextStyle(color: theme.accentColor)),
+                    ),
+                  ],
+                  const MenuFlyoutSeparator(),
+                  MenuFlyoutItem(
+                    onPressed: () async {
+                      Navigator.pop(flyoutContext);
+                      final confirm = await AppDialogs.showConfirmationDialog(
+                          outerContext,
+                          title: "Elimina progetto",
+                          message:
+                          "Sei sicuro di voler eliminare '${project.name}'?",
+                          confirmText: "Elimina",
+                          isDestructive: true);
+                      if (confirm == true) {
+                        onDeleted();
+                      }
+                    },
+                    leading: FaIcon(FontAwesomeIcons.trashCan,
+                        size: 16, color: Colors.red),
+                    text: Text("Elimina", style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+              );
             },
           );
-        } else if (value == 'unshare') {
-          projectBloc.add(UpdateProjectVisibility(
-              projectId: project.projectId, isPublic: false));
-          BannerService.showInfo(context, 'Il progetto è di nuovo privato.');
-        } else if (value == 'copy_id') {
-          await AppDialogs.showShareInfoDialog( // --- MODIFICA: Utilizzo del metodo corretto ---
-            context: context,
-            title: 'ID Progetto Pubblico',
-            message: 'Questo è l\'ID del tuo progetto pubblico. Chiunque lo possegga può visualizzarlo.',
-            copyableText: project.projectId,
-          );
-        }
-      },
-      // --- ICONOGRAFIA: Tutte le icone sono state sostituite con FontAwesomeIcons ---
-      itemBuilder: (context) => [
-        const PopupMenuItem(
-          value: 'rename',
-          child: Row(children: [
-            FaIcon(FontAwesomeIcons.penToSquare, size: 16),
-            SizedBox(width: 12),
-            Text("Rinomina")
-          ]),
-        ),
-        const PopupMenuDivider(),
-        if (isCurrentlyPublic) ...[
-          PopupMenuItem<String>(
-            value: 'copy_id',
-            child: Row(children: [
-              FaIcon(FontAwesomeIcons.copy, size: 16, color: theme.colorScheme.primary),
-              const SizedBox(width: 12),
-              Text("Copia ID Pubblico", style: TextStyle(color: theme.colorScheme.primary)),
-            ]),
-          ),
-          PopupMenuItem<String>(
-            value: 'unshare',
-            child: Row(children: [
-              FaIcon(FontAwesomeIcons.lock, size: 16, color: theme.colorScheme.primary),
-              const SizedBox(width: 12),
-              Text("Rendi Privato", style: TextStyle(color: theme.colorScheme.primary)),
-            ]),
-          ),
-        ] else ...[
-          PopupMenuItem<String>(
-            value: 'share',
-            child: Row(children: [
-              FaIcon(FontAwesomeIcons.shareNodes, size: 16, color: theme.colorScheme.primary),
-              const SizedBox(width: 12),
-              Text("Condividi", style: TextStyle(color: theme.colorScheme.primary)),
-            ]),
-          ),
-        ],
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'delete',
-          child: Row(children: [
-            FaIcon(FontAwesomeIcons.trashCan, size: 16, color: theme.colorScheme.error),
-            const SizedBox(width: 12),
-            Text("Elimina", style: TextStyle(color: theme.colorScheme.error))
-          ]),
-        ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface.withOpacity(0.8),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: FaIcon(FontAwesomeIcons.ellipsisVertical, // Icona aggiornata
-            size: 20,
-            color: theme.colorScheme.onSurfaceVariant),
+        },
+        child: FaIcon(FontAwesomeIcons.ellipsisVertical,
+            size: 20, color: theme.typography.body?.color?.withOpacity(0.8)),
       ),
     );
   }

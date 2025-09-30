@@ -1,13 +1,15 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:project_repository/project_repository.dart';
 import 'package:file_repository/file_repository.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Icons;
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:project_repository/project_repository.dart';
 
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
-import '../views/workarea.dart'; // Riutilizziamo la WorkArea per la visualizzazione
+import '../views/workarea.dart';
 
 /// Un workspace semplificato e statico per la visualizzazione di progetti condivisi.
 class StaticProjectWorkspace extends StatefulWidget {
@@ -25,13 +27,11 @@ class StaticProjectWorkspace extends StatefulWidget {
 }
 
 class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
-  // Lo stato locale di questo widget terrà traccia solo del file attivo
   String? _activeFileId;
 
   @override
   void initState() {
     super.initState();
-    // All'avvio, se ci sono file, seleziona il primo come attivo
     if (widget.files.isNotEmpty) {
       _activeFileId = widget.files.first.fileId;
     }
@@ -39,29 +39,20 @@ class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    // Troviamo il file attualmente selezionato
     final activeFile = widget.files.firstWhere(
           (file) => file.fileId == _activeFileId,
-      orElse: () => MyFile.empty, // Un file vuoto se non ne trova
+      orElse: () => MyFile.empty,
     );
 
-    return MultiBlocProvider(
-      providers: [
-        // Forniamo un FlowchartBloc locale solo per questo workspace statico.
-        // La sua unica responsabilità è caricare e mostrare il contenuto del file.
-        BlocProvider<FlowchartBloc>(
-          // Usiamo una key per forzare la ricreazione del BLoC se il file cambia
-          key: ValueKey(_activeFileId),
-          create: (context) => FlowchartBloc()
-            ..add(LoadFlowchart(
-              jsonContent: activeFile.content,
-              fileName: activeFile.name,
-            )),
-        ),
-      ],
+    return BlocProvider<FlowchartBloc>(
+      key: ValueKey(_activeFileId),
+      create: (context) => FlowchartBloc()
+        ..add(LoadFlowchart(
+          jsonContent: activeFile.content,
+          fileName: activeFile.name,
+        )),
       child: Row(
         children: [
-          // 1. Una Sidebar semplificata, senza "Nuovo File"
           _StaticSidebar(
             files: widget.files,
             activeFileId: _activeFileId,
@@ -71,25 +62,25 @@ class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
               });
             },
           ),
-          // 2. L'area di lavoro principale
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  // 3. Una TopBar semplificata, senza bottoni di modifica
                   _StaticTopBar(
                     projectName: widget.project.name,
                     fileName: activeFile.name,
                   ),
                   const SizedBox(height: 16),
-                  // 4. L'area di disegno, che ora mostrerà il flowchart statico
                   Expanded(
                     child: WorkArea(
-                      repaintKey: GlobalKey(), // Una nuova chiave per la vista statica
+                      repaintKey:
+                      GlobalKey(),
                       showGrid: true,
-                      isReadOnly: true, // Impostiamo la modalità sola lettura
-                      onToggleGrid: () {}, // La griglia è sempre attiva e non modificabile
+                      isReadOnly: true,
+                      allowDragInReadOnly: true,
+                      onToggleGrid:
+                          () {},
                     ),
                   ),
                 ],
@@ -117,28 +108,31 @@ class _StaticSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return Container(
       width: 320,
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+        border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
       ),
       child: Column(
         children: [
-          // Header con pulsante per tornare indietro
           ListTile(
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => context.read<ProjectBloc>().add(const LeaveProject()),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              onPressed: () =>
+                  context.read<ProjectBloc>().add(const LeaveProject()),
             ),
-            title: Text('Progetto Condiviso', style: theme.textTheme.titleMedium),
+            title: Text('Progetto Condiviso', style: theme.typography.bodyStrong),
           ),
-          const Divider(indent: 16, endIndent: 16),
-          // Lista dei file
+          const Divider(
+            style: DividerThemeData(
+              horizontalMargin: EdgeInsets.symmetric(horizontal: 16),
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               itemCount: files.length,
@@ -147,17 +141,18 @@ class _StaticSidebar extends StatelessWidget {
                 final isSelected = file.fileId == activeFileId;
                 return ListTile(
                   leading: Icon(
-                    Icons.insert_drive_file,
-                    color: isSelected ? theme.colorScheme.primary : null,
+                    FontAwesomeIcons.fileCode,
+                    color: isSelected ? theme.accentColor : null,
                   ),
                   title: Text(
                     file.name,
-                    style: TextStyle(
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? theme.colorScheme.primary : null,
+                    style: (theme.typography.body ?? const TextStyle()).copyWith(
+                      fontWeight:
+                      isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? theme.accentColor : null,
                     ),
                   ),
-                  onTap: () => onFileSelected(file.fileId),
+                  onPressed: () => onFileSelected(file.fileId),
                 );
               },
             ),
@@ -176,19 +171,19 @@ class _StaticTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return Container(
       height: 80,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+        border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
       ),
       alignment: Alignment.centerLeft,
       child: Row(
         children: [
-          Icon(Icons.visibility, color: theme.colorScheme.secondary),
+          Icon(FontAwesomeIcons.diagramProject, color: theme.accentColor),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -197,12 +192,12 @@ class _StaticTopBar extends StatelessWidget {
               children: [
                 Text(
                   projectName,
-                  style: theme.textTheme.titleMedium,
+                  style: theme.typography.bodyStrong,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   'Visualizzando: $fileName (sola lettura)',
-                  style: theme.textTheme.bodySmall,
+                  style: theme.typography.caption,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

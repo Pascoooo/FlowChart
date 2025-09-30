@@ -1,8 +1,9 @@
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
-import 'package:flowchart_thesis/config/widgets/buttons.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_event.dart';
@@ -29,7 +30,7 @@ class ProjectSidebar extends StatefulWidget {
 class _ProjectSidebarState extends State<ProjectSidebar> {
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return Container(
       width: 320,
@@ -39,9 +40,10 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
+                color: theme.cardColor,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+                border:
+                Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
               ),
               child: Column(
                 children: [
@@ -50,12 +52,12 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
                   Expanded(
                     child: _FileSystemView(
                       projectId: widget.selectedProject.projectId,
-                      isReadOnly: widget.isReadOnly, // <-- MODIFICA: Passa il flag
+                      isReadOnly: widget.isReadOnly,
                     ),
                   ),
-                  // <-- MODIFICA: Mostra il pulsante solo se non è in sola lettura -->
                   if (!widget.isReadOnly)
-                    CreateFileButton(projectId: widget.selectedProject.projectId),
+                    CreateFileButton(
+                        projectId: widget.selectedProject.projectId),
                 ],
               ),
             ),
@@ -67,7 +69,7 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
     );
   }
 
-  Widget _buildDivider(ThemeData theme) {
+  Widget _buildDivider(FluentThemeData theme) {
     return Container(
       height: 1,
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -75,7 +77,7 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
         gradient: LinearGradient(
           colors: [
             Colors.transparent,
-            theme.colorScheme.outline.withOpacity(0.1),
+            theme.inactiveColor.withValues(alpha: 0.1),
             Colors.transparent,
           ],
         ),
@@ -111,17 +113,6 @@ class _SidebarHeaderState extends State<_SidebarHeader>
   }
 
   @override
-  void reassemble() {
-    super.reassemble();
-    if (_floatingController.isAnimating) {
-      _floatingController.stop();
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _floatingController.repeat(reverse: true);
-    });
-  }
-
-  @override
   void dispose() {
     _floatingController.dispose();
     super.dispose();
@@ -129,7 +120,7 @@ class _SidebarHeaderState extends State<_SidebarHeader>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return Container(
       height: 100,
       padding: const EdgeInsets.symmetric(
@@ -138,26 +129,24 @@ class _SidebarHeaderState extends State<_SidebarHeader>
       ),
       child: Row(
         children: [
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () {
-                context.read<ProjectBloc>().add(const LeaveProject());
-              },
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  size: 20,
-                  color: theme.colorScheme.secondary,
+          IconButton(
+            onPressed: () {
+              context.read<ProjectBloc>().add(const LeaveProject());
+            },
+            style: ButtonStyle(
+              shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(100),
                 ),
               ),
+              backgroundColor: WidgetStatePropertyAll(
+                theme.accentColor.lighter.withValues(alpha: 0.1),
+              ),
+            ),
+            icon: Icon(
+              Icons.arrow_back_rounded,
+              size: 20,
+              color: theme.accentColor,
             ),
           ),
           const SizedBox(width: 16),
@@ -176,20 +165,20 @@ class _SidebarHeaderState extends State<_SidebarHeader>
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.secondary,
+                    theme.accentColor,
+                    theme.accentColor.lighter,
                   ],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.3),
+                    color: theme.accentColor.withValues(alpha: 0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
                 ],
               ),
               child: const Icon(
-                Icons.auto_awesome,
+                FontAwesomeIcons.diagramProject,
                 color: Colors.white,
                 size: 24,
               ),
@@ -203,10 +192,8 @@ class _SidebarHeaderState extends State<_SidebarHeader>
               children: [
                 Text(
                   "Unichart",
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
-                  ),
+                  style: theme.typography.title
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -227,7 +214,7 @@ class _FileSystemView extends StatelessWidget {
     return BlocBuilder<FileSystemBloc, FileSystemState>(
       builder: (context, state) {
         if (state is FileSystemLoading) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: ProgressRing());
         }
         if (state is FileSystemError) {
           return Center(child: Text(state.message));
@@ -255,7 +242,7 @@ class _FileSystemView extends StatelessWidget {
                   file: file,
                   isSelected: file.fileId == state.activeFileId,
                   projectId: projectId,
-                  isReadOnly: isReadOnly, // <-- MODIFICA: Passa il flag
+                  isReadOnly: isReadOnly,
                 );
               },
             ),
@@ -274,18 +261,22 @@ class FileListItem extends StatelessWidget {
   final String projectId;
   final bool isReadOnly;
 
-  const FileListItem({super.key,
+  const FileListItem({
+    super.key,
     required this.file,
     required this.isSelected,
     required this.projectId,
-    this.isReadOnly = false, // <-- MODIFICA: Aggiungi il flag
+    this.isReadOnly = false,
   });
 
   void _showRenameFileDialog(BuildContext context, MyFile file) async {
-    final newName = await AppDialogs.showInputDialog(context,
+    // Logic unchanged
+    final newName = await AppDialogs.showInputDialog(
+        context,
         initialValue: file.name,
         title: "Rinomina file",
         message: "Inserisci un nuovo nome per il file",
+        inputLabel: "Nome File",
         hintText: "es. File",
         confirmText: "Rinomina",
         cancelText: "Annulla",
@@ -310,7 +301,6 @@ class FileListItem extends StatelessWidget {
     if (newName == null) return;
     final value = newName.trim();
     if (value.isEmpty) return;
-
     context.read<FileSystemBloc>().add(
       RenameFile(
         fileId: file.fileId,
@@ -321,12 +311,14 @@ class FileListItem extends StatelessWidget {
   }
 
   void _showDeleteConfirmationDialog(BuildContext context, MyFile file) async {
+    // Logic unchanged
     final bool? confirmed = await AppDialogs.showConfirmationDialog(
       context,
       title: "Elimina File",
       message:
       'Sei sicuro di voler eliminare "${file.name}"? Questa azione è irreversibile.',
       confirmText: "Elimina",
+      isDestructive: true,
     );
 
     if (confirmed == true) {
@@ -341,100 +333,109 @@ class FileListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final isMain = file.name == 'main';
+    final flyoutController = FlyoutController();
+
+    // Salva il contesto esterno per usarlo dopo la chiusura del flyout
+    final outerContext = context;
 
     return Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? theme.accentColor.withValues(alpha: 0.1)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
           color: isSelected
-              ? theme.colorScheme.primary.withOpacity(0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected
-                ? theme.colorScheme.primary.withOpacity(0.3)
-                : theme.colorScheme.outline.withOpacity(0.1),
-          ),
+              ? theme.accentColor.withValues(alpha: 0.3)
+              : theme.inactiveColor.withValues(alpha: 0.1),
         ),
-        child: ListTile(
-            leading: Icon(
-              Icons.insert_drive_file,
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface.withOpacity(0.6),
-            ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    file.name,
-                    style: TextStyle(
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface,
-                      fontWeight:
-                      isSelected ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
+      ),
+      child: ListTile(
+        leading: Icon(
+          Icons.insert_drive_file,
+          color: isSelected
+              ? theme.accentColor
+              : theme.typography.body?.color?.withValues(alpha: 0.6),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                file.name,
+                style: (theme.typography.body ?? const TextStyle()).copyWith(
+                  color: isSelected
+                      ? theme.accentColor.darker
+                      : theme.typography.body?.color,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 ),
-                if (isMain)
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Icon(
-                      Icons.star,
-                      size: 16,
-                      color: theme.colorScheme.primary.withOpacity(0.8),
-                    ),
-                  ),
-              ],
-            ),
-            trailing: isMain || isReadOnly ? null : PopupMenuButton<String>(
-              icon: Icon(
-                Icons.more_vert,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
               ),
-              onSelected: (value) {
-                if (value == 'rename') {
-                  _showRenameFileDialog(context, file);
-                } else if (value == 'delete') {
-                  _showDeleteConfirmationDialog(context, file);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem<String>(
-                  value: 'rename',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit),
-                      SizedBox(width: 8),
-                      Text('Rinomina'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete),
-                      SizedBox(width: 8),
-                      Text('Elimina'),
-                    ],
-                  ),
-                ),
-              ],
             ),
-            onTap: () {
-              if (!isSelected) {
-                context.read<FileSystemBloc>().add(
-                  OpenFile(
-                    fileId: file.fileId,
-                    projectId: projectId,
-                    fileName: file.name,
-                  ),
-                );
-              }
-            }));
+          ],
+        ),
+        trailing: isReadOnly
+            ? (isMain
+                ? Icon(
+                    Icons.star,
+                    size: 16,
+                    color: theme.accentColor.withOpacity(0.8),
+                  )
+                : null)
+            : (isMain
+                ? Icon(
+                    Icons.star,
+                    size: 16,
+                    color: theme.accentColor.withOpacity(0.8),
+                  )
+                : FlyoutTarget(
+                    controller: flyoutController,
+                    child: IconButton(
+                      icon: Icon(
+                        FontAwesomeIcons.ellipsisVertical,
+                        size: 16,
+                        color: theme.typography.body?.color?.withValues(alpha: 0.6),
+                      ),
+                      onPressed: () {
+                        flyoutController.showFlyout(
+                          builder: (flyoutContext) => MenuFlyout(
+                            items: [
+                              MenuFlyoutItem(
+                                leading: const Icon(Icons.edit),
+                                text: const Text('Rinomina'),
+                                onPressed: () {
+                                  Navigator.pop(flyoutContext);
+                                  _showRenameFileDialog(outerContext, file);
+                                },
+                              ),
+                              MenuFlyoutItem(
+                                leading: const Icon(Icons.delete),
+                                text: const Text('Elimina'),
+                                onPressed: () {
+                                  Navigator.pop(flyoutContext);
+                                  _showDeleteConfirmationDialog(outerContext, file);
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  )),
+        onPressed: () {
+          if (!isSelected) {
+            context.read<FileSystemBloc>().add(
+              OpenFile(
+                fileId: file.fileId,
+                projectId: projectId,
+                fileName: file.name,
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
 }
 
@@ -445,12 +446,14 @@ class CreateFileButton extends StatelessWidget {
   const CreateFileButton({super.key, required this.projectId});
 
   void _showCreateFileDialog(BuildContext context, String projectId) async {
+    // Logic unchanged
     final newName = await AppDialogs.showInputDialog(context,
         title: "Crea file",
         message: "Inserisci un nuovo nome per il file",
         hintText: "es. File",
         confirmText: "Crea",
         cancelText: "Annulla",
+        inputLabel: "Nome File",
         validator: (v) {
           final value = (v ?? "").trim();
           if (value.isEmpty) return 'Il nome non può essere vuoto';
@@ -478,29 +481,28 @@ class CreateFileButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            theme.colorScheme.primary.withOpacity(0.1),
-            theme.colorScheme.primary.withOpacity(0.05),
+            theme.accentColor.withValues(alpha: 0.1),
+            theme.accentColor.withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.primary.withOpacity(0.2),
+          color: theme.accentColor.withValues(alpha: 0.2),
         ),
       ),
       child: ListTile(
-        onTap: () => _showCreateFileDialog(context, projectId),
-        leading:
-        Icon(Icons.add_circle_outline, color: theme.colorScheme.primary),
+        onPressed: () => _showCreateFileDialog(context, projectId),
+        leading: Icon(Icons.add_circle_outline, color: theme.accentColor),
         title: Text(
           "Nuovo File",
-          style: TextStyle(
-            color: theme.colorScheme.primary,
+          style: (theme.typography.body ?? const TextStyle()).copyWith(
+            color: theme.accentColor.dark,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -515,18 +517,18 @@ class BottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+        border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 24,
             offset: const Offset(4, 0),
           ),
@@ -534,18 +536,58 @@ class BottomActions extends StatelessWidget {
       ),
       child: Column(
         children: [
-          ModernMenuItem(
-            iconWidget:  Icon(Icons.settings_rounded, color: theme.colorScheme.onSurfaceVariant),
+          _ModernMenuItem(
+            iconWidget: Icon(Icons.settings_rounded,
+                color: theme.typography.body?.color?.withValues(alpha: 0.7)),
             onTap: () => AppRouter.goToSettings(context),
             title: "Impostazioni",
           ),
-          ModernMenuItem(
+          _ModernMenuItem(
             iconWidget: AnimatedThemeIcon(isDark: isDark),
             title: "Cambia Tema",
             onTap: () => context.read<ThemeProvider>().toggleTheme(),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ModernMenuItem extends StatelessWidget {
+  final Widget iconWidget;
+  final String title;
+  final VoidCallback onTap;
+
+  const _ModernMenuItem(
+      {required this.iconWidget, required this.title, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return HoverButton(
+      onPressed: onTap,
+      builder: (context, states) {
+        // Logica per determinare il colore corretto
+        final Color backgroundColor;
+        if (states.isEmpty) {
+          // Se il bottone è a riposo, rendilo completamente trasparente
+          backgroundColor = Colors.transparent;
+        } else {
+          // Altrimenti (hover, pressed), usa il colore del tema
+          backgroundColor = ButtonThemeData.buttonColor(context, states);
+        }
+
+        return Container(
+          color: backgroundColor, // Applica il colore calcolato
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Row(
+            children: [
+              iconWidget,
+              const SizedBox(width: 16),
+              Expanded(child: Text(title)),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -557,7 +599,7 @@ class AnimatedThemeIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 400),
       transitionBuilder: (child, animation) {
@@ -569,7 +611,7 @@ class AnimatedThemeIcon extends StatelessWidget {
       child: Icon(
         isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
         key: ValueKey(isDark),
-        color: theme.colorScheme.onSurfaceVariant,
+        color: theme.typography.body?.color?.withValues(alpha: 0.7),
       ),
     );
   }

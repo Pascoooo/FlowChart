@@ -1,9 +1,10 @@
-import 'package:flowchart_thesis/config/router/app_router.dart';
-import 'package:flowchart_thesis/config/constants/theme_switch.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import 'blocs/auth_bloc/authentication_bloc.dart';
+import 'config/constants/theme_switch.dart';
+import 'config/router/app_router.dart';
 
 class MyAppView extends StatefulWidget {
   const MyAppView({super.key});
@@ -24,11 +25,12 @@ class _MyAppViewState extends State<MyAppView> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
+    return FluentApp.router(
       routerConfig: _router,
       debugShowCheckedModeBanner: false,
       theme: Provider.of<ThemeProvider>(context).themeData,
       title: 'Flowchart Thesis',
+      color: Colors.blue,
     );
   }
 }

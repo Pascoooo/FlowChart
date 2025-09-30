@@ -1,13 +1,11 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-// --- DESCRIZIONE DELLA MODIFICA: Aggiunto un enum per rendere il dialogo informativo più versatile e type-safe. ---
 enum DialogType { info, success, warning, error }
 
-// --- REFACTOR: La classe è stata rinominata da ServiceDialog a GenericDialogs per maggiore chiarezza semantica. ---
+/// 🎨 Professional Dialog System - Web-First Design with Perfect Centering
 class GenericDialogs {
-  // --- UI/UX: Riprogettato per un layout più pulito e visivamente più gradevole, usando un Dialog personalizzato. ---
+  /// 📢 Info Dialog - Perfectly Centered Single-Button Layout
   static Future<void> showInfoDialog(
       BuildContext context, {
         required String title,
@@ -15,16 +13,32 @@ class GenericDialogs {
         DialogType type = DialogType.info,
         String closeText = 'Ho capito',
       }) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
-    // --- UX: Icona e colore vengono scelti dinamicamente in base al tipo di dialogo per un feedback visivo immediato. ---
+    // 🎯 Semantic Type Mapping with Theme Colors
     final Map<DialogType, (IconData, Color)> typeDetails = {
-      DialogType.info: (FontAwesomeIcons.circleInfo, theme.colorScheme.primary),
-      DialogType.success:
-      (FontAwesomeIcons.solidCircleCheck, Colors.green.shade600),
-      DialogType.warning:
-      (FontAwesomeIcons.triangleExclamation, Colors.orange.shade700),
-      DialogType.error: (FontAwesomeIcons.circleExclamation, theme.colorScheme.error),
+      DialogType.info: (
+      FontAwesomeIcons.circleInfo,
+      theme.accentColor.defaultBrushFor(theme.brightness)
+      ),
+      DialogType.success: (
+      FontAwesomeIcons.solidCircleCheck,
+      theme.brightness == Brightness.light
+          ? const Color(0xFF059669) // AppColors.lightSuccess equivalent
+          : const Color(0xFF10B981)  // AppColors.darkSuccess equivalent
+      ),
+      DialogType.warning: (
+      FontAwesomeIcons.triangleExclamation,
+      theme.brightness == Brightness.light
+          ? const Color(0xFFD97706) // AppColors.lightWarning equivalent
+          : const Color(0xFFF59E0B)  // AppColors.darkWarning equivalent
+      ),
+      DialogType.error: (
+      FontAwesomeIcons.circleExclamation,
+      theme.brightness == Brightness.light
+          ? const Color(0xFFDC2626) // AppColors.lightError equivalent
+          : const Color(0xFFEF4444)  // AppColors.darkError equivalent
+      ),
     };
 
     final (icon, iconColor) = typeDetails[type]!;
@@ -32,100 +46,259 @@ class GenericDialogs {
     return showDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (dialogContext) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 380),
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: iconColor.withOpacity(0.1),
+      builder: (dialogContext) => Center(
+        child: ContentDialog(
+          constraints: const BoxConstraints(
+            minWidth: 480,
+            maxWidth: 560,
+            minHeight: 300,
+          ),
+          content: Container(
+            padding: const EdgeInsets.fromLTRB(40, 32, 40, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 🎯 Icon Container - Centered
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: iconColor.withOpacity(0.1),
+                    border: Border.all(
+                      color: iconColor.withOpacity(0.2),
+                      width: 2,
+                    ),
+                  ),
+                  child: FaIcon(
+                    icon,
+                    size: 32,
+                    color: iconColor,
+                  ),
                 ),
-                child: FaIcon(icon, size: 32, color: iconColor),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+
+                const SizedBox(height: 24),
+
+                // 🎯 Title - Centered
+                Text(
+                  title,
+                  style: theme.typography.title?.copyWith(
+                    color: theme.typography.body?.color,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 20,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: CupertinoButton.filled(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text(closeText),
+
+                const SizedBox(height: 16),
+
+                // 🎯 Message - Centered
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  child: Text(
+                    message,
+                    style: theme.typography.body?.copyWith(
+                      color: theme.typography.body?.color?.withOpacity(0.8),
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 32),
+
+                // 🎯 Single Button - Perfectly Centered
+                Center(
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 12),
+                      child: Text(closeText),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // --- REFACTOR: Mantenuto CupertinoAlertDialog ma con stile derivato dal tema e opzioni migliorate. ---
+  /// ❓ Confirmation Dialog - Professional Two-Button Layout
   static Future<bool?> showConfirmationDialog(
       BuildContext context, {
         required String title,
         required String message,
         String confirmText = 'Conferma',
         String cancelText = 'Annulla',
-        // --- UX: Aggiunto parametro 'isDestructive' per controllare lo stile dell'azione di conferma. ---
         bool isDestructive = false,
       }) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
-    return showCupertinoDialog<bool>(
+    return showDialog<bool>(
       context: context,
       barrierDismissible: true,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: <CupertinoDialogAction>[
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              cancelText,
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+      builder: (dialogContext) {
+        // 🎯 Destructive Action Color Logic
+        Color getDestructiveColor() {
+          return theme.brightness == Brightness.light
+              ? const Color(0xFFDC2626) // AppColors.lightError equivalent
+              : const Color(0xFFEF4444); // AppColors.darkError equivalent
+        }
+
+        // 🎯 Icon Selection
+        final iconData = isDestructive
+            ? FontAwesomeIcons.triangleExclamation
+            : FontAwesomeIcons.circleQuestion;
+
+        final iconColor = isDestructive
+            ? getDestructiveColor()
+            : theme.accentColor.defaultBrushFor(theme.brightness);
+
+        return Center(
+          child: ContentDialog(
+            constraints: const BoxConstraints(
+              minWidth: 520,
+              maxWidth: 600,
+              minHeight: 280,
             ),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(
-              confirmText,
-              style: TextStyle(
-                // --- THEME: Il colore ora dipende dal tema e dal parametro 'isDestructive'. ---
-                color: isDestructive
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.primary,
-                fontWeight: FontWeight.w600,
+            content: Container(
+              padding: const EdgeInsets.fromLTRB(40, 32, 40, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // 🎯 Header Section - Centered
+                  Column(
+                    children: [
+                      // Icon
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: iconColor.withOpacity(0.1),
+                          border: Border.all(
+                            color: iconColor.withOpacity(0.2),
+                            width: 2,
+                          ),
+                        ),
+                        child: FaIcon(
+                          iconData,
+                          size: 28,
+                          color: iconColor,
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Title
+                      Text(
+                        title,
+                        style: theme.typography.title?.copyWith(
+                          color: theme.typography.body?.color,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 18,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 🎯 Divider
+                  Container(
+                    height: 1,
+                    width: double.infinity,
+                    color: theme.resources.dividerStrokeColorDefault,
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 🎯 Message - Centered
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Text(
+                      message,
+                      style: theme.typography.body?.copyWith(
+                        color: theme.typography.body?.color?.withOpacity(0.8),
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
             ),
+            actions: [
+              // 🎯 Actions - Centered Row
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Secondary Action (Cancel)
+                    Button(
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        child: Text(cancelText),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // Primary Action (Confirm)
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      style: isDestructive
+                          ? ButtonStyle(
+                        backgroundColor: ButtonState.resolveWith((states) {
+                          if (states.contains(ButtonStates.disabled)) {
+                            return theme.resources.controlFillColorDisabled;
+                          }
+                          if (states.contains(ButtonStates.pressed)) {
+                            return getDestructiveColor().withOpacity(0.9);
+                          }
+                          if (states.contains(ButtonStates.hovered)) {
+                            return getDestructiveColor().withOpacity(0.8);
+                          }
+                          return getDestructiveColor();
+                        }),
+                        foregroundColor: ButtonState.all(
+                            theme.brightness == Brightness.light
+                                ? Colors.white
+                                : Colors.black
+                        ),
+                      )
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        child: Text(confirmText),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  // --- UI/UX: Dialogo di input completamente ridisegnato per un'estetica più moderna e pulita. ---
+  /// ✏️ Input Dialog - Professional Text Input with Validation
   static Future<String?> showInputDialog(
       BuildContext context, {
         required String title,
+        required String inputLabel,
         String? message,
         String? initialValue,
         String hintText = '',
@@ -134,103 +307,222 @@ class GenericDialogs {
         String? Function(String?)? validator,
       }) async {
     final controller = TextEditingController(text: initialValue);
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return showDialog<String>(
       context: context,
-      barrierDismissible: false, // L'utente deve fare una scelta esplicita.
-      builder: (context) {
-        // --- REFACTOR: La logica di validazione è stata mantenuta ma integrata nel nuovo design. ---
-        return StatefulBuilder(
-          builder: (context, setState) {
-            String? errorText;
-            bool isButtonEnabled = false;
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        // State variables
+        String? errorText;
+        bool isButtonEnabled = false;
 
+        return StatefulBuilder(
+          builder: (statefulContext, setState) {
             void validate(String value) {
-              if (validator != null) {
-                errorText = validator(value);
-                isButtonEnabled = errorText == null;
-              } else {
-                isButtonEnabled = value.trim().isNotEmpty;
-              }
+              setState(() {
+                if (validator != null) {
+                  errorText = validator(value);
+                  isButtonEnabled = errorText == null && value.trim().isNotEmpty;
+                } else {
+                  isButtonEnabled = value.trim().isNotEmpty;
+                  errorText = null;
+                }
+              });
             }
 
-            // Esegui la validazione iniziale
-            validate(controller.text);
+            // Initial validation
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              validate(controller.text);
+            });
 
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16.0)),
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 320),
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleLarge,
-                    ),
-                    if (message != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        message,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+            return Center(
+              child: ContentDialog(
+                constraints: const BoxConstraints(
+                  minWidth: 520,
+                  maxWidth: 600,
+                  minHeight: 320,
+                ),
+                content: Container(
+                  padding: const EdgeInsets.fromLTRB(40, 32, 40, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // 🎯 Header Section - Centered
+                      Column(
+                        children: [
+                          // Icon
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
+                              border: Border.all(
+                                color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.2),
+                                width: 2,
+                              ),
+                            ),
+                            child: FaIcon(
+                              FontAwesomeIcons.penToSquare,
+                              size: 28,
+                              color: theme.accentColor.defaultBrushFor(theme.brightness),
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Title
+                          Text(
+                            title,
+                            style: theme.typography.title?.copyWith(
+                              color: theme.typography.body?.color,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // 🎯 Divider
+                      Container(
+                        height: 1,
+                        width: double.infinity,
+                        color: theme.resources.dividerStrokeColorDefault,
+                        margin: const EdgeInsets.symmetric(horizontal: 20),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // 🎯 Message (if provided)
+                      if (message != null) ...[
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: Text(
+                            message,
+                            style: theme.typography.body?.copyWith(
+                              color: theme.typography.body?.color?.withOpacity(0.8),
+                              height: 1.5,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // 🎯 Input Section - Centered Container
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 400),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Input Label
+                            Text(
+                              inputLabel,
+                              style: theme.typography.bodyStrong?.copyWith(
+                                color: theme.typography.body?.color,
+                                fontSize: 14,
+                              ),
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            // Text Input
+                            TextBox(
+                              controller: controller,
+                              autofocus: true,
+                              placeholder: hintText,
+                              onChanged: validate,
+                              style: theme.typography.body?.copyWith(
+                                color: theme.typography.body?.color,
+                              ),
+                                decoration: WidgetStateProperty.all<BoxDecoration>(
+                                  BoxDecoration(
+                                    color: theme.resources.controlFillColorDefault,
+                                    border: Border.all(
+                                      color: errorText != null
+                                          ? (theme.brightness == Brightness.light
+                                          ? const Color(0xFFDC2626)
+                                          : const Color(0xFFEF4444))
+                                          : theme.resources.controlStrokeColorDefault,
+                                      width: errorText != null ? 2 : 1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                            ),
+                            // Error Text
+                            if (errorText != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Row(
+                                  children: [
+                                    FaIcon(
+                                      FontAwesomeIcons.circleExclamation,
+                                      size: 14,
+                                      color: theme.brightness == Brightness.light
+                                          ? const Color(0xFFDC2626)
+                                          : const Color(0xFFEF4444),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        errorText!,
+                                        style: theme.typography.caption?.copyWith(
+                                          color: theme.brightness == Brightness.light
+                                              ? const Color(0xFFDC2626)
+                                              : const Color(0xFFEF4444),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
-                    const SizedBox(height: 20),
-                    // --- UI/UX: TextField con uno stile più pulito e integrato. ---
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      style: theme.textTheme.bodyMedium,
-                      decoration: InputDecoration(
-                        hintText: hintText,
-                        errorText: errorText,
-                        filled: true,
-                        fillColor: theme.colorScheme.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10.0),
-                          borderSide: BorderSide(
-                              color: theme.dividerColor.withOpacity(0.5)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10.0),
-                          borderSide: BorderSide(
-                              color: theme.dividerColor.withOpacity(0.5)),
-                        ),
-                      ),
-                      onChanged: (value) => setState(() => validate(value)),
-                    ),
-                    const SizedBox(height: 24),
-                    // --- REFACTOR: Sostituzione di Divider/VerticalDivider con un layout basato su Row e padding. ---
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                  ),
+                ),
+                actions: [
+                  // 🎯 Actions - Centered Row
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CupertinoButton(
-                          onPressed: () => Navigator.of(context).pop(null),
-                          child: Text(
-                            cancelText,
-                            style: TextStyle(
-                                color: theme.colorScheme.onSurfaceVariant),
+                        // Secondary Action (Cancel)
+                        Button(
+                          onPressed: () => Navigator.of(dialogContext).pop(null),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                            child: Text(cancelText),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        // --- UX: Il pulsante di conferma è più prominente per indicare l'azione primaria. ---
-                        CupertinoButton.filled(
+
+                        const SizedBox(width: 12),
+
+                        // Primary Action (Confirm)
+                        FilledButton(
                           onPressed: isButtonEnabled
-                              ? () =>
-                              Navigator.of(context).pop(controller.text.trim())
+                              ? () => Navigator.of(dialogContext).pop(controller.text.trim())
                               : null,
-                          child: Text(confirmText),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                            child: Text(confirmText),
+                          ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             );
           },

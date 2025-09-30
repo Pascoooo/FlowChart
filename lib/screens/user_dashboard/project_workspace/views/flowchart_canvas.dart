@@ -1,48 +1,27 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flowchart_repository/flowchart_repository.dart';
-
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
-import 'creation_handle.dart';
 import 'node_widget.dart';
 import 'painters.dart';
 
-/// Il canvas che renderizza l'intero diagramma di flusso,
-/// includendo nodi, connessioni e la griglia di sfondo.
-class FlowchartCanvas extends StatefulWidget {
+class FlowchartCanvas extends StatelessWidget {
   final bool showGrid;
   final bool isReadOnly;
+  final bool allowDragInReadOnly; // nuovo
 
   const FlowchartCanvas({
     super.key,
     required this.showGrid,
     this.isReadOnly = false,
+    this.allowDragInReadOnly = false,
   });
-
-  @override
-  State<FlowchartCanvas> createState() => _FlowchartCanvasState();
-}
-
-class _FlowchartCanvasState extends State<FlowchartCanvas> {
-  /// Traccia quale handle di creazione "+" è attualmente aperto, se presente.
-  /// Serve per evitare che un click per chiudere il pannello deselezioni il nodo.
-  String? _activeHandleNodeId;
-
-  void _setActiveHandle(String? nodeId) {
-    if (mounted) {
-      setState(() {
-        _activeHandleNodeId = nodeId;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return BlocListener<FlowchartBloc, FlowchartState>(
-      // Mostra dialog di errore in caso di azioni non valide
       listener: (context, state) {
         if (state is FlowchartActionFailure) {
           AppDialogs.showInfoDialog(
@@ -55,126 +34,95 @@ class _FlowchartCanvasState extends State<FlowchartCanvas> {
       child: BlocBuilder<FlowchartBloc, FlowchartState>(
         builder: (context, state) {
           if (state is! FlowchartLoaded) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: ProgressRing());
           }
 
           return LayoutBuilder(
             builder: (context, constraints) {
-              return GestureDetector(
-                // Gestisce la deselezione quando si clicca sullo sfondo
+              // Costruiamo il contenuto della canvas (griglia, connessioni, nodi)
+              Widget content = GestureDetector(
                 onTap: () {
-                  // Se un pannello di creazione è aperto, questo click non deve
-                  // deselezionare il nodo, ma solo chiudere il pannello.
-                  // La logica di chiusura è gestita internamente da CreationHandle.
-                  if (_activeHandleNodeId != null) {
-                    // Non fare nulla, l'handle gestirà il tap
-                  } else {
-                    // Nessun pannello aperto, deseleziona qualsiasi nodo
-                    context.read<FlowchartBloc>().add(const DeselectNode());
-                  }
+                  context.read<FlowchartBloc>().add(const DeselectNode());
                 },
                 behavior: HitTestBehavior.translucent,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    // Livello 1: Griglia di sfondo (opzionale)
-                    if (widget.showGrid)
+                    if (showGrid)
                       Positioned.fill(
-                        child:
-                        CustomPaint(painter: GridPainter.fromTheme(context)),
+                        child: CustomPaint(painter: GridPainter.fromTheme(context)),
                       ),
-
-                    // Livello 2: Connessioni tra i nodi
                     Positioned.fill(
                       child: CustomPaint(
                         painter: ConnectionPainter(
                           nodes: state.flowchart.nodes,
                           edges: state.flowchart.edges,
-                          theme: Theme.of(context),
+                          theme: FluentTheme.of(context),
                         ),
                       ),
                     ),
-
-                    // Livello 3: Widget dei nodi
                     for (final node in state.flowchart.nodes)
                       NodeWidget(
                         key: ValueKey(node.id),
                         node: node,
                         canvasConstraints: constraints,
                         isSelected: state.selectedNodeId == node.id,
-                        // **MODIFICA CRUCIALE**: Propaga lo stato di sola lettura al widget del nodo
-                        isReadOnly: widget.isReadOnly,
+                        isReadOnly: isReadOnly,
+                        allowDragInReadOnly: allowDragInReadOnly,
                       ),
-
-                    // Livello 4: Maniglie di creazione "+" per il nodo selezionato
-                    if (state.selectedNodeId != null && !widget.isReadOnly)
-                      ..._buildCreationHandles(context, state, constraints),
                   ],
                 ),
               );
+
+              // Se siamo in modalità debug, applichiamo zoom + pan animati verso il nodo selezionato
+              if (state.isDebugMode && state.selectedNodeId != null) {
+                final node = state.getNodeById(state.selectedNodeId!);
+                if (node != null) {
+                  final viewportW = constraints.maxWidth;
+                  final viewportH = constraints.maxHeight;
+                  const double targetScale = 1.8;
+                  final double nodeCenterX = node.x + node.width / 2;
+                  final double nodeCenterY = node.y + (node.height + 42.0) / 2; // include top padding per button
+                  final double targetTx = (viewportW / 2) - nodeCenterX * targetScale;
+                  final double targetTy = (viewportH / 2) - nodeCenterY * targetScale;
+
+                  // Due TweenAnimationBuilder annidati per animare offset e scala in modo fluido
+                  content = ClipRect(
+                    child: TweenAnimationBuilder<Offset>(
+                      tween: Tween<Offset>(begin: const Offset(0, 0), end: Offset(targetTx, targetTy)),
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      key: ValueKey('dbg-offset-${state.selectedNodeId}-${state.debugIndex}'),
+                      builder: (context, offset, child) {
+                        return Transform.translate(
+                          offset: offset,
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween<double>(begin: 1.0, end: targetScale),
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                            key: ValueKey('dbg-scale-${state.selectedNodeId}-${state.debugIndex}'),
+                            builder: (context, scale, grandChild) {
+                              return Transform.scale(
+                                scale: scale,
+                                alignment: Alignment.topLeft,
+                                child: grandChild,
+                              );
+                            },
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: content,
+                    ),
+                  );
+                }
+              }
+
+              return content;
             },
           );
         },
       ),
     );
-  }
-
-  /// Costruisce le maniglie di creazione (+) attorno al nodo selezionato.
-  List<Widget> _buildCreationHandles(
-      BuildContext context, FlowchartLoaded state, BoxConstraints constraints) {
-    final selectedNode = state.getNodeById(state.selectedNodeId!);
-    if (selectedNode == null) return [];
-
-    // Logica per il nodo Condizione (DecisionNode)
-    if (selectedNode.kind == FlowNodeKind.decision) {
-      final outgoingEdges = state.getOutgoingEdges(selectedNode.id);
-      final hasFalseBranch = outgoingEdges.any((e) => e.port == 'false');
-      final hasTrueBranch = outgoingEdges.any((e) => e.port == 'true');
-      final handles = <Widget>[];
-
-      // Mostra handle 'false' (a sinistra) solo se non esiste già
-      if (!hasFalseBranch) {
-        handles.add(
-          CreationHandle(
-            key: ValueKey('handle_left_${selectedNode.id}'),
-            direction: HandleDirection.left,
-            sourceNode: selectedNode,
-            onPanelToggled: (isOpen) =>
-                _setActiveHandle(isOpen ? selectedNode.id : null),
-            canvasConstraints: constraints,
-          ),
-        );
-      }
-      // Mostra handle 'true' (a destra) solo se non esiste già
-      if (!hasTrueBranch) {
-        handles.add(
-          CreationHandle(
-            key: ValueKey('handle_right_${selectedNode.id}'),
-            direction: HandleDirection.right,
-            sourceNode: selectedNode,
-            onPanelToggled: (isOpen) =>
-                _setActiveHandle(isOpen ? selectedNode.id : null),
-            canvasConstraints: constraints,
-          ),
-        );
-      }
-      return handles;
-    }
-
-    // Logica per tutti gli altri nodi
-    if (state.canAddOutgoingConnection(selectedNode.id)) {
-      return [
-        CreationHandle(
-          key: ValueKey('canvas_handle_bottom_${selectedNode.id}'),
-          direction: HandleDirection.bottom,
-          sourceNode: selectedNode,
-          onPanelToggled: (isOpen) =>
-              _setActiveHandle(isOpen ? selectedNode.id : null),
-          canvasConstraints: constraints,
-        ),
-      ];
-    }
-
-    return [];
   }
 }

@@ -1,17 +1,17 @@
+import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/project_workspace.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/static_workspace.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../blocs/project_bloc/project_bloc.dart';
 import '../../blocs/project_bloc/project_event.dart';
 import '../../blocs/project_bloc/project_state.dart';
 import '../../config/error/error_page.dart';
 import '../../config/services/banner_service.dart';
-import '../../config/services/dialog_service/app_dialogs.dart';
+// L'import di AppDialogs viene rimosso o aggiornato a seconda della struttura del progetto,
+// qui si fa riferimento diretto al nostro RecoveryDialogs ridisegnato.
 import '../../config/services/dialog_service/recovery_dialogs.dart';
 import 'animations/background_animation.dart';
-import 'animations/project_loading_indicator.dart';
 import 'project_selection/views/project_selector.dart';
-import 'project_workspace/widgets/project_workspace.dart';
 
 const Duration _kTransitionDuration = Duration(milliseconds: 300);
 
@@ -29,46 +29,47 @@ class _DashboardPageState extends State<DashboardPage> {
     context.read<ProjectBloc>().add(const CheckForUnsavedSessions());
   }
 
-  /// **CORRETTO**: Gestisce la logica di recupero in modo asincrono.
+  // --- METODO DI INTERAZIONE CON I DIALOGHI COMPLETAMENTE RISCRITTO ---
   void _showRecoveryDialog(BuildContext context, UnsavedChangesFound state) {
-    WidgetsBinding.instance.addPostFrameCallback((_) async { // Aggiunto async
-      // Attendiamo che l'utente faccia una scelta nel dialogo.
-      final action = await AppDialogs.showInitialRecoveryDialog(
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Chiama il nostro nuovo dialogo a due pulsanti, più pulito e diretto.
+      final action = await RecoveryDialogs.showInitialRecoveryDialog(
         context: context,
         projectName: state.projectName,
       );
+
       if (!mounted) return;
+
+      // La logica ora gestisce solo le due azioni possibili: manage o discard.
       switch (action) {
-        case RecoveryAction.recoverAll:
-          context.read<ProjectBloc>().add(RecoverSession(projectId: state.projectId));
-          break;
-        case RecoveryAction.discardAll:
-          context.read<ProjectBloc>().add(DiscardSession(projectId: state.projectId));
-          break;
-        case RecoveryAction.manualSelect:
-        // Anche la chiamata al dialogo manuale è ora asincrona.
+        case RecoveryAction.manage:
+        // L'azione "Rivedi e Gestisci" porta direttamente al dialogo di confronto manuale.
           await _showManualRecoveryDialog(context, state);
           break;
+        case RecoveryAction.discard:
+        // L'azione "Scarta" invia l'evento per eliminare la sessione non salvata.
+          context
+              .read<ProjectBloc>()
+              .add(DiscardSession(projectId: state.projectId));
+          break;
         default:
-        // L'utente potrebbe aver chiuso il dialogo in modo imprevisto.
-        // Ricarichiamo i progetti per sicurezza.
+        // Nel caso in cui il dialogo venga chiuso senza una scelta (es. tasto ESC),
+        // si procede al caricamento standard dei progetti.
           context.read<ProjectBloc>().add(const LoadProjects());
           break;
       }
     });
   }
 
-  /// **CORRETTO**: Attende il completamento del recupero manuale prima di procedere.
+  // Questo metodo rimane valido, poiché il dialogo manuale esiste ancora nel nuovo flusso.
   Future<void> _showManualRecoveryDialog(
       BuildContext context, UnsavedChangesFound state) async {
-    // Attendiamo che il dialogo manuale venga completato.
-    final didComplete = await AppDialogs.showManualRecoveryDialog(
+    final didComplete = await RecoveryDialogs.showManualRecoveryDialog(
       context: context,
       state: state,
     );
 
-    // Se il dialogo è stato completato, ricarichiamo i progetti.
-    // L'evento viene inviato solo ora, in modo sicuro.
+    // Se il processo di recupero manuale è stato completato, si caricano i progetti.
     if (didComplete == true && mounted) {
       context.read<ProjectBloc>().add(const LoadProjects());
     }
@@ -76,8 +77,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
+    return ScaffoldPage(
+      content: Stack(
         children: [
           const AnimatedBackground(),
           BlocListener<ProjectBloc, ProjectState>(
@@ -90,28 +91,27 @@ class _DashboardPageState extends State<DashboardPage> {
             },
             child: BlocBuilder<ProjectBloc, ProjectState>(
               builder: (context, state) {
+                // La logica di costruzione della UI rimane invariata.
+                // È robusta e gestisce correttamente i vari stati del BLoC.
                 if (state is ProjectInitial ||
                     state is ProjectLoading ||
                     state is UnsavedChangesFound) {
-                  return const ModernLoadingIndicator();
+                  return const Center(child: ProgressRing());
                 }
                 if (state is ProjectError) {
                   return ErrorPage(error: state.message);
                 }
-                // --- NUOVA CONDIZIONE AGGIUNTA QUI ---
                 if (state is StaticWorkspaceLoaded) {
-                  // Se lo stato è quello per la vista statica, mostriamo il nuovo widget
                   return StaticProjectWorkspace(
                     key: ValueKey('static-workspace-${state.project.projectId}'),
                     project: state.project,
                     files: state.files,
                   );
                 }
-
                 if (state is ProjectsLoaded) {
                   return _buildProjectsLoadedView(state);
                 }
-                return const ModernLoadingIndicator();
+                return const Center(child: ProgressRing());
               },
             ),
           ),
@@ -125,21 +125,22 @@ class _DashboardPageState extends State<DashboardPage> {
       duration: _kTransitionDuration,
       child: state.selectedProject != null
           ? ProjectWorkspace(
-              key: ValueKey('workspace-${state.selectedProject!.projectId}'),
-              selectedProject: state.selectedProject!,
-              isReadOnly: state.isReadOnlyView,
-              onLeave: () => context.read<ProjectBloc>().add(const LeaveProject()),
-            )
+        key: ValueKey('workspace-${state.selectedProject!.projectId}'),
+        selectedProject: state.selectedProject!,
+        isReadOnly: state.isReadOnlyView,
+        onLeave: () =>
+            context.read<ProjectBloc>().add(const LeaveProject()),
+      )
           : ProjectSelector(
-              key: const ValueKey('project-selector'),
-              projects: state.projects,
-              onProjectSelected: (project) => context
-                  .read<ProjectBloc>()
-                  .add(StartSessionAndSelectProject(project: project)),
-              onCreateProject: (name) => context
-                  .read<ProjectBloc>()
-                  .add(CreateProject(projectName: name)),
-            ),
+        key: const ValueKey('project-selector'),
+        projects: state.projects,
+        onProjectSelected: (project) => context
+            .read<ProjectBloc>()
+            .add(StartSessionAndSelectProject(project: project)),
+        onCreateProject: (name) => context
+            .read<ProjectBloc>()
+            .add(CreateProject(projectName: name)),
+      ),
     );
   }
 }

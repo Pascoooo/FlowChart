@@ -4,7 +4,7 @@ import 'package:firebase_ui_auth/firebase_ui_auth.dart';
 import 'package:firebase_ui_oauth_google/firebase_ui_oauth_google.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 import 'package:flowchart_thesis/screens/settings/widgets/settings_provider.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,9 +42,9 @@ void main() async {
     );
   } else {
     runApp(
-      const MaterialApp(
-        home: Scaffold(
-          body: Center(
+      const FluentApp(
+        home: ScaffoldPage(
+          content: Center(
             child: Text(
                 "Errore di configurazione critica. Impossibile caricare le impostazioni."),
           ),

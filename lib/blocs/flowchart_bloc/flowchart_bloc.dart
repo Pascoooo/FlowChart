@@ -26,6 +26,10 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<Redo>(_onRedo);
     on<ResetFlowchart>(_onResetFlowchart);
     on<ClearHistory>(_onClearHistory);
+    on<DebugFlowchart>(_onDebugFlowchart);
+    on<DebugNextNode>(_onDebugNext);
+    on<DebugPrevNode>(_onDebugPrev);
+    on<DebugExit>(_onDebugExit);
   }
 
   bool get canUndo => _history.canUndo;
@@ -314,5 +318,94 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
   void _onClearHistory(ClearHistory event, Emitter<FlowchartState> emit) {
     _history.clear();
+  }
+
+  void _onDebugFlowchart(DebugFlowchart event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final s = state as FlowchartLoaded;
+
+    // Trova il nodo start
+    FlowNode? start;
+    try {
+      start = s.flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
+    } catch (_) {
+      return;
+    }
+
+    // Costruisci un percorso lineare dall'inizio seguendo le connessioni
+    final List<String> path = [];
+    final visited = <String>{};
+
+    String? currentId = start.id;
+    while (currentId != null && currentId.isNotEmpty && !visited.contains(currentId)) {
+      path.add(currentId);
+      visited.add(currentId);
+
+      // Edge di default (port == null) oppure per decisioni prova true poi false
+      final outgoing = s.flowchart.edges.where((e) => e.from == currentId).toList();
+      if (outgoing.isEmpty) break;
+
+      FlowchartEdge? next;
+      // prova port null (lineare)
+      next = outgoing.firstWhere(
+        (e) => e.port == null,
+        orElse: () => const FlowchartEdge(from: '', to: ''),
+      );
+      if (next.from.isEmpty) {
+        // decisione: prova true poi false
+        next = outgoing.firstWhere(
+          (e) => e.port == 'true',
+          orElse: () => const FlowchartEdge(from: '', to: ''),
+        );
+        if (next.from.isEmpty) {
+          next = outgoing.firstWhere(
+            (e) => e.port == 'false',
+            orElse: () => const FlowchartEdge(from: '', to: ''),
+          );
+        }
+      }
+
+      if (next.from.isEmpty) break;
+      currentId = next.to;
+    }
+
+    if (path.isEmpty) return;
+
+    emit(s.copyWith(
+      isDebugMode: true,
+      debugPath: path,
+      debugIndex: 0,
+      selectedNodeId: path.first,
+    ));
+  }
+
+  void _onDebugNext(DebugNextNode event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final s = state as FlowchartLoaded;
+    if (!s.isDebugMode || s.debugPath.isEmpty) return;
+
+    final nextIndex = (s.debugIndex + 1).clamp(0, s.debugPath.length - 1);
+    if (nextIndex == s.debugIndex) return;
+
+    final newNodeId = s.debugPath[nextIndex];
+    emit(s.copyWith(debugIndex: nextIndex, selectedNodeId: newNodeId));
+  }
+
+  void _onDebugPrev(DebugPrevNode event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final s = state as FlowchartLoaded;
+    if (!s.isDebugMode || s.debugPath.isEmpty) return;
+
+    final prevIndex = (s.debugIndex - 1).clamp(0, s.debugPath.length - 1);
+    if (prevIndex == s.debugIndex) return;
+
+    final newNodeId = s.debugPath[prevIndex];
+    emit(s.copyWith(debugIndex: prevIndex, selectedNodeId: newNodeId));
+  }
+
+  void _onDebugExit(DebugExit event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final s = state as FlowchartLoaded;
+    emit(s.copyWith(isDebugMode: false, debugPath: const [], debugIndex: 0));
   }
 }

@@ -1,7 +1,7 @@
 import 'dart:math';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
-
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../user_dashboard/project_workspace/views/painters.dart';
 
@@ -20,7 +20,6 @@ class FlowchartPreview extends StatelessWidget {
     this.showUnsavedBadge = false,
   });
 
-  // Il metodo di parsing ora usa il factory corretto dentro FlowchartLoaded
   FlowchartLoaded _parse(String raw) {
     if (raw.trim().isEmpty) return FlowchartLoaded.empty();
     try {
@@ -34,18 +33,18 @@ class FlowchartPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = _parse(flowchartContent);
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
+    final theme = FluentTheme.of(context);
+    final primary = theme.accentColor;
     final borderColor = emphasizeBorders
         ? primary.withAlpha((0.85 * 255).round())
-        : theme.dividerColor;
+        : theme.inactiveColor;
 
     return AspectRatio(
       aspectRatio: 16 / 10,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: borderColor,
@@ -72,7 +71,6 @@ class FlowchartPreview extends StatelessWidget {
         child: Stack(
           children: [
             _StaticFlowchartViewport(
-              // Passa i nuovi modelli
               nodes: state.flowchart.nodes,
               edges: state.flowchart.edges,
               showGrid: showGrid,
@@ -93,7 +91,7 @@ class FlowchartPreview extends StatelessWidget {
                 ),
               ),
             if (showUnsavedBadge)
-              Positioned(
+              const Positioned(
                 top: 8,
                 left: 10,
                 child: _UnsavedBadge(),
@@ -106,20 +104,21 @@ class FlowchartPreview extends StatelessWidget {
 }
 
 class _UnsavedBadge extends StatelessWidget {
+  const _UnsavedBadge();
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final bg = theme.colorScheme.errorContainer.withAlpha((0.90 * 255).round());
-    final txt = theme.colorScheme.onErrorContainer;
+    final theme = FluentTheme.of(context);
+    final bg = Colors.red.lighter.withValues(alpha: 0.9);
+    final txt = Colors.red.darkest;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.error.withAlpha((0.5 * 255).round()), width: 1),
+        border: Border.all(color: Colors.red.light.withValues(alpha: 0.5), width: 1),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.error.withAlpha((0.22 * 255).round()),
+            color: Colors.red.withValues(alpha: 0.22),
             blurRadius: 8,
             offset: const Offset(0, 2),
           )
@@ -128,13 +127,13 @@ class _UnsavedBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.warning_amber_rounded, size: 16, color: txt),
+          Icon(FontAwesomeIcons.triangleExclamation,
+              color: txt, size: 14),
           const SizedBox(width: 6),
           Text(
             'Versione non salvata',
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
+            style: theme.typography.caption?.copyWith(
+              fontWeight: FontWeight.bold,
               letterSpacing: 0.3,
               color: txt,
             ),
@@ -146,7 +145,6 @@ class _UnsavedBadge extends StatelessWidget {
 }
 
 class _StaticFlowchartViewport extends StatelessWidget {
-  // Accetta i nuovi modelli
   final List<FlowNode> nodes;
   final List<FlowchartEdge> edges;
   final bool showGrid;
@@ -164,20 +162,26 @@ class _StaticFlowchartViewport extends StatelessWidget {
     if (nodes.isEmpty) {
       return Stack(
         children: [
-          if (showGrid) Positioned.fill(child: CustomPaint(painter: _previewGrid(context, emphasized))),
+          if (showGrid)
+            Positioned.fill(
+                child: CustomPaint(painter: _previewGrid(context, emphasized))),
           Center(
             child: Text(
               'Diagramma Vuoto',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.2,
-              ),
+              style: FluentTheme.of(context).typography.body?.copyWith(
+                  color:
+                  FluentTheme.of(context).brightness == Brightness.light
+                      ? Colors.black.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.6),
+                  fontStyle: FontStyle.italic,
+                  fontSize: 16,
+                  letterSpacing: 0.3),
             ),
           ),
         ],
       );
     }
+
 
     Rect? bounds;
     for (final node in nodes) {
@@ -197,8 +201,10 @@ class _StaticFlowchartViewport extends StatelessWidget {
 
         final scaledContentW = bounds.width * scale;
         final scaledContentH = bounds.height * scale;
-        final offsetX = (constraints.maxWidth - scaledContentW) / 2 - bounds.left * scale;
-        final offsetY = (constraints.maxHeight - scaledContentH) / 2 - bounds.top * scale;
+        final offsetX =
+            (constraints.maxWidth - scaledContentW) / 2 - bounds.left * scale;
+        final offsetY =
+            (constraints.maxHeight - scaledContentH) / 2 - bounds.top * scale;
 
         return Stack(
           clipBehavior: Clip.hardEdge,
@@ -219,9 +225,8 @@ class _StaticFlowchartViewport extends StatelessWidget {
                       Positioned.fill(
                         child: CustomPaint(
                           painter: ConnectionPainter(
-                            nodes: nodes, // Passa i nuovi modelli
-                            edges: edges,
-                            theme: Theme.of(context),
+                            nodes: nodes,
+                            edges: edges, theme: FluentTheme.of(context),
                           ),
                         ),
                       ),
@@ -229,7 +234,7 @@ class _StaticFlowchartViewport extends StatelessWidget {
                         Positioned(
                           left: node.x,
                           top: node.y,
-                          child: _StaticNode(node: node), // Widget rinominato
+                          child: _StaticNode(node: node),
                         ),
                     ],
                   ),
@@ -243,8 +248,8 @@ class _StaticFlowchartViewport extends StatelessWidget {
   }
 
   GridPainter _previewGrid(BuildContext context, bool emphasized) {
+    final theme = FluentTheme.of(context);
     if (!emphasized) return GridPainter.fromTheme(context);
-    final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final base = isDark ? Colors.white : Colors.black;
     return GridPainter(
@@ -259,25 +264,26 @@ class _StaticFlowchartViewport extends StatelessWidget {
 }
 
 class _StaticNode extends StatelessWidget {
-  final FlowNode node; // Accetta il nuovo modello
+  final FlowNode node;
   const _StaticNode({required this.node});
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = const TextStyle(
-      fontSize: 12,
-      color: Colors.black87,
-      fontWeight: FontWeight.w500,
+    final theme = FluentTheme.of(context);
+    // Testo sempre scuro perché il fill è sempre bianco
+    final textStyle = theme.typography.caption?.copyWith(
+      color: Colors.black.withValues(alpha: 0.85),
     );
-    final borderColor = Colors.blueGrey.shade400;
+    final borderColor = theme.inactiveColor;
+    // Riempimento sempre bianco nel preview
+    final fillColor = Colors.white;
     const borderWidth = 1.5;
 
-    // Lo switch ora usa il 'kind' del nodo
     switch (node.kind) {
       case FlowNodeKind.decision:
         return CustomPaint(
           painter: DiamondPainter(
-            color: Colors.white,
+            color: fillColor,
             borderColor: borderColor,
             strokeWidth: borderWidth,
           ),
@@ -301,7 +307,7 @@ class _StaticNode extends StatelessWidget {
       case FlowNodeKind.input:
         return CustomPaint(
           painter: ParallelogramPainter(
-            fillColor: Colors.white,
+            fillColor: fillColor,
             borderColor: borderColor,
             strokeWidth: borderWidth,
             reversed: false,
@@ -311,7 +317,8 @@ class _StaticNode extends StatelessWidget {
             height: node.height,
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 child: Text(
                   node.text,
                   textAlign: TextAlign.center,
@@ -326,7 +333,7 @@ class _StaticNode extends StatelessWidget {
       case FlowNodeKind.output:
         return CustomPaint(
           painter: ParallelogramPainter(
-            fillColor: Colors.white,
+            fillColor: fillColor,
             borderColor: borderColor,
             strokeWidth: borderWidth,
             reversed: true,
@@ -336,7 +343,8 @@ class _StaticNode extends StatelessWidget {
             height: node.height,
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 child: Text(
                   node.text,
                   textAlign: TextAlign.center,
@@ -353,14 +361,16 @@ class _StaticNode extends StatelessWidget {
           width: node.width,
           height: node.height,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.white, // fill sempre bianco
             borderRadius: BorderRadius.circular(
-              (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 8,
+              (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end)
+                  ? 999
+                  : 8,
             ),
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.08),
+                color: Colors.black.withValues(alpha: 0.08),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),

@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
-
 import 'card_pop_menu.dart';
 
 class ProjectCard extends StatelessWidget {
@@ -22,36 +21,34 @@ class ProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return SizedBox(
       width: 220,
       height: 200,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
-              theme.colorScheme.surface.withOpacity(0.9),
-            ],
-          ),
-          border: Border.all(color: theme.colorScheme.outline.withOpacity(0.15)),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.shadow.withOpacity(0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+      child: HoverButton(
+        onPressed: onTap,
+        builder: (context, states) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.cardColor.withOpacity(0.8),
+                  theme.cardColor,
+                ],
+              ),
+              border: Border.all(color: theme.inactiveColor.withOpacity(0.15)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: onTap,
             child: Stack(
               children: [
                 Padding(
@@ -63,24 +60,22 @@ class ProjectCard extends StatelessWidget {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(colors: [
-                            theme.colorScheme.primary.withOpacity(0.2),
-                            theme.colorScheme.primary.withOpacity(0.1),
+                            theme.accentColor.withOpacity(0.2),
+                            theme.accentColor.withOpacity(0.1),
                           ]),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: FaIcon(
                           FontAwesomeIcons.folder,
-                          // MODIFICA: Dimensione icona ridotta
-                          size: 24, // Era 28
-                          color: theme.colorScheme.primary,
+                          size: 24,
+                          color: theme.accentColor,
                         ),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         project.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
+                        style: theme.typography.bodyStrong?.copyWith(
+                          color: theme.typography.body?.color,
                         ),
                         textAlign: TextAlign.center,
                         maxLines: 2,
@@ -103,8 +98,8 @@ class ProjectCard extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

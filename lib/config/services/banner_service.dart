@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flowchart_thesis/config/router/app_router.dart';
 
 // Enum per definire il tipo di banner
 enum BannerType { error, success, info }
@@ -11,35 +12,36 @@ class BannerService {
 
   /// Mostra un banner di errore.
   static void showError(BuildContext context, String message, {Duration? duration}) {
-    _show(context, message: message, type: BannerType.error, duration: duration);
+    _show(message: message, type: BannerType.error, duration: duration);
   }
 
   /// Mostra un banner di successo.
   static void showSuccess(BuildContext context, String message, {Duration? duration}) {
-    _show(context, message: message, type: BannerType.success, duration: duration);
+    _show(message: message, type: BannerType.success, duration: duration);
   }
 
   /// Mostra un banner informativo.
   static void showInfo(BuildContext context, String message, {Duration? duration}) {
-    _show(context, message: message, type: BannerType.info, duration: duration);
+    _show(message: message, type: BannerType.info, duration: duration);
   }
 
   /// Metodo privato per creare e mostrare l'overlay del banner.
-  static void _show(
-      BuildContext context, {
-        required String message,
-        required BannerType type,
-        Duration? duration,
-      }) {
-    // L'Overlay ci permette di "disegnare" widget sopra a tutto il resto.
-    final overlayState = Overlay.of(context);
+  static void _show({
+    required String message,
+    required BannerType type,
+    Duration? duration,
+  }) {
+    // Recupera l'Overlay dallo stato del root navigator per evitare lookup sul context chiamante.
+    final overlayState = AppRouter.rootNavigatorKey.currentState?.overlay;
+    if (overlayState == null) {
+      // Se per qualche motivo il root navigator non è pronto, esci silenziosamente.
+      return;
+    }
     OverlayEntry? overlayEntry;
 
-    // Definiamo in anticipo la funzione per rimuovere il banner.
-    // Verrà chiamata dall'animazione di uscita del banner stesso.
-    final onRemove = () {
+    void onRemove() {
       overlayEntry?.remove();
-    };
+    }
 
     overlayEntry = OverlayEntry(
       builder: (context) {
@@ -123,7 +125,7 @@ class _AnimatedBannerState extends State<_AnimatedBanner> with SingleTickerProvi
   // Metodo per avviare l'animazione di uscita.
   void _close() {
     _dismissTimer?.cancel();
-    _controller.reverse();
+    if (mounted) _controller.reverse();
   }
 
   // Funzioni helper per ottenere stile e durata in base al tipo

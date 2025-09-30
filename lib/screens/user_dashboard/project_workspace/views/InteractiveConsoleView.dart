@@ -1,7 +1,6 @@
-import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:flutter/services.dart';
 
 class InteractiveConsoleDialog extends StatefulWidget {
   final String serviceUrl;
@@ -16,7 +15,8 @@ class InteractiveConsoleDialog extends StatefulWidget {
   });
 
   @override
-  State<InteractiveConsoleDialog> createState() => _InteractiveConsoleDialogState();
+  State<InteractiveConsoleDialog> createState() =>
+      _InteractiveConsoleDialogState();
 }
 
 class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
@@ -36,15 +36,13 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
 
   void _connect() {
     try {
-      // Sostituisce l'URL http con ws (o https con wss per connessioni sicure)
       final wsUrl = widget.serviceUrl.replaceFirst(RegExp(r'^http'), 'ws');
-      _channel = WebSocketChannel.connect(Uri.parse('${wsUrl}console'));
+      _channel = WebSocketChannel.connect(Uri.parse('$wsUrl/console'));
 
       setState(() {
-        _outputLines.add('Tentativo di connessione a ${wsUrl}console...');
+        _outputLines.add('Tentativo di connessione...');
       });
 
-      // Invia subito il codice C dopo la connessione
       _channel.sink.add(widget.cCode);
 
       _channel.stream.listen(
@@ -53,6 +51,7 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
           setState(() {
             if (message == "[ESECUZIONE AVVIATA]") {
               _isConnected = true;
+              _outputLines.clear(); // Pulisce i messaggi di connessione
               _outputLines.add('--- Esecuzione avviata ---');
             } else if (message == "[ESECUZIONE TERMINATA]") {
               _isExecutionFinished = true;
@@ -60,7 +59,8 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
               _outputLines.add('--- Esecuzione terminata ---');
             } else {
               _outputLines.add(message);
-              // Rilevamento intelligente del prompt di input con trim
+              // Logica per determinare se attendere un input.
+              // È euristica e potrebbe essere migliorata in base all'output specifico dei programmi C.
               final trimmedMessage = message.trim();
               final lowerMessage = trimmedMessage.toLowerCase();
               if (lowerMessage.contains('inserisci') ||
@@ -68,7 +68,7 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
                   lowerMessage.contains('enter') ||
                   lowerMessage.endsWith(':') ||
                   lowerMessage.endsWith('?')) {
-                _awaitingInput = true;  // Abilita input per prompt imperativi
+                _awaitingInput = true;
               } else {
                 _awaitingInput = false;
               }
@@ -110,8 +110,8 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
       final textToSend = _inputController.text;
       _channel.sink.add(textToSend);
       setState(() {
-        _outputLines.add('> $textToSend'); // Mostra l'input inviato
-        _awaitingInput = false; // Disabilita fino al prossimo prompt
+        _outputLines.add('> $textToSend');
+        _awaitingInput = false;
       });
       _inputController.clear();
       _scrollToBottom();
@@ -138,88 +138,132 @@ class _InteractiveConsoleDialogState extends State<InteractiveConsoleDialog> {
     super.dispose();
   }
 
+  TextStyle _getLineStyle(String line, FluentThemeData theme) {
+    final baseStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 14,
+      color: theme.typography.body?.color,
+    );
+    if (line.startsWith('> ')) {
+      return baseStyle.copyWith(
+          color: theme.accentColor.defaultBrushFor(theme.brightness));
+    }
+    if (line.startsWith('---')) {
+      return baseStyle.copyWith(
+          color: theme.typography.body?.color?.withOpacity(0.6),
+          fontStyle: FontStyle.italic);
+    }
+    if (line.contains('[ERRORE')) {
+      return baseStyle.copyWith(color: theme.resources.systemFillColorCritical);
+    }
+    return baseStyle;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    final theme = FluentTheme.of(context);
+
+    // MODIFICA: Stile del pulsante distruttivo basato sul tema.
+    final destructiveButtonStyle = ButtonStyle(
+      backgroundColor: ButtonState.resolveWith((states) {
+        final color = theme.resources.systemFillColorCritical;
+        if (states.isPressing) return color.withOpacity(0.8);
+        if (states.isHovering) return color.withOpacity(0.9);
+        return color;
+      }),
+      foregroundColor: ButtonState.all(Colors.white),
+    );
+
+    // MODIFICA: La struttura ora usa le proprietà 'title', 'content' e 'actions'
+    // del ContentDialog per un layout più standard e pulito.
+    return ContentDialog(
+      constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
+      // SEZIONE TITOLO
       title: Row(
         children: [
-          Icon(Icons.terminal, color: theme.colorScheme.primary),
-          const SizedBox(width: 12),
+          Icon(FontAwesomeIcons.terminal,
+              color: theme.accentColor.defaultBrushFor(theme.brightness),
+              size: 24),
+          const SizedBox(width: 16),
           Expanded(
             child: Text(
               'Console: ${widget.fileName}',
-              style: theme.textTheme.titleLarge,
+              style: theme.typography.title,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 12),
-          CircleAvatar(
-            radius: 6,
-            backgroundColor: _isConnected ? Colors.green : Colors.grey,
+          const SizedBox(width: 16),
+          Tooltip(
+            message: _isConnected ? 'Connesso' : 'Disconnesso',
+            child: InfoBadge(
+              // MODIFICA: Colori basati sul tema
+              color: _isConnected
+                  ? Colors.green
+                  : theme.inactiveColor,
+            ),
           ),
         ],
       ),
-      content: SizedBox(
-        width: 600,
-        height: 400,
-        child: Column(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.brightness == Brightness.dark ? Colors.black.withOpacity(0.5) : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(8),
-                ),
+      // SEZIONE CONTENUTO
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // SEZIONE OUTPUT CONSOLE
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.micaBackgroundColor,
+                borderRadius: const BorderRadius.all(Radius.circular(8)),
+              ),
+              child: Scrollbar(
+                controller: _scrollController,
                 child: ListView.builder(
                   controller: _scrollController,
                   itemCount: _outputLines.length,
                   itemBuilder: (context, index) {
                     final line = _outputLines[index];
-                    return Text(
+                    return SelectableText( // MODIFICA: reso il testo selezionabile
                       line,
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                      style: _getLineStyle(line, theme),
                     );
                   },
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            // Sempre mostra il TextField durante l'esecuzione, ma disabilitalo se non awaiting input
-            if (!_isExecutionFinished)
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _inputController,
-                      autofocus: true,
-                      enabled: _awaitingInput, // Abilitato solo per prompt
-                      decoration: InputDecoration(
-                        hintText: _awaitingInput
-                            ? 'Inserisci il valore e premi Invio...'
-                            : 'In attesa del prossimo output...',
-                        border: const OutlineInputBorder(),
-                        filled: true,
-                      ),
-                      onSubmitted: (_) => _sendInput(),
-                    ),
+          ),
+          const SizedBox(height: 20),
+          // SEZIONE INPUT UTENTE
+          if (!_isExecutionFinished)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextBox(
+                    controller: _inputController,
+                    autofocus: true,
+                    enabled: _awaitingInput,
+                    placeholder: _awaitingInput
+                        ? 'Inserisci il valore e premi Invio...'
+                        : 'In attesa del prossimo input dal programma...',
+                    onSubmitted: (_) => _sendInput(),
                   ),
-                  if (_awaitingInput) // Icona per indicare pronto per input
-                    const Padding(
-                      padding: EdgeInsets.only(left: 8.0),
-                      child: Icon(Icons.keyboard_arrow_right, color: Colors.green),
-                    ),
-                ],
-              ),
-          ],
-        ),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: _awaitingInput ? _sendInput : null,
+                  child: const Text('Invia'),
+                ),
+              ],
+            ),
+        ],
       ),
+      // SEZIONE AZIONI
       actions: [
-        TextButton(
+        Button(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(_isExecutionFinished ? 'Chiudi' : 'Termina'),
+          style: _isExecutionFinished ? null : destructiveButtonStyle,
+          child: Text(_isExecutionFinished ? 'Chiudi' : 'Termina Esecuzione'),
         ),
       ],
     );

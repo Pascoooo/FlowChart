@@ -1,6 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flowchart_thesis/screens/user_dashboard/project_selection/widgets/project_carousel.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
@@ -8,6 +6,7 @@ import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
 import '../../../../config/constants/themes.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
+import 'project_carousel.dart';
 
 class ProjectContainer extends StatefulWidget {
   final List<MyProject> projects;
@@ -65,7 +64,7 @@ class ProjectContainerState extends State<ProjectContainer>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return AnimatedBuilder(
       animation: _containerAnimation,
@@ -76,7 +75,7 @@ class ProjectContainerState extends State<ProjectContainer>
             width: AppConstants.projectContainerWidth,
             height: AppConstants.projectContainerHeight,
             decoration: _buildContainerDecoration(theme),
-            child: Stack( // Use a Stack to overlay the new button
+            child: Stack(
               children: [
                 Column(
                   mainAxisAlignment: MainAxisAlignment.start,
@@ -92,7 +91,6 @@ class ProjectContainerState extends State<ProjectContainer>
                     const Spacer(flex: 2),
                   ],
                 ),
-                // Position the new button in the top right corner
                 Positioned(
                   top: 16,
                   right: 16,
@@ -106,62 +104,83 @@ class ProjectContainerState extends State<ProjectContainer>
     );
   }
 
-  /// **NUOVO PULSANTE "APRI CON ID"**
-  /// **NUOVO PULSANTE "APRI CON ID"**
-  Widget _buildViewSharedButton(BuildContext context, ThemeData theme) {
+
+  Widget _buildViewSharedButton(BuildContext context, FluentThemeData theme) {
     return Tooltip(
       message: "Apri progetto condiviso",
-      child: ElevatedButton.icon(
-        icon: const FaIcon(FontAwesomeIcons.link, size: 16),
-        label: const Text("Apri con ID"),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+      // Usiamo un Button standard per un look più pulito, adatto ad un'azione secondaria.
+      child: Button(
+        style: ButtonStyle(
+          backgroundColor:
+          ButtonState.all(theme.accentColor.withOpacity(0.1)),
+          foregroundColor: ButtonState.all(theme.accentColor),
+          shape: ButtonState.all(RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppStyles.borderRadiusSmall),
+          )),
         ),
+        // La logica onPressed è IDENTICA all'originale, come richiesto.
         onPressed: () async {
           final projectId = await AppDialogs.showInputDialog(
-            context,
-            title: "Apri Progetto Condiviso",
-            message: "Incolla l'ID del progetto che vuoi visualizzare.",
-            hintText: "ID Progetto...",
-            confirmText: "Apri",
-          );
+              context,
+              title: "Apri Progetto Condiviso",
+              message: "Incolla l'ID del progetto che vuoi visualizzare.",
+              hintText: "ID Progetto...",
+              confirmText: "Apri",
+              cancelText: "Annulla",
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return "L'ID del progetto non può essere vuoto.";
+                }
+                return null;
+              },
+              inputLabel: "ID Progetto");
           if (projectId != null && projectId.trim().isNotEmpty) {
-            context.read<ProjectBloc>().add(LoadStaticWorkspace(projectId: projectId.trim()));
+            context
+                .read<ProjectBloc>()
+                .add(LoadStaticWorkspace(projectId: projectId.trim()));
           }
         },
+        // Applichiamo un padding generoso per risolvere il problema delle dimensioni.
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+          child: Row(
+            children: [
+              Icon(FontAwesomeIcons.link, size: 16),
+              SizedBox(width: 8),
+              Text("Apri con ID"),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  BoxDecoration _buildContainerDecoration(ThemeData theme) {
+  BoxDecoration _buildContainerDecoration(FluentThemeData theme) {
     return BoxDecoration(
       borderRadius: BorderRadius.circular(AppStyles.borderRadiusLarge),
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-          theme.colorScheme.surface.withValues(alpha: 0.9),
-          theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.6),
+          theme.cardColor.withOpacity(0.4),
+          theme.cardColor.withOpacity(0.9),
+          theme.cardColor.withOpacity(0.6),
         ],
         stops: const [0.0, 0.5, 1.0],
       ),
       border: Border.all(
-        color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        color: theme.inactiveColor.withOpacity(0.2),
         width: 1.5,
       ),
       boxShadow: [
         BoxShadow(
-          color: theme.colorScheme.shadow.withValues(alpha: 0.1),
+          color: Colors.black.withOpacity(0.1),
           blurRadius: 32,
           spreadRadius: 4,
           offset: const Offset(0, 12),
         ),
         BoxShadow(
-          color: theme.colorScheme.primary.withValues(alpha: 0.05),
+          color: theme.accentColor.withOpacity(0.05),
           blurRadius: 16,
           spreadRadius: 2,
           offset: const Offset(0, 4),
@@ -170,7 +189,7 @@ class ProjectContainerState extends State<ProjectContainer>
     );
   }
 
-  Widget _buildEnhancedHeader(ThemeData theme) {
+  Widget _buildEnhancedHeader(FluentThemeData theme) {
     return SlideTransition(
       position: _headerSlideAnimation,
       child: Container(
@@ -185,25 +204,24 @@ class ProjectContainerState extends State<ProjectContainer>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        theme.colorScheme.primary.withValues(alpha: 0.2),
-                        theme.colorScheme.secondary.withValues(alpha: 0.1),
+                        theme.accentColor.withOpacity(0.2),
+                        theme.accentColor.lighter.withOpacity(0.1),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(AppStyles.borderRadiusSmall),
+                    borderRadius:
+                    BorderRadius.circular(AppStyles.borderRadiusSmall),
                   ),
                   child: FaIcon(
                     FontAwesomeIcons.folderOpen,
                     size: 26,
-                    color: theme.colorScheme.primary,
+                    color: theme.accentColor,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Text(
                   "I tuoi progetti",
-                  style: theme.textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
-                  ),
+                  style: theme.typography.title
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -255,17 +273,6 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
   }
 
   @override
-  void reassemble() {
-    super.reassemble();
-    if (_floatingController.isAnimating) {
-      _floatingController.stop();
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _floatingController.repeat(reverse: true);
-    });
-  }
-
-  @override
   void dispose() {
     _floatingController.dispose();
     super.dispose();
@@ -273,7 +280,7 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return AnimatedBuilder(
       animation: _floatingAnimation,
@@ -289,37 +296,37 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      theme.colorScheme.primaryContainer.withOpacity(0.3),
-                      theme.colorScheme.secondaryContainer.withOpacity(0.2),
+                      theme.accentColor.lighter.withOpacity(0.3),
+                      theme.accentColor.lightest.withOpacity(0.2),
                     ],
                   ),
                 ),
                 child: FaIcon(
                   FontAwesomeIcons.folderPlus,
                   size: 48,
-                  color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                  color: theme.accentColor.withOpacity(0.7),
                 ),
               ),
               const SizedBox(height: 24),
               Text(
                 "Nessun progetto trovato",
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
-                ),
+                style: theme.typography.subtitle
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppStyles.borderRadiusMedium),
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius:
+                  BorderRadius.circular(AppStyles.borderRadiusMedium),
+                  color: theme.cardColor.withOpacity(0.5),
                 ),
                 child: Text(
                   "Inizia il tuo viaggio creativo con il primo progetto",
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  style: theme.typography.body?.copyWith(
+                    color: theme.typography.body?.color?.withOpacity(0.7),
                     fontStyle: FontStyle.italic,
                   ),
                 ),

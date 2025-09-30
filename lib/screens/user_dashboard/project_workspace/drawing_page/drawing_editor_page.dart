@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_thesis/config/services/dialog_service/app_dialogs.dart';
-import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:universal_html/html.dart' as html;
 
+/// 🎨 Drawing Editor - Professional Web-First Interface
 class DrawingEditorPage extends StatefulWidget {
   const DrawingEditorPage({super.key});
 
@@ -14,38 +17,71 @@ class DrawingEditorPage extends StatefulWidget {
 }
 
 class _DrawingEditorPageState extends State<DrawingEditorPage> {
-  bool _drawingMode = true;
+  // --- DRAWING STATE (Logic Preserved) ---
+  bool _drawingMode = true; // true: Pencil, false: Eraser
   final List<Stroke> _strokes = [];
   Stroke? _currentStroke;
-
-  double _strokeWidth = 2.0;
-  double _eraserWidth = 16.0;
-  Color _strokeColor = Colors.black;
-  final List<Color> _availableColors = [
-    Colors.black,
-    Colors.red,
-    Colors.blue,
-    Colors.green,
-    Colors.yellow,
-    Colors.purple,
-    Colors.orange,
-  ];
-
   final GlobalKey _canvasKey = GlobalKey();
 
+  // --- TOOL STATE ---
+  double _strokeWidth = 2.0;
+  double _eraserWidth = 16.0;
+  late Color _strokeColor;
+  late List<Color> _availableColors;
+
+  // --- BACKGROUND STATE (Logic Preserved) ---
   Uint8List? _bgBytes;
   ImageProvider? _bgImage;
-  bool _useBackground = false; // switch stato
+  bool _useBackground = false;
   double? _bgImageWidth;
   double? _bgImageHeight;
-  Size? _canvasSize; // aggiornato dinamicamente
-  Rect? _currentImageBox; // bounding box attuale dell'immagine scalata
+  Size? _canvasSize;
+  Rect? _currentImageBox;
 
   @override
   void initState() {
     super.initState();
     _loadScreenshotFromStorage();
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final theme = FluentTheme.of(context);
+    _strokeColor = theme.brightness == Brightness.light
+        ? const Color(0xFF03256C) // Primary blue from your theme
+        : const Color(0xFF06BEE1); // Accent from your theme
+
+    // Theme-based color palette
+    _availableColors = [
+      theme.brightness == Brightness.light
+          ? const Color(0xFF03256C) // Primary blue
+          : const Color(0xFFE2E8F0), // Light text
+      theme.brightness == Brightness.light
+          ? const Color(0xFF64748B) // Secondary text
+          : const Color(0xFF94A3B8), // Tertiary text
+      theme.brightness == Brightness.light
+          ? Colors.white
+          : const Color(0xFF222222), // Dark surface
+      theme.brightness == Brightness.light
+          ? const Color(0xFFDC2626) // Error color
+          : const Color(0xFFEF4444),
+      theme.brightness == Brightness.light
+          ? const Color(0xFFD97706) // Warning color
+          : const Color(0xFFF59E0B),
+      theme.brightness == Brightness.light
+          ? const Color(0xFF0284C7) // Info color
+          : const Color(0xFF06BEE1),
+      theme.brightness == Brightness.light
+          ? const Color(0xFF059669) // Success color
+          : const Color(0xFF10B981),
+      theme.brightness == Brightness.light
+          ? const Color(0xFF7C3AED) // Purple accent
+          : const Color(0xFF8B5CF6),
+    ];
+  }
+
+  // --- MANAGEMENT METHODS (Logic Preserved) ---
 
   void _loadScreenshotFromStorage() {
     try {
@@ -58,9 +94,7 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
           _bgImage = MemoryImage(bytes);
         });
       }
-    } catch (_) {
-      // ignoriamo errori di parsing
-    }
+    } catch (_) {}
   }
 
   Future<void> _decodeImageDimensions(Uint8List bytes) async {
@@ -76,38 +110,19 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
     } catch (_) {}
   }
 
-  void _toggleBackground() {
-    if (_bgImage == null) return; // nessuno screenshot disponibile
-    setState(() => _useBackground = !_useBackground);
-  }
-
-  // Metodi per la gestione dello stato
-  void _setDrawingMode(bool value) {
-    setState(() => _drawingMode = value);
-  }
-
-  void _addStroke(Stroke stroke) { // legacy helper (manteniamo per retro compat)
-    setState(() {
-      _currentStroke = stroke;
-      _strokes.add(stroke);
-    });
+  void _setDrawingMode(bool isDrawing) {
+    setState(() => _drawingMode = isDrawing);
   }
 
   void _startNormalizedStroke(Offset localPos) {
-    if (_canvasSize == null) {
-      // fallback legacy
-      _addStroke(Stroke(points: [localPos], color: _drawingMode ? _strokeColor : Colors.transparent, width: _drawingMode ? _strokeWidth : _eraserWidth, isEraser: !_drawingMode));
-      return;
-    }
+    if (_canvasSize == null) return;
     final canvasSize = _canvasSize!;
     final bool relToImage = _useBackground && _currentImageBox != null;
     Rect refBox = relToImage ? _currentImageBox! : Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height);
     double nx = (localPos.dx - refBox.left) / refBox.width;
     double ny = (localPos.dy - refBox.top) / refBox.height;
-    nx = nx.clamp(0.0, 1.0);
-    ny = ny.clamp(0.0, 1.0);
     final stroke = Stroke(
-      points: [Offset(nx, ny)],
+      points: [Offset(nx.clamp(0.0, 1.0), ny.clamp(0.0, 1.0))],
       color: _drawingMode ? _strokeColor : Colors.transparent,
       width: _drawingMode ? _strokeWidth : _eraserWidth,
       isEraser: !_drawingMode,
@@ -121,127 +136,111 @@ class _DrawingEditorPageState extends State<DrawingEditorPage> {
   }
 
   void _appendPoint(Offset localPos) {
-    if (_currentStroke == null) return;
-    if (_currentStroke!.normalized) {
-      if (_canvasSize == null) return;
-      final canvasSize = _canvasSize!;
-      Rect refBox;
-      if (_currentStroke!.relativeToImage && _currentImageBox != null) {
-        refBox = _currentImageBox!;
-      } else {
-        refBox = Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height);
-      }
-      double nx = (localPos.dx - refBox.left) / refBox.width;
-      double ny = (localPos.dy - refBox.top) / refBox.height;
-      nx = nx.clamp(0.0, 1.0);
-      ny = ny.clamp(0.0, 1.0);
-      setState(() {
-        _currentStroke!.points.add(Offset(nx, ny));
-      });
-    } else {
-      setState(() {
-        _currentStroke!.points.add(localPos);
-      });
+    if (_currentStroke == null || !_currentStroke!.normalized || _canvasSize == null) return;
+    final canvasSize = _canvasSize!;
+    Rect refBox = (_currentStroke!.relativeToImage && _currentImageBox != null)
+        ? _currentImageBox!
+        : Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height);
+    double nx = (localPos.dx - refBox.left) / refBox.width;
+    double ny = (localPos.dy - refBox.top) / refBox.height;
+    setState(() {
+      _currentStroke!.points.add(Offset(nx.clamp(0.0, 1.0), ny.clamp(0.0, 1.0)));
+    });
+  }
+
+  void _endStroke() => setState(() => _currentStroke = null);
+
+  void _clearAllStrokes() async {
+    final confirmed = await AppDialogs.showConfirmationDialog(
+      context,
+      title: "Conferma Cancellazione",
+      message: "Sei sicuro di voler cancellare l'intero disegno? L'azione è irreversibile.",
+      confirmText: "Cancella Tutto",
+      isDestructive: true,
+    );
+    if (confirmed == true) {
+      setState(() => _strokes.clear());
     }
   }
 
-  void _endStroke() {
-    setState(() {
-      if (_currentStroke != null) {
-        _currentStroke!.points.add(null);
-        _currentStroke = null;
-      }
-    });
-  }
-
-  void _clearAllStrokes() {
-    final confirmed = AppDialogs.showConfirmationDialog(
-      context,
-      title: "Conferma",
-      message: "Sei sicuro di voler cancellare tutto il disegno?",
-      confirmText: "Cancella",
-      cancelText: "Annulla",
-    );
-    confirmed.then((value) {
-      if (value == true) {
-        setState(() => _strokes.clear());
-      }
-    });
+  void _toggleBackground() {
+    if (_bgImage == null) return;
+    setState(() => _useBackground = !_useBackground);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Forza tema chiaro solo per questa pagina
-    final lightTheme = Theme.of(context).copyWith(
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: Colors.grey[100],
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 1,
-      ),
-    );
+    final theme = FluentTheme.of(context);
 
-    return Theme(
-      data: lightTheme,
-      child: MediaQuery(
-        data: MediaQuery.of(context).copyWith(platformBrightness: Brightness.light),
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text("Editor di Disegno"),
-            automaticallyImplyLeading: false,
+    return ScaffoldPage(
+      // 🎯 Professional Toolbar Header
+      header: Container(
+        height: 80, // Generous height for web
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: theme.resources.layerFillColorDefault,
+          border: Border(
+            bottom: BorderSide(
+              color: theme.resources.dividerStrokeColorDefault,
+              width: 1,
+            ),
           ),
-          body: Column(
-            children: [
-              DrawingToolbar(
-                drawingMode: _drawingMode,
-                strokeWidth: _strokeWidth,
-                eraserWidth: _eraserWidth,
-                strokeColor: _strokeColor,
-                availableColors: _availableColors,
-                onToggleDrawingMode: () => _setDrawingMode(true),
-                onToggleEraserMode: () => _setDrawingMode(false),
-                onStrokeWidthChanged: (value) => setState(() => _strokeWidth = value),
-                onEraserWidthChanged: (value) => setState(() => _eraserWidth = value),
-                onColorSelected: (color) => setState(() => _strokeColor = color),
-                onClearAll: _clearAllStrokes,
-                useBackground: _useBackground,
-                backgroundAvailable: _bgImage != null,
-                onToggleBackground: _toggleBackground,
-              ),
-              Expanded(
-                child: DrawingCanvas(
-                  canvasKey: _canvasKey,
-                  strokes: _strokes,
-                  isDrawingMode: _drawingMode,
-                  strokeWidth: _strokeWidth,
-                  eraserWidth: _eraserWidth,
-                  strokeColor: _strokeColor,
-                  backgroundImage: _useBackground ? _bgImage : null,
-                  imageWidth: _bgImageWidth,
-                  imageHeight: _bgImageHeight,
-                  useBackground: _useBackground,
-                  onGeometry: (size, imageBox) {
-                    _canvasSize = size;
-                    _currentImageBox = imageBox;
-                  },
-                  onPanStart: (details) => _startNormalizedStroke(details),
-                  onPanUpdate: (details) => _appendPoint(details),
-                  onPanEnd: _endStroke,
-                ),
-              ),
-            ],
-          ),
+          boxShadow: [
+            BoxShadow(
+              color: theme.shadowColor.withOpacity(0.05),
+              offset: const Offset(0, 2),
+              blurRadius: 4,
+            ),
+          ],
+        ),
+        child: EditorToolbar(
+          drawingMode: _drawingMode,
+          strokeWidth: _strokeWidth,
+          eraserWidth: _eraserWidth,
+          strokeColor: _strokeColor,
+          availableColors: _availableColors,
+          onToggleDrawingMode: () => _setDrawingMode(true),
+          onToggleEraserMode: () => _setDrawingMode(false),
+          onStrokeWidthChanged: (v) => setState(() => _strokeWidth = v),
+          onEraserWidthChanged: (v) => setState(() => _eraserWidth = v),
+          onColorSelected: (c) => setState(() => _strokeColor = c),
+          onClearAll: _clearAllStrokes,
+          useBackground: _useBackground,
+          backgroundAvailable: _bgImage != null,
+          onToggleBackground: (v) => _toggleBackground(),
+        ),
+      ),
+
+      // 🎯 Drawing Canvas Content
+      content: Container(
+        decoration: BoxDecoration(
+          color: theme.resources.layerFillColorAlt,
+        ),
+        child: DrawingCanvas(
+          canvasKey: _canvasKey,
+          strokes: _strokes,
+          backgroundImage: _useBackground ? _bgImage : null,
+          imageWidth: _bgImageWidth,
+          imageHeight: _bgImageHeight,
+          useBackground: _useBackground,
+          onGeometry: (size, imageBox) {
+            _canvasSize = size;
+            _currentImageBox = imageBox;
+          },
+          onPanStart: _startNormalizedStroke,
+          onPanUpdate: _appendPoint,
+          onPanEnd: _endStroke,
         ),
       ),
     );
   }
 }
 
-// ----------------------------------------------------------------------------
+// ============================================================================
+// 🎨 PROFESSIONAL TOOLBAR - Complete Redesign
+// ============================================================================
 
-/// Widget per la barra degli strumenti di disegno.
-class DrawingToolbar extends StatelessWidget {
+class EditorToolbar extends StatelessWidget {
   final bool drawingMode;
   final double strokeWidth;
   final double eraserWidth;
@@ -253,12 +252,11 @@ class DrawingToolbar extends StatelessWidget {
   final ValueChanged<double> onStrokeWidthChanged;
   final ValueChanged<double> onEraserWidthChanged;
   final ValueChanged<Color> onColorSelected;
-  // Nuovi parametri per toggle sfondo
   final bool useBackground;
   final bool backgroundAvailable;
-  final VoidCallback onToggleBackground;
+  final ValueChanged<bool> onToggleBackground;
 
-  const DrawingToolbar({
+  const EditorToolbar({
     super.key,
     required this.drawingMode,
     required this.strokeWidth,
@@ -278,181 +276,201 @@ class DrawingToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final toolbarColor = useBackground
-        ? Colors.blueGrey.shade50
-        : Colors.white;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      decoration: BoxDecoration(
-        color: toolbarColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.withOpacity(0.15)),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Sezione Strumenti
-          Row(
-            children: [
-              _ToolButton(
-                icon: Icons.edit_rounded,
-                tooltip: "Matita",
-                isActive: drawingMode,
-                onTap: onToggleDrawingMode,
-              ),
-              const SizedBox(width: 8.0),
-              _ToolButton(
-                icon: Icons.auto_fix_normal_rounded,
-                tooltip: "Gomma",
-                isActive: !drawingMode,
-                onTap: onToggleEraserMode,
-              ),
-              const SizedBox(width: 12),
-              _BackgroundSwitch(
-                isOn: useBackground,
-                enabled: backgroundAvailable,
-                onTap: onToggleBackground,
-              ),
-            ],
-          ),
-          // Slider
-          SizedBox(
-            width: 150,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: drawingMode
-                      ? Slider(
-                          value: strokeWidth,
-                          min: 1.0,
-                          max: 10.0,
-                          divisions: 9,
-                          activeColor: Colors.black,
-                          onChanged: onStrokeWidthChanged,
-                        )
-                      : Slider(
-                          value: eraserWidth,
-                          min: 5.0,
-                          max: 50.0,
-                          divisions: 9,
-                          onChanged: onEraserWidthChanged,
-                        ),
-                ),
-              ],
+    final theme = FluentTheme.of(context);
+
+    return Row(
+      children: [
+        // 🎯 Tools Section
+        _ToolSection(
+          title: 'Strumenti',
+          children: [
+            _ToggleTool(
+              icon: FontAwesomeIcons.pencil,
+              label: 'Matita',
+              isActive: drawingMode,
+              onPressed: onToggleDrawingMode,
             ),
-          ),
-          // Colori & Azioni
-          Row(
+            const SizedBox(width: 8),
+            _ToggleTool(
+              icon: FontAwesomeIcons.eraser,
+              label: 'Gomma',
+              isActive: !drawingMode,
+              onPressed: onToggleEraserMode,
+            ),
+          ],
+        ),
+
+        // 🎯 Separator
+        _VerticalSeparator(),
+
+        // 🎯 Size Section
+        _ToolSection(
+          title: drawingMode ? 'Spessore Tratto' : 'Dimensione Gomma',
+          children: [
+            _SizeControl(
+              value: drawingMode ? strokeWidth : eraserWidth,
+              min: drawingMode ? 1.0 : 5.0,
+              max: drawingMode ? 15.0 : 60.0,
+              onChanged: drawingMode ? onStrokeWidthChanged : onEraserWidthChanged,
+              displayValue: drawingMode
+                  ? '${strokeWidth.toInt()}px'
+                  : '${eraserWidth.toInt()}px',
+            ),
+          ],
+        ),
+
+        // 🎯 Separator
+        _VerticalSeparator(),
+
+        // 🎯 Colors Section (only for drawing mode)
+        if (drawingMode) ...[
+          _ToolSection(
+            title: 'Colore',
             children: [
-              _ColorPicker(
-                availableColors: availableColors,
+              _ColorPalette(
+                colors: availableColors,
                 selectedColor: strokeColor,
                 onColorSelected: onColorSelected,
               ),
-              const SizedBox(width: 16),
-              _ToolButton(
-                icon: Icons.delete_outline_rounded,
-                tooltip: "Cancella tutto",
-                isActive: false,
-                onTap: onClearAll,
-              ),
             ],
+          ),
+
+          _VerticalSeparator(),
+        ],
+
+        // 🎯 Background Section
+        _ToolSection(
+          title: 'Sfondo',
+          children: [
+            _BackgroundToggle(
+              useBackground: useBackground,
+              backgroundAvailable: backgroundAvailable,
+              onToggle: onToggleBackground,
+            ),
+          ],
+        ),
+
+        const Spacer(),
+
+        // 🎯 Actions Section
+        _ActionButton(
+          icon: FontAwesomeIcons.trash,
+          label: 'Pulisci',
+          onPressed: onClearAll,
+          isDestructive: true,
+        ),
+      ],
+    );
+  }
+}
+
+// --- TOOLBAR COMPONENTS ---
+
+/// 🎨 Tool Section Container
+class _ToolSection extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _ToolSection({
+    required this.title,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Title
+          Text(
+            title,
+            style: theme.typography.caption?.copyWith(
+              color: theme.typography.body?.color?.withOpacity(0.8),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Content
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: children,
           ),
         ],
       ),
     );
   }
 }
-class _ToolButton extends StatelessWidget {
+
+/// 🎨 Toggle Tool Button
+class _ToggleTool extends StatelessWidget {
   final IconData icon;
-  final String tooltip;
+  final String label;
   final bool isActive;
-  final VoidCallback onTap;
+  final VoidCallback onPressed;
 
-  const _ToolButton({
+  const _ToggleTool({
     required this.icon,
-    required this.tooltip,
+    required this.label,
     required this.isActive,
-    required this.onTap,
+    required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isActive ? Theme.of(context).primaryColor.withValues(alpha: 0.1) : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            icon,
-            color: isActive ? Theme.of(context).primaryColor : Colors.grey[700],
-            size: 24,
-          ),
-        ),
-      ),
-    );
-  }
-}
+    final theme = FluentTheme.of(context);
 
-class _ColorPicker extends StatelessWidget {
-  final List<Color> availableColors;
-  final Color selectedColor;
-  final ValueChanged<Color> onColorSelected;
+    return Tooltip(
+      message: label,
+      child: HoverButton(
+        onPressed: onPressed,
+        builder: (context, states) {
+          final isHovering = states.contains(ButtonStates.hovered);
+          final isPressed = states.contains(ButtonStates.pressed);
 
-  const _ColorPicker({
-    required this.availableColors,
-    required this.selectedColor,
-    required this.onColorSelected,
-  });
+          Color backgroundColor;
+          Color foregroundColor;
 
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 32,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        shrinkWrap: true,
-        itemCount: availableColors.length,
-        itemBuilder: (context, index) {
-          final color = availableColors[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: GestureDetector(
-              onTap: () => onColorSelected(color),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: selectedColor == color
-                      ? Border.all(color: Colors.white, width: 3.0)
-                      : null,
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 2,
-                    ),
-                  ],
-                ),
-                child: selectedColor == color
-                    ? const Icon(Icons.check, color: Colors.white, size: 16)
-                    : null,
+          if (isActive) {
+            backgroundColor = theme.accentColor.defaultBrushFor(theme.brightness);
+            foregroundColor = theme.brightness == Brightness.light
+                ? Colors.white
+                : Colors.black;
+          } else if (isPressed) {
+            backgroundColor = theme.resources.subtleFillColorTertiary;
+            foregroundColor = theme.resources.textFillColorPrimary;
+          } else if (isHovering) {
+            backgroundColor = theme.resources.subtleFillColorSecondary;
+            foregroundColor = theme.resources.textFillColorPrimary;
+          } else {
+            backgroundColor = Colors.transparent;
+            foregroundColor = theme.resources.textFillColorPrimary;
+          }
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 40,
+            height: 32,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(6),
+              border: isActive
+                  ? null
+                  : Border.all(
+                color: theme.resources.controlStrokeColorDefault,
+              ),
+            ),
+            child: Center(
+              child: FaIcon(
+                icon,
+                size: 16,
+                color: foregroundColor,
               ),
             ),
           );
@@ -462,94 +480,229 @@ class _ColorPicker extends StatelessWidget {
   }
 }
 
+/// 🎨 Size Control Slider
+class _SizeControl extends StatelessWidget {
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+  final String displayValue;
 
-class _BackgroundSwitch extends StatelessWidget {
-  final bool isOn;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _BackgroundSwitch({required this.isOn, required this.enabled, required this.onTap});
+  const _SizeControl({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    required this.displayValue,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final baseColor = enabled ? (isOn ? Colors.blueAccent : Colors.grey.shade300) : Colors.grey.shade200;
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-        width: 70,
-        height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        decoration: BoxDecoration(
-          color: baseColor,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            if (enabled)
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-          ],
+    final theme = FluentTheme.of(context);
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 120,
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
         ),
-        child: Stack(
+        const SizedBox(width: 12),
+        Container(
+          width: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            color: theme.resources.cardBackgroundFillColorSecondary,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: theme.resources.cardStrokeColorDefault,
+            ),
+          ),
+          child: Text(
+            displayValue,
+            style: theme.typography.caption?.copyWith(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: theme.resources.textFillColorPrimary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 🎨 Color Palette
+class _ColorPalette extends StatelessWidget {
+  final List<Color> colors;
+  final Color selectedColor;
+  final ValueChanged<Color> onColorSelected;
+
+  const _ColorPalette({
+    required this.colors,
+    required this.selectedColor,
+    required this.onColorSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: colors.map((color) {
+        final isSelected = color == selectedColor;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: _ColorSwatch(
+            color: color,
+            isSelected: isSelected,
+            onPressed: () => onColorSelected(color),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+/// 🎨 Individual Color Swatch
+class _ColorSwatch extends StatelessWidget {
+  final Color color;
+  final bool isSelected;
+  final VoidCallback onPressed;
+
+  const _ColorSwatch({
+    required this.color,
+    required this.isSelected,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+
+    return Tooltip(
+      message: 'Seleziona colore',
+      child: HoverButton(
+        onPressed: onPressed,
+        builder: (context, states) {
+          final isHovering = states.contains(ButtonStates.hovered);
+          final isPressed = states.contains(ButtonStates.pressed);
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isSelected
+                    ? theme.accentColor.defaultBrushFor(theme.brightness)
+                    : (isHovering
+                    ? theme.resources.controlStrokeColorDefault
+                    : Colors.transparent),
+                width: isSelected ? 3 : 1,
+              ),
+              boxShadow: isSelected || isHovering ? [
+                BoxShadow(
+                  color: theme.shadowColor.withOpacity(0.15),
+                  offset: const Offset(0, 2),
+                  blurRadius: 4,
+                ),
+              ] : null,
+            ),
+            child: isPressed
+                ? Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(6),
+              ),
+            )
+                : null,
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 🎨 Background Toggle
+class _BackgroundToggle extends StatelessWidget {
+  final bool useBackground;
+  final bool backgroundAvailable;
+  final ValueChanged<bool> onToggle;
+
+  const _BackgroundToggle({
+    required this.useBackground,
+    required this.backgroundAvailable,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+
+    return Row(
+      children: [
+        FaIcon(
+          FontAwesomeIcons.image,
+          size: 14,
+          color: backgroundAvailable
+              ? theme.resources.textFillColorPrimary
+              : theme.resources.textFillColorDisabled,
+        ),
+        const SizedBox(width: 8),
+        ToggleSwitch(
+          checked: useBackground,
+          onChanged: backgroundAvailable ? onToggle : null,
+        ),
+      ],
+    );
+  }
+}
+
+/// 🎨 Action Button
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool isDestructive;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+
+    final Color iconColor = isDestructive
+        ? (theme.brightness == Brightness.light
+        ? const Color(0xFFDC2626)
+        : const Color(0xFFEF4444))
+        : theme.resources.textFillColorPrimary;
+
+    return Tooltip(
+      message: label,
+      child: Button(
+        onPressed: onPressed,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Divider centrale
-            Align(
-              alignment: Alignment.center,
-              child: Container(
-                width: 2,
-                margin: const EdgeInsets.symmetric(vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
+            FaIcon(
+              icon,
+              size: 16,
+              color: iconColor,
             ),
-            // Indicatori testo
-            Row(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      "OFF",
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: isOn ? Colors.white70 : Colors.black87,
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      "BG",
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: isOn ? Colors.white : Colors.black54,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            // Highlight animato
-            AnimatedAlign(
-              duration: const Duration(milliseconds: 250),
-              alignment: isOn ? Alignment.centerRight : Alignment.centerLeft,
-              curve: Curves.easeOut,
-              child: Container(
-                width: 32,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: enabled ? (isOn ? Colors.blue.shade600 : Colors.white) : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white.withOpacity(0.8), width: 1),
-                ),
-              ),
-            ),
+            const SizedBox(width: 8),
+            Text(label),
           ],
         ),
       ),
@@ -557,33 +710,41 @@ class _BackgroundSwitch extends StatelessWidget {
   }
 }
 
-// ----------------------------------------------------------------------------
+/// 🎨 Vertical Separator
+class _VerticalSeparator extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
 
-/// Widget per l'area di disegno interattiva.
+    return Container(
+      width: 1,
+      height: 32,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: theme.resources.dividerStrokeColorDefault,
+    );
+  }
+}
+
+// ============================================================================
+// 🎨 DRAWING CANVAS - Enhanced Design
+// ============================================================================
+
 class DrawingCanvas extends StatelessWidget {
   final GlobalKey canvasKey;
   final List<Stroke> strokes;
-  final bool isDrawingMode;
-  final double strokeWidth;
-  final double eraserWidth;
-  final Color strokeColor;
-  final ValueChanged<Offset> onPanStart;
-  final ValueChanged<Offset> onPanUpdate;
-  final VoidCallback onPanEnd;
-  final ImageProvider? backgroundImage; // nuovo
+  final ImageProvider? backgroundImage;
   final double? imageWidth;
   final double? imageHeight;
   final bool useBackground;
   final void Function(Size canvasSize, Rect? imageBox) onGeometry;
+  final ValueChanged<Offset> onPanStart;
+  final ValueChanged<Offset> onPanUpdate;
+  final VoidCallback onPanEnd;
 
   const DrawingCanvas({
     super.key,
     required this.canvasKey,
     required this.strokes,
-    required this.isDrawingMode,
-    required this.strokeWidth,
-    required this.eraserWidth,
-    required this.strokeColor,
     required this.onPanStart,
     required this.onPanUpdate,
     required this.onPanEnd,
@@ -609,40 +770,49 @@ class DrawingCanvas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+
     return ClipRect(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
           final imageBox = _computeImageBox(canvasSize);
-          // comunica geometria al parent
           onGeometry(canvasSize, imageBox);
+
           return GestureDetector(
             onPanStart: (details) {
-              final RenderBox box = canvasKey.currentContext?.findRenderObject() as RenderBox? ?? context.findRenderObject() as RenderBox;
-              final localPos = box.globalToLocal(details.globalPosition);
-              onPanStart(localPos);
+              final box = context.findRenderObject() as RenderBox;
+              onPanStart(box.globalToLocal(details.globalPosition));
             },
             onPanUpdate: (details) {
-              final RenderBox box = canvasKey.currentContext?.findRenderObject() as RenderBox? ?? context.findRenderObject() as RenderBox;
-              final localPos = box.globalToLocal(details.globalPosition);
-              onPanUpdate(localPos);
+              final box = context.findRenderObject() as RenderBox;
+              onPanUpdate(box.globalToLocal(details.globalPosition));
             },
             onPanEnd: (_) => onPanEnd(),
             child: Container(
+              key: canvasKey,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.brightness == Brightness.light
+                    ? Colors.white
+                    : theme.resources.layerFillColorAlt,
                 image: backgroundImage != null
                     ? DecorationImage(
-                        image: backgroundImage!,
-                        fit: BoxFit.contain,
-                        alignment: Alignment.center,
-                      )
+                  image: backgroundImage!,
+                  fit: BoxFit.contain,
+                )
                     : null,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.shadowColor.withOpacity(0.1),
+                    offset: const Offset(0, 2),
+                    blurRadius: 8,
+                  ),
+                ],
               ),
+              margin: const EdgeInsets.all(16),
               child: CustomPaint(
-                key: canvasKey,
                 painter: SketchPainter(strokes: strokes, imageBox: imageBox),
-                size: canvasSize,
+                size: Size.infinite,
               ),
             ),
           );
@@ -652,16 +822,17 @@ class DrawingCanvas extends StatelessWidget {
   }
 }
 
-// ----------------------------------------------------------------------------
+// ============================================================================
+// 🎨 DRAWING MODELS - Logic Preserved
+// ============================================================================
 
-/// Classe per rappresentare un tratto di disegno.
 class Stroke {
-  final List<Offset?> points; // se normalized=true: valori 0..1
+  final List<Offset> points;
   final Color color;
   final double width;
   final bool isEraser;
-  final bool normalized; // nuovo
-  final bool relativeToImage; // nuovo: normalizzato rispetto al box immagine
+  final bool normalized;
+  final bool relativeToImage;
 
   Stroke({
     required this.points,
@@ -673,46 +844,57 @@ class Stroke {
   });
 }
 
-/// Painter personalizzato per disegnare i tratti.
 class SketchPainter extends CustomPainter {
   final List<Stroke> strokes;
-  final Rect? imageBox; // bounding box attuale dell'immagine (se presente)
+  final Rect? imageBox;
+
   SketchPainter({required this.strokes, required this.imageBox});
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final stroke in strokes) {
-      final paint = Paint()..strokeCap = StrokeCap.round;
+      final paint = Paint()
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = stroke.width
+        ..style = PaintingStyle.stroke;
+
       if (stroke.isEraser) {
-        paint.color = Colors.transparent;
         paint.blendMode = BlendMode.clear;
       } else {
         paint.color = stroke.color;
       }
-      paint.strokeWidth = stroke.width;
 
-      Offset? _denorm(Offset? p) {
-        if (p == null) return null;
-        if (!stroke.normalized) return p; // legacy assoluto
-        if (stroke.relativeToImage) {
-          final box = imageBox ?? Rect.fromLTWH(0, 0, size.width, size.height);
-            return Offset(box.left + p.dx * box.width, box.top + p.dy * box.height);
-        } else {
-          return Offset(p.dx * size.width, p.dy * size.height);
-        }
+      Offset _denorm(Offset p) {
+        if (!stroke.normalized) return p;
+        final box = (stroke.relativeToImage && imageBox != null)
+            ? imageBox!
+            : Rect.fromLTWH(0, 0, size.width, size.height);
+        return Offset(
+            box.left + p.dx * box.width,
+            box.top + p.dy * box.height
+        );
       }
 
-      for (int i = 0; i < stroke.points.length - 1; i++) {
-        final a = _denorm(stroke.points[i]);
-        final b = _denorm(stroke.points[i + 1]);
-        if (a != null && b != null) {
-          canvas.drawLine(a, b, paint);
+      // Draw stroke path
+      if (stroke.points.length > 1) {
+        final path = Path();
+        path.moveTo(_denorm(stroke.points.first).dx, _denorm(stroke.points.first).dy);
+
+        for (int i = 1; i < stroke.points.length; i++) {
+          final point = _denorm(stroke.points[i]);
+          path.lineTo(point.dx, point.dy);
         }
+
+        canvas.drawPath(path, paint);
+      } else if (stroke.points.isNotEmpty) {
+        // Single point
+        final point = _denorm(stroke.points.first);
+        canvas.drawCircle(point, stroke.width / 2, paint);
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant SketchPainter old) => old.strokes != strokes || old.imageBox != imageBox;
+  bool shouldRepaint(covariant SketchPainter old) =>
+      old.strokes != strokes || old.imageBox != imageBox;
 }
-

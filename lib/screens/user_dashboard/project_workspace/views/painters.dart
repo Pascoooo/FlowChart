@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flowchart_repository/flowchart_repository.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 
 class GridPainter extends CustomPainter {
   final Color minorColor, majorColor;
@@ -17,7 +17,7 @@ class GridPainter extends CustomPainter {
   });
 
   factory GridPainter.fromTheme(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     return GridPainter(
       minorColor: (isDark ? Colors.white : Colors.black)
@@ -92,7 +92,7 @@ class DiamondPainter extends CustomPainter {
 class ConnectionPainter extends CustomPainter {
   final List<FlowNode> nodes;
   final List<FlowchartEdge> edges;
-  final ThemeData theme;
+  final FluentThemeData theme;
 
   ConnectionPainter({
     required this.nodes,
@@ -103,7 +103,7 @@ class ConnectionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = theme.colorScheme.onSurface.withOpacity(0.5)
+      ..color = (theme.typography.body?.color ?? Colors.black).withOpacity(0.5)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -118,16 +118,20 @@ class ConnectionPainter extends CustomPainter {
         Offset startPoint;
         if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
           if (edge.port == 'true') {
-            startPoint = Offset(fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
+            startPoint = Offset(
+                fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
           } else {
             startPoint = Offset(fromNode.x, fromNode.y + fromNode.height / 2);
           }
         } else {
-          startPoint = Offset(fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
+          startPoint = Offset(
+              fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
         }
 
-        final endCenter = Offset(toNode.x + toNode.width / 2, toNode.y + toNode.height / 2);
-        final endPoint = _getIntersectionPointWithRect(startPoint, endCenter, toNode);
+        final endCenter =
+        Offset(toNode.x + toNode.width / 2, toNode.y + toNode.height / 2);
+        final endPoint =
+        _getIntersectionPointWithRect(startPoint, endCenter, toNode);
 
         canvas.drawLine(startPoint, endPoint, paint);
         _drawArrow(canvas, paint, startPoint, endPoint);
@@ -139,26 +143,39 @@ class ConnectionPainter extends CustomPainter {
     }
   }
 
-  Offset _getIntersectionPointWithRect(Offset startPoint, Offset endCenter, FlowNode toNode) {
-    final toRect = Rect.fromLTWH(toNode.x, toNode.y, toNode.width, toNode.height);
+  Offset _getIntersectionPointWithRect(
+      Offset startPoint, Offset endCenter, FlowNode toNode) {
+    final toRect =
+    Rect.fromLTWH(toNode.x, toNode.y, toNode.width, toNode.height);
     final line = Line(endCenter, startPoint);
 
-    Offset? topIntersection = line.intersection(Line(toRect.topLeft, toRect.topRight));
-    Offset? rightIntersection = line.intersection(Line(toRect.topRight, toRect.bottomRight));
-    Offset? bottomIntersection = line.intersection(Line(toRect.bottomRight, toRect.bottomLeft));
-    Offset? leftIntersection = line.intersection(Line(toRect.bottomLeft, toRect.topLeft));
+    Offset? topIntersection =
+    line.intersection(Line(toRect.topLeft, toRect.topRight));
+    Offset? rightIntersection =
+    line.intersection(Line(toRect.topRight, toRect.bottomRight));
+    Offset? bottomIntersection =
+    line.intersection(Line(toRect.bottomRight, toRect.bottomLeft));
+    Offset? leftIntersection =
+    line.intersection(Line(toRect.bottomLeft, toRect.topLeft));
 
-    final intersections = [topIntersection, rightIntersection, bottomIntersection, leftIntersection]
-        .where((p) => p != null).cast<Offset>().toList();
+    final intersections = [
+      topIntersection,
+      rightIntersection,
+      bottomIntersection,
+      leftIntersection
+    ].where((p) => p != null).cast<Offset>().toList();
 
     if (intersections.isEmpty) return endCenter;
 
-    intersections.sort((a, b) => (a - startPoint).distance.compareTo((b - startPoint).distance));
+    intersections.sort(
+            (a, b) => (a - startPoint).distance.compareTo((b - startPoint).distance));
     return intersections.first;
   }
 
-  void _drawArrow(Canvas canvas, Paint paint, Offset startPoint, Offset endPoint) {
-    final angle = atan2(endPoint.dy - startPoint.dy, endPoint.dx - startPoint.dx);
+  void _drawArrow(
+      Canvas canvas, Paint paint, Offset startPoint, Offset endPoint) {
+    final angle =
+    atan2(endPoint.dy - startPoint.dy, endPoint.dx - startPoint.dx);
     const arrowSize = 10.0;
     const arrowAngle = pi / 6;
 
@@ -175,11 +192,11 @@ class ConnectionPainter extends CustomPainter {
   void _drawBranchLabel(Canvas canvas, FlowNode fromNode, String label) {
     final textPainter = TextPainter(
       text: TextSpan(
-        text: label == 'true' ? 'Vero' : 'Falso',
+        text: label == 'true' ? 'True' : 'False',
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: theme.colorScheme.onSurface,
+          color: theme.typography.body?.color,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -209,12 +226,12 @@ class ConnectionPainter extends CustomPainter {
     );
 
     final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(99));
-    final bgPaint = Paint()..color = theme.colorScheme.surface.withAlpha(240);
+    final bgPaint = Paint()..color = theme.cardColor.withAlpha(240);
     canvas.drawRRect(rrect, bgPaint);
     canvas.drawRRect(
       rrect,
       Paint()
-        ..color = theme.colorScheme.outline.withOpacity(0.5)
+        ..color = theme.inactiveColor.withOpacity(0.5)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0,
     );
@@ -245,7 +262,7 @@ class Line {
     final t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
     final u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
 
-    if (t > 0 && t <= 1 && u >= 0 && u <= 1) { // Adjusted bounds for accuracy
+    if (t > 0 && t <= 1 && u >= 0 && u <= 1) {
       return Offset(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
     }
     return null;

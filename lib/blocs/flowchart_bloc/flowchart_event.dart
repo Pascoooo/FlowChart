@@ -113,3 +113,19 @@ class ResetFlowchart extends FlowchartEvent {
 class ClearHistory extends FlowchartEvent {
   const ClearHistory();
 }
+
+class DebugFlowchart extends FlowchartEvent {
+  const DebugFlowchart();
+}
+
+class DebugNextNode extends FlowchartEvent {
+  const DebugNextNode();
+}
+
+class DebugPrevNode extends FlowchartEvent {
+  const DebugPrevNode();
+}
+
+class DebugExit extends FlowchartEvent {
+  const DebugExit();
+}

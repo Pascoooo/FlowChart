@@ -26,151 +26,151 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<ExecuteActiveFile>(_onExecuteActiveFile);
   }
 
-      /// **GENERATORE DI CODICE C CON LOGICA AGGIORNATA**
-      String _generateCCode(String jsonContent) {
-        try {
-          final flowchart = FlowchartEntity.fromDocument(jsonDecode(jsonContent));
-          final code = StringBuffer();
-          final visitedNodes = <String>{}; // Per evitare duplicazioni e loop
+  /// **GENERATORE DI CODICE C CON LOGICA AGGIORNATA**
+  // ignore: unused_element
+  String _generateCCode(String jsonContent) {
+    try {
+      final flowchart = FlowchartEntity.fromDocument(jsonDecode(jsonContent));
+      final code = StringBuffer();
+      final visitedNodes = <String>{}; // Per evitare duplicazioni e loop
 
-          // --- Helpers ---
-          String mapDataType(String type) {
-            switch (type) {
-              case 'float': return 'float';
-              case 'string': return 'char';
-              case 'char': return 'char';
-              default: return 'int';
+      // --- Helpers ---
+      String mapDataType(String type) {
+        switch (type) {
+          case 'float': return 'float';
+          case 'string': return 'char';
+          case 'char': return 'char';
+          default: return 'int';
+        }
+      }
+
+      String mapTypeToFormatSpecifier(String type) {
+        switch (type) {
+          case 'float': return '%f';
+          case 'string': return '%s';
+          case 'char': return '%c';
+          default: return '%d';
+        }
+      }
+
+      // --- Funzione ricorsiva per generare il corpo del codice ---
+      void generateCodeForNode(String nodeId, int indentation) {
+        if (visitedNodes.contains(nodeId) || nodeId.isEmpty) return;
+        visitedNodes.add(nodeId);
+
+        final node = flowchart.nodes.firstWhere((n) => n.id == nodeId);
+        final indent = '    ' * indentation;
+
+        switch (node.kind) {
+          case FlowNodeKind.input:
+            final varName = (node.data?['targetVariables'] as List).first;
+            final variable = flowchart.variables.firstWhere((v) => v.name == varName);
+
+            if (variable.defaultValue == null) {
+              code.writeln('${indent}// Nodo: ${node.text} - Richiesta input');
+              code.writeln('${indent}printf("Inserisci valore per ${variable.name}: \\n");');  // Aggiunto \\n per flush
+              code.writeln('${indent}fflush(stdout);');  // Forza flush
+              code.writeln('${indent}scanf("${mapTypeToFormatSpecifier(variable.dataType)}", &${variable.name});');
             }
-          }
+            break;
 
-          String mapTypeToFormatSpecifier(String type) {
-            switch (type) {
-              case 'float': return '%f';
-              case 'string': return '%s';
-              case 'char': return '%c';
-              default: return '%d';
-            }
-          }
+          case FlowNodeKind.output:
+            String template = node.data?['template'] as String? ?? "";
+            final varNames = (node.data?['variables'] as List?)?.cast<String>() ?? [];
 
-          // --- Funzione ricorsiva per generare il corpo del codice ---
-          void generateCodeForNode(String nodeId, int indentation) {
-            if (visitedNodes.contains(nodeId) || nodeId.isEmpty) return;
-            visitedNodes.add(nodeId);
-
-            final node = flowchart.nodes.firstWhere((n) => n.id == nodeId);
-            final indent = '    ' * indentation;
-
-            switch (node.kind) {
-              case FlowNodeKind.input:
-                final varName = (node.data?['targetVariables'] as List).first;
-                final variable = flowchart.variables.firstWhere((v) => v.name == varName);
-
-                if (variable.defaultValue == null) {
-                  code.writeln('${indent}// Nodo: ${node.text} - Richiesta input');
-                  code.writeln('${indent}printf("Inserisci valore per ${variable.name}: \\n");');  // Aggiunto \\n per flush
-                  code.writeln('${indent}fflush(stdout);');  // Forza flush
-                  code.writeln('${indent}scanf("${mapTypeToFormatSpecifier(variable.dataType)}", &${variable.name});');
-                }
-                break;
-
-              case FlowNodeKind.output:
-                String template = node.data?['template'] as String? ?? "";
-                final varNames = (node.data?['variables'] as List?)?.cast<String>() ?? [];
-
-                if (template.isEmpty && varNames.isEmpty) {
-                  // Skip o debug se vuoto
-                  code.writeln('${indent}// Nodo Output vuoto - Nessuna stampa');
-                  break;
-                }
-
-                String cTemplate = template;
-                if (varNames.isNotEmpty) {
-                  for (final varName in varNames) {
-                    final variable = flowchart.variables.firstWhere(
-                          (v) => v.name == varName,
-                      orElse: () => VariableDeclaration(name: '', dataType: 'unknown', defaultValue: null),
-                    );
-                    if (variable.dataType != 'unknown') {
-                      cTemplate = cTemplate.replaceAll(
-                          '{${variable.name}}', mapTypeToFormatSpecifier(variable.dataType));
-                    }
-                  }
-                }
-
-                code.writeln('${indent}// Nodo: ${node.text}');
-                if (varNames.isEmpty) {
-                  code.writeln('${indent}printf("$cTemplate\\n");');
-                } else {
-                  code.writeln('${indent}printf("$cTemplate\\n", ${varNames.join(', ')});');
-                }
-                code.writeln('${indent}fflush(stdout);');  // Forza flush dopo ogni printf
-                break;
-
-              case FlowNodeKind.decision:
-                code.writeln('${indent}// Nodo Decisione non gestito in questa fase.');
-                break;
-
-              case FlowNodeKind.end:
-                if (flowchart.name == 'main') {
-                  code.writeln('${indent}return 0;');
-                } else {
-                  code.writeln('${indent}return;');
-                }
-                return;
-
-              default:
-                code.writeln('${indent}// Nodo ${node.kind.name}: ${node.text}');
+            if (template.isEmpty && varNames.isEmpty) {
+              // Skip o debug se vuoto
+              code.writeln('${indent}// Nodo Output vuoto - Nessuna stampa');
+              break;
             }
 
-            final nextEdge = flowchart.edges.firstWhere(
-                    (e) => e.from == node.id && e.port == null,
-                orElse: () => const EdgeEntity(from: '', to: '', port: null)
-            );
-            generateCodeForNode(nextEdge.to, indentation);
-          }
-
-          // --- Inizio Costruzione Codice ---
-          code.writeln('#include <stdio.h>');
-          code.writeln('#include <stdio.h>');  // Aggiungi per fflush
-          code.writeln();
-
-          if (flowchart.name == 'main') {
-            code.writeln('int main() {');
-          } else {
-            code.writeln('${mapDataType(flowchart.signature.returnType)} ${flowchart.name}() {');
-          }
-
-          if (flowchart.variables.isNotEmpty) {
-            code.writeln('    // Dichiarazione delle variabili');
-            for (var variable in flowchart.variables) {
-              if (variable.dataType == 'string') {
-                code.writeln('    char ${variable.name}[256];');
-              } else {
-                if (variable.defaultValue != null) {
-                  code.writeln('    ${mapDataType(variable.dataType)} ${variable.name} = ${variable.defaultValue};');
-                } else {
-                  code.writeln('    ${mapDataType(variable.dataType)} ${variable.name};');
+            String cTemplate = template;
+            if (varNames.isNotEmpty) {
+              for (final varName in varNames) {
+                final variable = flowchart.variables.firstWhere(
+                      (v) => v.name == varName,
+                  orElse: () => VariableDeclaration(name: '', dataType: 'unknown', defaultValue: null),
+                );
+                if (variable.dataType != 'unknown') {
+                  cTemplate = cTemplate.replaceAll(
+                      '{${variable.name}}', mapTypeToFormatSpecifier(variable.dataType));
                 }
               }
             }
-            code.writeln();
-          }
 
-          final startNode = flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
-          final firstEdge = flowchart.edges.firstWhere((e) => e.from == startNode.id, orElse: () => const EdgeEntity(from: '', to: '', port: null));
-          generateCodeForNode(firstEdge.to, 1);
+            code.writeln('${indent}// Nodo: ${node.text}');
+            if (varNames.isEmpty) {
+              code.writeln('${indent}printf("$cTemplate\\n");');
+            } else {
+              code.writeln('${indent}printf("$cTemplate\\n", ${varNames.join(', ')});');
+            }
+            code.writeln('${indent}fflush(stdout);');  // Forza flush dopo ogni printf
+            break;
 
-          if (flowchart.name == 'main' && !code.toString().contains('return 0;')) {
-            code.writeln('    return 0;');
-          }
+          case FlowNodeKind.decision:
+            code.writeln('${indent}// Nodo Decisione non gestito in questa fase.');
+            break;
 
-          code.writeln('}');
+          case FlowNodeKind.end:
+            if (flowchart.name == 'main') {
+              code.writeln('${indent}return 0;');
+            } else {
+              code.writeln('${indent}return;');
+            }
+            return;
 
-          return code.toString();
-        } catch (e) {
-          return "Impossibile generare il codice C.\nErrore: ${e.toString()}";
+          default:
+            code.writeln('${indent}// Nodo ${node.kind.name}: ${node.text}');
         }
+
+        final nextEdge = flowchart.edges.firstWhere(
+                (e) => e.from == node.id && e.port == null,
+            orElse: () => const EdgeEntity(from: '', to: '', port: null)
+        );
+        generateCodeForNode(nextEdge.to, indentation);
       }
+
+      // --- Inizio Costruzione Codice ---
+      code.writeln('#include <stdio.h>');
+      code.writeln();
+
+      if (flowchart.name == 'main') {
+        code.writeln('int main() {');
+      } else {
+        code.writeln('${mapDataType(flowchart.signature.returnType)} ${flowchart.name}() {');
+      }
+
+      if (flowchart.variables.isNotEmpty) {
+        code.writeln('    // Dichiarazione delle variabili');
+        for (var variable in flowchart.variables) {
+          if (variable.dataType == 'string') {
+            code.writeln('    char ${variable.name}[256];');
+          } else {
+            if (variable.defaultValue != null) {
+              code.writeln('    ${mapDataType(variable.dataType)} ${variable.name} = ${variable.defaultValue};');
+            } else {
+              code.writeln('    ${mapDataType(variable.dataType)} ${variable.name};');
+            }
+          }
+        }
+        code.writeln();
+      }
+
+      final startNode = flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
+      final firstEdge = flowchart.edges.firstWhere((e) => e.from == startNode.id, orElse: () => const EdgeEntity(from: '', to: '', port: null));
+      generateCodeForNode(firstEdge.to, 1);
+
+      if (flowchart.name == 'main' && !code.toString().contains('return 0;')) {
+        code.writeln('    return 0;');
+      }
+
+      code.writeln('}');
+
+      return code.toString();
+    } catch (e) {
+      return "Impossibile generare il codice C.\nErrore: ${e.toString()}";
+    }
+  }
 
   Future<void> _onExecuteActiveFile(
       ExecuteActiveFile event, Emitter<FileSystemState> emit) async {
@@ -188,6 +188,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       final content = rtdbContent ?? file.content;
 
       final generatedCode = _generateCCode(content);
+
 
       // --- MODIFICA CHIAVE QUI ---
       // Emettiamo il nostro nuovo stato invece del vecchio dialogo
@@ -287,8 +288,8 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       emit(FileSystemLoaded(files: updatedFiles, activeFileId: nextActiveFileId));
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Errore durante l\'eliminazione: ${e.toString()}'));
-      }
-      }
+    }
+  }
 
   Future<void> _onRenameFile(
       RenameFile event, Emitter<FileSystemState> emit) async {
@@ -311,3 +312,4 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     }
   }
 }
+

@@ -30,6 +30,9 @@ class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
   static final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
+  // Getter pubblico per accedere al root navigator (es. per Overlay globale)
+  static GlobalKey<NavigatorState> get rootNavigatorKey => _rootNavigatorKey;
+
   static GoRouter getRouter(AuthenticationBloc authBloc) {
     return GoRouter(
       navigatorKey: _rootNavigatorKey,

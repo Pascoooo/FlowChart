@@ -1,25 +1,20 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-// Import necessario per poter usare il tipo VariableDeclaration
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-// --- MODIFICA: La funzione ora accetta la lista di variabili disponibili ---
+/// 📤 Output Node Configuration Dialog - Professional Web-First Design
 Future<Map<String, dynamic>?> showOutputNodeDialog(
-    BuildContext context, {
-      required List<VariableDeclaration> availableVariables,
-    }) {
+  BuildContext context, {
+  required List<VariableDeclaration> availableVariables,
+}) {
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
-    useRootNavigator: true,
-    // Passiamo le variabili al widget del dialogo
     builder: (_) => _OutputNodeDialog(variables: availableVariables),
   );
 }
 
 class _OutputNodeDialog extends StatefulWidget {
-  // --- MODIFICA: Il dialogo ora riceve la lista di variabili ---
   final List<VariableDeclaration> variables;
   const _OutputNodeDialog({required this.variables});
 
@@ -48,23 +43,25 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     super.dispose();
   }
 
-  /// --- NUOVA FUNZIONE: Inserisce il segnaposto di una variabile nel testo ---
+  // --- BUSINESS LOGIC (Preserved) ---
+
   void _insertVariable(String variableName) {
-    final textToInsert = '{$variableName}';
+    final textToInsert = '{{$variableName}}';
     final currentText = _messageController.text;
     final selection = _messageController.selection;
-    final newText = currentText.replaceRange(selection.start, selection.end, textToInsert);
+    final newText =
+        currentText.replaceRange(selection.start, selection.end, textToInsert);
 
     _messageController.value = TextEditingValue(
       text: newText,
-      selection: TextSelection.collapsed(offset: selection.start + textToInsert.length),
+      selection: TextSelection.collapsed(
+          offset: selection.start + textToInsert.length),
     );
   }
 
   void _onConfirm() {
     if (_messageController.text.trim().isNotEmpty) {
-      // --- MODIFICA: Estrae i nomi delle variabili usate nel template ---
-      final RegExp regex = RegExp(r'\{(\w+)\}');
+      final RegExp regex = RegExp(r'\{\{(\w+)\}\}');
       final matches = regex.allMatches(_messageController.text);
       final usedVariables = matches.map((m) => m.group(1)!).toSet().toList();
 
@@ -73,7 +70,7 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
             ? 'Output'
             : _labelController.text.trim(),
         'template': _messageController.text.trim(),
-        'variables': usedVariables, // Aggiungiamo la lista di variabili usate
+        'variables': usedVariables,
       };
       Navigator.of(context).pop(result);
     }
@@ -81,96 +78,374 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final isValid = _messageController.text.trim().isNotEmpty;
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 420),
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                FaIcon(
-                  FontAwesomeIcons.terminal,
-                  size: 22,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 12),
-                Text('Configura Nodo Output',
-                    style: theme.textTheme.headlineSmall),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Definisci il messaggio che verrà mostrato e le variabili da usare.',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 24),
+    return Center(
+      child: ContentDialog(
+        constraints: const BoxConstraints(
+          minWidth: 600,
+          maxWidth: 700,
+          minHeight: 480,
+        ),
+        content: Container(
+          padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 🎯 Header Section
+              _buildHeader(context, theme),
 
-            Text('Etichetta Nodo (opzionale)', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 8),
-            CupertinoTextField(
-              controller: _labelController,
-              placeholder: 'Es. Risultato Finale',
-              // ... (resto del textfield invariato)
-            ),
-            const SizedBox(height: 16),
-            Text('Messaggio di Output *', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 8),
-            CupertinoTextField(
-              controller: _messageController,
-              placeholder: 'Es. Il calcolo è: {{risultato}}',
-              maxLines: 3,
-              // ... (resto del textfield invariato)
-            ),
+              const SizedBox(height: 24),
 
-            // --- NUOVO WIDGET: Lista delle variabili come chip ---
-            if (widget.variables.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text('Variabili disponibili', style: theme.textTheme.labelLarge),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                runSpacing: 8.0,
-                children: widget.variables.map((variable) {
-                  return ActionChip(
-                    label: Text(variable.name),
-                    avatar: FaIcon(FontAwesomeIcons.code, size: 12),
-                    onPressed: () => _insertVariable(variable.name),
-                    tooltip: 'Inserisci {{${variable.name}}}',
-                  );
-                }).toList(),
+              // 🎯 Divider
+              Container(
+                height: 1,
+                width: double.infinity,
+                color: theme.resources.dividerStrokeColorDefault,
               ),
-            ],
 
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                CupertinoButton(
-                  onPressed: () => Navigator.of(context).pop(null),
-                  child: Text(
-                    'Annulla',
-                    style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: 24),
+
+              // 🎯 Form Content - Scrollable
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Label Input
+                      _buildSectionLabel(context, 'Etichetta Personalizzata'),
+                      const SizedBox(height: 8),
+                      TextBox(
+                        controller: _labelController,
+                        placeholder:
+                            'Es. Mostra Risultato, Messaggio Finale...',
+                        style: theme.typography.body?.copyWith(
+                          color: theme.typography.body?.color,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Message Template
+                      _buildSectionLabel(
+                        context,
+                        'Messaggio di Output',
+                        isRequired: true,
+                      ),
+                      const SizedBox(height: 8),
+                      TextBox(
+                        controller: _messageController,
+                        placeholder:
+                            'Es. Il risultato del calcolo è: {{risultato}}',
+                        maxLines: 6,
+                        style: theme.typography.body?.copyWith(
+                          color: theme.typography.body?.color,
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _buildSectionLabel(context, 'Variabili Disponibili'),
+                      const SizedBox(height: 8),
+
+                      if (widget.variables.isNotEmpty) ...[
+                        Text(
+                          'Clicca su una variabile per inserirla nel messaggio',
+                          style: theme.typography.caption?.copyWith(
+                            color: theme.resources.textFillColorSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildVariableGrid(context, theme),
+                      ] else
+                        _buildEmptyVariablesState(context, theme),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                CupertinoButton.filled(
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          // 🎯 Actions - Centered Row
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Button(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  style: ButtonStyle(
+                    padding: WidgetStateProperty.all(
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
+                  child: const Text('Annulla'),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
                   onPressed: isValid ? _onConfirm : null,
+                  style: ButtonStyle(
+                    padding: WidgetStateProperty.all(
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
                   child: const Text('Conferma'),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 🎨 Header Section
+  Widget _buildHeader(BuildContext context, FluentThemeData theme) {
+    final warningColor = theme.brightness == Brightness.light
+        ? const Color(0xFFD97706) // AppColors.lightWarning
+        : const Color(0xFFF59E0B); // AppColors.darkWarning
+
+    return Row(
+      children: [
+        // Icon Container
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: warningColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: warningColor.withValues(alpha: 0.2),
+            ),
+          ),
+          child: FaIcon(
+            FontAwesomeIcons.terminal,
+            size: 20,
+            color: warningColor,
+          ),
+        ),
+
+        const SizedBox(width: 16),
+
+        // Title and Description
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Configura Nodo Output',
+                style: theme.typography.title?.copyWith(
+                  color: theme.typography.body?.color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Definisci il messaggio da visualizzare con variabili dinamiche.',
+                style: theme.typography.body?.copyWith(
+                  color: theme.typography.body?.color?.withValues(alpha: 0.7),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 🎨 Section Label
+  Widget _buildSectionLabel(BuildContext context, String label,
+      {bool isRequired = false}) {
+    final theme = FluentTheme.of(context);
+
+    return Row(
+      children: [
+        Text(
+          label,
+          style: theme.typography.bodyStrong?.copyWith(
+            color: theme.typography.body?.color,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (isRequired) ...[
+          const SizedBox(width: 4),
+          Text(
+            '*',
+            style: TextStyle(
+              color: theme.brightness == Brightness.light
+                  ? const Color(0xFFDC2626)
+                  : const Color(0xFFEF4444),
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 🎨 Variable Grid
+  Widget _buildVariableGrid(BuildContext context, FluentThemeData theme) {
+    return Wrap(
+      spacing: 8.0,
+      runSpacing: 8.0,
+      children: widget.variables.map((variable) {
+        return _VariableChip(
+          variable: variable,
+          onPressed: () => _insertVariable(variable.name),
+          theme: theme,
+        );
+      }).toList(),
+    );
+  }
+
+  /// 🎨 Empty Variables State
+  Widget _buildEmptyVariablesState(
+      BuildContext context, FluentThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: theme.resources.layerFillColorAlt,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.resources.dividerStrokeColorDefault,
+        ),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            FaIcon(
+              FontAwesomeIcons.boxOpen,
+              size: 24,
+              color: theme.typography.body?.color?.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Nessuna variabile disponibile',
+              style: theme.typography.body?.copyWith(
+                color: theme.typography.body?.color?.withValues(alpha: 0.6),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Crea prima dei nodi Input per dichiarare variabili',
+              style: theme.typography.caption?.copyWith(
+                color: theme.typography.body?.color?.withValues(alpha: 0.5),
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+// --- HELPER WIDGETS ---
+
+/// 🎨 Variable Chip Component
+class _VariableChip extends StatelessWidget {
+  final VariableDeclaration variable;
+  final VoidCallback onPressed;
+  final FluentThemeData theme;
+
+  const _VariableChip({
+    required this.variable,
+    required this.onPressed,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return HoverButton(
+        onPressed: onPressed,
+        builder: (context, states) {
+          // Fluent UI v4 usa WidgetState invece di ButtonStates
+          final isHovering = states.isHovered;
+          final isPressed = states.isPressed;
+
+          Color backgroundColor;
+          Color foregroundColor;
+          double elevation;
+
+          final accent = theme.accentColor.defaultBrushFor(theme.brightness);
+
+          if (isPressed) {
+            backgroundColor = accent.withValues(alpha: 0.25);
+            foregroundColor = accent;
+            elevation = 0;
+          } else if (isHovering) {
+            backgroundColor = accent.withValues(alpha: 0.15);
+            foregroundColor = accent;
+            elevation = 2;
+          } else {
+            backgroundColor = accent.withValues(alpha: 0.10);
+            foregroundColor = accent;
+            elevation = 0;
+          }
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: accent.withValues(alpha: 0.30),
+              ),
+              boxShadow: elevation > 0
+                  ? [
+                      BoxShadow(
+                        color: theme.shadowColor.withValues(alpha: 0.10),
+                        offset: Offset(0, elevation),
+                        blurRadius: elevation * 2,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Type Badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: foregroundColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    variable.dataType.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: foregroundColor,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+                // Variable Name
+                Text(
+                  variable.name,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: foregroundColor,
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
   }
 }

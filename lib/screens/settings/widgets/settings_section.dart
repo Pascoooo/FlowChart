@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 
 class SettingsSection extends StatelessWidget {
   final String title;
@@ -14,49 +14,54 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
+    final theme = FluentTheme.of(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                title.toUpperCase(),
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: cs.primary,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.inactiveColor.withValues(alpha: 0.15),
+          width: 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: theme.typography.subtitle?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              if (status != null) status!,
-            ],
+                if (status != null) status!,
+              ],
+            ),
           ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outline.withOpacity(0.2)),
-              color: cs.surfaceContainer.withOpacity(0.5)
-          ),
-          child: Column(
-            children: List.generate(children.length, (index) {
-              return Column(
-                children: [
-                  children[index],
-                  if (index < children.length - 1)
-                    Divider(height: 1, indent: 72, endIndent: 16, color: cs.outline.withOpacity(0.2)),
-                ],
-              );
-            }),
-          ),
-        ),
-      ],
+          const Divider(size: 1.0),
+          // Body
+          ..._withDividers(children),
+        ],
+      ),
     );
+  }
+
+  List<Widget> _withDividers(List<Widget> items) {
+    if (items.isEmpty) return items;
+    final List<Widget> out = [];
+    for (var i = 0; i < items.length; i++) {
+      out.add(items[i]);
+      if (i < items.length - 1) {
+        out.add(const Divider(size: 0.5));
+      }
+    }
+    return out;
   }
 }

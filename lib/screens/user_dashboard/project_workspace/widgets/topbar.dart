@@ -1,8 +1,9 @@
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
@@ -11,7 +12,6 @@ import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
-import '../../../../config/services/banner_service.dart';
 
 class TopBar extends StatefulWidget {
   final MyProject selectedProject;
@@ -117,17 +117,17 @@ class _SimpleTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return Container(
       height: 80,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+        border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -136,7 +136,7 @@ class _SimpleTopBar extends StatelessWidget {
       child: Row(
         children: [
           Icon(Icons.folder_open_rounded,
-              color: theme.colorScheme.primary, size: 24),
+              color: theme.accentColor, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -145,16 +145,12 @@ class _SimpleTopBar extends StatelessWidget {
               children: [
                 Text(
                   projectName,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
-                  ),
+                  style: theme.typography.title
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 Text(
                   'Caricamento...',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  ),
+                  style: theme.typography.caption,
                 ),
               ],
             ),
@@ -162,8 +158,7 @@ class _SimpleTopBar extends StatelessWidget {
           SizedBox(
             width: 16,
             height: 16,
-            child: CircularProgressIndicator(
-                strokeWidth: 2, color: theme.colorScheme.primary),
+            child: ProgressRing(strokeWidth: 2, activeColor: theme.accentColor),
           ),
         ],
       ),
@@ -194,12 +189,13 @@ class _AdvancedTopBar extends StatelessWidget {
 
   Future<void> _resetFlowchart(BuildContext context) async {
     final bool? confirmed = await AppDialogs.showConfirmationDialog(
-      context,
-      title: 'Conferma reset',
-      message:
-      'Sei sicuro di voler resettare il flowchart? Tutti i nodi tranne "Inizio" verranno eliminati.',
-      confirmText: 'Resetta',
-      cancelText: 'Annulla',
+        context,
+        title: 'Conferma reset',
+        message:
+        'Sei sicuro di voler resettare il flowchart? Tutti i nodi tranne "Inizio" verranno eliminati.',
+        confirmText: 'Resetta',
+        cancelText: 'Annulla',
+        isDestructive: true
     );
     if (confirmed == true && context.mounted) {
       context.read<FlowchartBloc>().add(const ResetFlowchart());
@@ -213,6 +209,7 @@ class _AdvancedTopBar extends StatelessWidget {
       message: 'Sei sicuro di voler eliminare il nodo selezionato?',
       confirmText: 'Elimina',
       cancelText: 'Annulla',
+      isDestructive: true,
     );
     if (confirmed == true && context.mounted) {
       context.read<FlowchartBloc>().add(RemoveNode(nodeId));
@@ -221,7 +218,7 @@ class _AdvancedTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         const double minWidthForCenterActions = 800.0;
@@ -232,13 +229,12 @@ class _AdvancedTopBar extends StatelessWidget {
           height: 80,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
+            color: theme.cardColor,
             borderRadius: BorderRadius.circular(20),
-            border:
-            Border.all(color: theme.colorScheme.outline.withOpacity(0.1)),
+            border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
             boxShadow: [
               BoxShadow(
-                color: theme.colorScheme.shadow.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -284,12 +280,17 @@ class _AdvancedTopBar extends StatelessWidget {
                       return const SizedBox.shrink();
                     }
 
-                    // --- NUOVA LOGICA DI CONTROLLO ---
-                    // Controlla se esiste un nodo "Fine" nel flowchart.
+                    // ===== NUOVA LOGICA DI CONTROLLO =====
                     final bool hasEndNode = flowchartState.flowchart.nodes
                         .any((node) => node.kind == FlowNodeKind.end);
-                    // Il pulsante "Play" è attivo solo se c'è un file attivo E un nodo "Fine".
-                    final bool isPlayEnabled = state.activeFileId != null && hasEndNode;
+                    final bool isPlayEnabled =
+                        state.activeFileId != null && hasEndNode;
+
+                    // Disabilita reset se c'è solo il nodo Start
+                    final nodes = flowchartState.flowchart.nodes;
+                    final bool hasOnlyStartNode =
+                        nodes.length == 1 && nodes.first.kind == FlowNodeKind.start;
+                    final bool isResetEnabled = !hasOnlyStartNode;
 
                     final selectedNode = flowchartState
                         .getNodeById(flowchartState.selectedNodeId ?? '');
@@ -307,7 +308,8 @@ class _AdvancedTopBar extends StatelessWidget {
                       onDeleteSelected: _deleteSelected,
                       projectId: selectedProjectId,
                       activeFileId: state.activeFileId,
-                      isPlayEnabled: isPlayEnabled, // Passa il nuovo flag al widget
+                      isPlayEnabled: isPlayEnabled,
+                      isResetEnabled: isResetEnabled,
                     );
                   },
                 ),
@@ -327,8 +329,8 @@ class _AnimatedFlowchartActions extends StatelessWidget {
   final void Function(BuildContext, String nodeId) onDeleteSelected;
   final String projectId;
   final String? activeFileId;
-  // --- MODIFICA: Aggiunto nuovo parametro ---
   final bool isPlayEnabled;
+  final bool? isResetEnabled; // aggiunto
 
   const _AnimatedFlowchartActions({
     required this.isDeletionEnabled,
@@ -338,45 +340,59 @@ class _AnimatedFlowchartActions extends StatelessWidget {
     required this.onDeleteSelected,
     required this.projectId,
     this.activeFileId,
-    required this.isPlayEnabled, // Richiesto nel costruttore
+    required this.isPlayEnabled,
+    this.isResetEnabled,
   });
 
   @override
   Widget build(BuildContext context) {
-    final buttons = <Widget>[
-      _buildAnimatedButton(
-        context: context,
-        tooltip: 'Elimina nodo selezionato',
-        icon: Icons.delete_rounded,
-        onPressed: isDeletionEnabled
-            ? () => onDeleteSelected(context, selectedNodeId!)
-            : null,
-        interval: const Interval(0.6, 1.0),
-      ),
-      const UndoRedoControls(),
-      _buildAnimatedButton(
-        context: context,
-        tooltip: 'Resetta flowchart',
-        icon: Icons.delete_sweep_rounded,
-        onPressed: () => onReset(context),
-        interval: const Interval(0.7, 1.0),
-      ),
-      _buildAnimatedButton(
-        context: context,
-        tooltip: 'Esegui Flowchart',
-        icon: Icons.play_arrow_rounded,
-        // --- MODIFICA: L'onPressed ora dipende dal nuovo flag isPlayEnabled ---
-        onPressed: isPlayEnabled
-            ? () {
-          context.read<FileSystemBloc>().add(ExecuteActiveFile(
-            projectId: projectId,
-            fileId: activeFileId!,
-          ));
-        }
-            : null,
-        interval: const Interval(0.8, 1.0),
-      ),
-    ];
+    final List<Widget> buttons = [];
+
+    buttons.add(_buildAnimatedButton(
+      context: context,
+      tooltip: 'Elimina nodo selezionato',
+      icon: Icons.delete_rounded,
+      onPressed: isDeletionEnabled
+          ? () => onDeleteSelected(context, selectedNodeId!)
+          : null,
+      interval: const Interval(0.6, 1.0),
+    ));
+
+    buttons.add(const UndoRedoControls());
+
+    buttons.add(_buildAnimatedButton(
+      context: context,
+      tooltip: 'Resetta flowchart',
+      icon: Icons.delete_sweep_rounded,
+      onPressed: (isResetEnabled ?? true) ? () => onReset(context) : null,
+      interval: const Interval(0.7, 1.0),
+    ));
+
+    buttons.add(_buildAnimatedButton(
+      context: context,
+      tooltip: 'Esegui Flowchart',
+      icon: Icons.play_arrow_rounded,
+      onPressed: isPlayEnabled
+          ? () {
+              context.read<FileSystemBloc>().add(ExecuteActiveFile(
+                    projectId: projectId,
+                    fileId: activeFileId!,
+                  ));
+            }
+          : null,
+      interval: const Interval(0.8, 1.0),
+    ));
+
+    // Nuovo pulsante Debug
+    buttons.add(_buildAnimatedButton(
+      context: context,
+      tooltip: 'Debug Flowchart',
+      icon: Icons.bug_report,
+      onPressed: () {
+        context.read<FlowchartBloc>().add(const DebugFlowchart());
+      },
+      interval: const Interval(0.9, 1.0),
+    ));
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -403,10 +419,19 @@ class _AnimatedFlowchartActions extends StatelessWidget {
       opacity: tween.animate(curvedAnimation),
       child: ScaleTransition(
         scale: tween.animate(curvedAnimation),
-        child: IconButton(
-          tooltip: tooltip,
-          icon: Icon(icon, size: 20),
-          onPressed: onPressed,
+        child: Tooltip(
+          message: tooltip,
+          child: AnimatedOpacity(
+            opacity: onPressed == null ? 0.4 : 1.0, // stesso effetto di Undo/Redo
+            duration: const Duration(milliseconds: 200),
+            child: IconButton(
+              style: ButtonStyle(
+                backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+              ),
+              icon: Icon(icon, size: 20),
+              onPressed: onPressed,
+            ),
+          ),
         ),
       ),
     );
@@ -421,7 +446,7 @@ class _Breadcrumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     String currentFileName = "";
 
     if (state.files.isNotEmpty) {
@@ -431,27 +456,26 @@ class _Breadcrumb extends StatelessWidget {
       currentFileName = matchingFile.name;
     }
 
-    final textStyle =
-    theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500);
+    final textStyle = theme.typography.caption;
     final separator = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Icon(
-        Icons.chevron_right_rounded,
-        size: 14,
-        color: theme.colorScheme.onSurface.withOpacity(0.4),
+        Icons.chevron_right,
+        size: 20,
+        color: theme.typography.body?.color?.withValues(alpha: 0.4),
       ),
     );
 
     return Row(
       children: [
-        Icon(Icons.auto_awesome,
-            size: 16, color: theme.colorScheme.primary.withOpacity(0.7)),
+        Icon(FontAwesomeIcons.file,
+            size: 16, color: theme.accentColor.withValues(alpha: 0.7)),
         const SizedBox(width: 8),
         Flexible(
           child: Text(
             selectedProjectName,
             style: textStyle?.copyWith(
-                color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
+                color: theme.accentColor, fontWeight: FontWeight.bold),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -461,14 +485,14 @@ class _Breadcrumb extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: theme.colorScheme.secondary.withOpacity(0.1),
+              color: theme.accentColor.lighter.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               currentFileName,
               style: textStyle?.copyWith(
-                  color: theme.colorScheme.secondary,
-                  fontWeight: FontWeight.w600),
+                  color: theme.accentColor.lighter,
+                  fontWeight: FontWeight.bold),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -525,75 +549,19 @@ class _UndoRedoButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Tooltip(
       message: tooltip,
       child: AnimatedOpacity(
         opacity: enabled ? 1.0 : 0.4,
         duration: const Duration(milliseconds: 200),
         child: IconButton(
+          style: const ButtonStyle(
+            backgroundColor: WidgetStatePropertyAll(Colors.transparent),
+          ),
           icon: Icon(icon, size: 20),
           onPressed: onPressed,
-          color: enabled
-              ? theme.colorScheme.onSurface
-              : theme.colorScheme.onSurface.withOpacity(0.4),
         ),
       ),
     );
   }
-}
-
-class KeyboardShortcuts extends StatelessWidget {
-  final Widget child;
-
-  const KeyboardShortcuts({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ):
-        const UndoIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY):
-        const RedoIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift,
-            LogicalKeyboardKey.keyZ): const RedoIntent(),
-      },
-      child: Actions(
-        actions: {
-          UndoIntent: CallbackAction<UndoIntent>(
-            onInvoke: (UndoIntent intent) {
-              final bloc = context.read<FlowchartBloc>();
-              if (bloc.canUndo) {
-                bloc.add(const Undo());
-              }
-              return null;
-            },
-          ),
-          RedoIntent: CallbackAction<RedoIntent>(
-            onInvoke: (RedoIntent intent) {
-              final bloc = context.read<FlowchartBloc>();
-              if (bloc.canRedo) {
-                bloc.add(const Redo());
-              }
-              return null;
-            },
-          ),
-        },
-        child: Focus(
-          autofocus: true,
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-class UndoIntent extends Intent {
-  const UndoIntent();
-}
-
-class RedoIntent extends Intent {
-  const RedoIntent();
 }

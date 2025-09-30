@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 
 class AnimatedBackground extends StatefulWidget {
   const AnimatedBackground({super.key});
@@ -8,7 +8,8 @@ class AnimatedBackground extends StatefulWidget {
   State<AnimatedBackground> createState() => _AnimatedBackgroundState();
 }
 
-class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProviderStateMixin {
+class _AnimatedBackgroundState extends State<AnimatedBackground>
+    with TickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -20,19 +21,6 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProv
     )..repeat();
   }
 
-  // Gestisce l'hot reload su Web per evitare frame su view già dismessa
-  @override
-  void reassemble() {
-    super.reassemble();
-    if (_controller.isAnimating) {
-      _controller.stop();
-    }
-    // Riavvia dopo il frame di reload
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _controller.repeat();
-    });
-  }
-
   @override
   void dispose() {
     _controller.dispose();
@@ -41,7 +29,7 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProv
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return AnimatedBuilder(
       animation: _controller,
@@ -55,16 +43,16 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProv
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    theme.colorScheme.primary.withValues(alpha: 0.05),
-                    theme.colorScheme.secondary.withValues(alpha: 0.05),
-                    theme.colorScheme.surface.withValues(alpha: 0.1),
+                    theme.accentColor.withOpacity(0.05),
+                    theme.accentColor.lighter.withOpacity(0.05),
+                    theme.scaffoldBackgroundColor.withOpacity(0.1),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    color: theme.accentColor.withOpacity(0.1),
                     blurRadius: 100,
                     spreadRadius: 20,
                   ),

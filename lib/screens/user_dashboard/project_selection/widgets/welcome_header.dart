@@ -1,14 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
 import '../../../../blocs/auth_bloc/authentication_bloc.dart';
-import '../../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../../config/constants/themes.dart';
-import '../../../../config/router/app_router.dart';
-import '../../../../config/services/dialog_service/app_dialogs.dart';
 
 class WelcomeHeader extends StatefulWidget {
   const WelcomeHeader({super.key});
@@ -75,7 +70,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     return AnimatedBuilder(
       animation: _heroAnimation,
       builder: (context, child) {
@@ -99,7 +94,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     );
   }
 
-  Widget _buildHeroIcon(ThemeData theme) {
+  Widget _buildHeroIcon(FluentThemeData theme) {
     return AnimatedBuilder(
       animation: _decorationAnimation,
       builder: (context, child) {
@@ -111,22 +106,22 @@ class WelcomeHeaderState extends State<WelcomeHeader>
               shape: BoxShape.circle,
               gradient: LinearGradient(
                 colors: [
-                  theme.colorScheme.primary,
-                  theme.colorScheme.secondary,
+                  theme.accentColor,
+                  theme.accentColor.lighter,
                 ],
               ),
               boxShadow: [
                 BoxShadow(
-                  color: theme.colorScheme.primary.withOpacity(0.3),
+                  color: theme.accentColor.withOpacity(0.3),
                   blurRadius: 20,
                   spreadRadius: 2,
                 ),
               ],
             ),
-            child: FaIcon(
+            child: const FaIcon(
               FontAwesomeIcons.diagramProject,
               size: 32,
-              color: theme.colorScheme.onPrimary,
+              color: Colors.white,
             ),
           ),
         );
@@ -134,7 +129,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     );
   }
 
-  Widget _buildWelcomeText(ThemeData theme) {
+  Widget _buildWelcomeText(FluentThemeData theme) {
     return BlocBuilder<AuthenticationBloc, AuthenticationState>(
       builder: (context, state) {
         final username = state.status == AuthenticationStatus.authenticated
@@ -144,17 +139,17 @@ class WelcomeHeaderState extends State<WelcomeHeader>
         return RichText(
           textAlign: TextAlign.center,
           text: TextSpan(
-            style: theme.textTheme.headlineLarge?.copyWith(
+            style: theme.typography.title?.copyWith(
               fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface,
-              fontSize: (theme.textTheme.headlineLarge?.fontSize ?? 32) + 4,
+              color: theme.typography.body?.color,
+              fontSize: (theme.typography.title?.fontSize ?? 32) + 4,
             ),
             children: [
               const TextSpan(text: "Bentornato, "),
               TextSpan(
                 text: username,
                 style: TextStyle(
-                  color: theme.colorScheme.primary,
+                  color: theme.accentColor,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -166,22 +161,21 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     );
   }
 
-  Widget _buildSubtitle(ThemeData theme) {
+  Widget _buildSubtitle(FluentThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppStyles.borderRadiusMedium),
-        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        color: theme.cardColor.withOpacity(0.3),
       ),
       child: Text(
         "Trasforma le tue idee in diagrammi professionali",
         textAlign: TextAlign.center,
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
+        style: theme.typography.bodyStrong?.copyWith(
+          color: theme.typography.body?.color?.withOpacity(0.7),
           fontStyle: FontStyle.italic,
         ),
       ),
     );
   }
-
 }

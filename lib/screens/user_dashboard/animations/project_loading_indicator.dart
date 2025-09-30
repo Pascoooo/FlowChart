@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ModernLoadingIndicator extends StatefulWidget {
@@ -46,7 +46,7 @@ class _ModernLoadingIndicatorState extends State<ModernLoadingIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return Center(
       child: FadeTransition(
@@ -57,7 +57,7 @@ class _ModernLoadingIndicatorState extends State<ModernLoadingIndicator>
             FaIcon(
               FontAwesomeIcons.diagramProject,
               size: 48,
-              color: theme.colorScheme.primary,
+              color: theme.accentColor,
             ),
             const SizedBox(height: 32),
             SlideTransition(
@@ -66,25 +66,21 @@ class _ModernLoadingIndicatorState extends State<ModernLoadingIndicator>
                 children: [
                   Text(
                     "Caricamento Progetti",
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: theme.typography.title
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     "Quasi pronto...",
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    style: theme.typography.body?.copyWith(
+                      color: theme.typography.body?.color?.withOpacity(0.7),
                     ),
                   ),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: 200,
-                    child: LinearProgressIndicator(
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                      color: theme.colorScheme.primary,
-                      borderRadius: BorderRadius.circular(8),
-                      minHeight: 6,
+                    child: ProgressBar(
+                      backgroundColor: theme.inactiveColor.withOpacity(0.2),
                     ),
                   ),
                 ],

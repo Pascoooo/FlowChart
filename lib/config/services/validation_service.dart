@@ -1,4 +1,3 @@
-
 import 'package:project_repository/project_repository.dart';
 
 import '../constants/themes.dart';
@@ -28,13 +27,13 @@ class ValidationService {
       return 'Il nome contiene caratteri non validi';
     }
 
-    // 4. NUOVO: Controllo per rinomina con lo stesso nome
+    // 4. Rinominando: permettiamo lo stesso nome corrente senza errore
     if (currentProjectId != null) {
       final currentProject = existingProjects.firstWhere(
             (p) => p.projectId == currentProjectId,
       );
       if (currentProject.name.toLowerCase() == normalizedValue) {
-        return 'Nome già in uso';
+        return null; // Nessuna modifica: non bloccare il pulsante Conferma
       }
     }
 

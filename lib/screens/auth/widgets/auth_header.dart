@@ -1,5 +1,5 @@
-// dart
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,14 +21,15 @@ class AuthHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         if (showBackButton)
           IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+            icon: Icon(Icons.arrow_back_ios_new,
+                color: theme.typography.body?.color?.withOpacity(0.6)),
             onPressed: () => context.pop(),
           ),
         Expanded(
@@ -47,14 +48,14 @@ class AuthHeader extends StatelessWidget {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            theme.colorScheme.primary,
-                            theme.colorScheme.primary.withOpacity(0.7),
+                            theme.accentColor.darker,
+                            theme.accentColor,
                           ],
                         ),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: theme.colorScheme.primary.withOpacity(0.3),
+                            color: theme.accentColor.withOpacity(0.3),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -85,10 +86,8 @@ class AuthHeader extends StatelessWidget {
                             offset: Offset(0, 20 * (1 - value)),
                             child: Text(
                               title,
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: theme.colorScheme.onSurface,
-                              ),
+                              style: theme.typography.title
+                                  ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                           ),
                         );
@@ -105,10 +104,9 @@ class AuthHeader extends StatelessWidget {
                             offset: Offset(0, 20 * (1 - value)),
                             child: Text(
                               subtitle,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurface
-                                    .withOpacity(0.7),
-                                fontWeight: FontWeight.w400,
+                              style: theme.typography.body?.copyWith(
+                                color: theme.typography.body?.color
+                                    ?.withOpacity(0.7),
                               ),
                             ),
                           ),
@@ -130,10 +128,10 @@ class AuthHeader extends StatelessWidget {
                 scale: value,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                    color: theme.cardColor.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: theme.colorScheme.outline.withOpacity(0.1),
+                      color: theme.inactiveColor.withOpacity(0.2),
                     ),
                   ),
                   child: IconButton(
@@ -147,8 +145,9 @@ class AuthHeader extends StatelessWidget {
                       },
                       child: Icon(
                         isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                        size: 25,
                         key: ValueKey(isDark),
-                        color: theme.colorScheme.onSurfaceVariant,
+                        color: theme.typography.body?.color,
                       ),
                     ),
                     onPressed: onThemeToggle,

@@ -45,7 +45,8 @@ class AppDialogs {
         String hintText = '',
         String confirmText = 'Conferma',
         String cancelText = 'Annulla',
-        String? Function(String?)? validator,
+        required String? Function(String?)? validator,
+        required String inputLabel,
       }) {
     return GenericDialogs.showInputDialog(
       context,
@@ -56,6 +57,7 @@ class AppDialogs {
       confirmText: confirmText,
       cancelText: cancelText,
       validator: validator,
+      inputLabel: inputLabel
     );
   }
 
@@ -82,7 +84,6 @@ class AppDialogs {
     required FlowNodeKind kind,
     List<MyFile>? files,
     List<VariableDeclaration>? variables,
-    // --- Aggiungi questo nuovo parametro alla firma della funzione ---
     Set<String>? existingVariableNames,
   }) {
     switch (kind) {
@@ -97,10 +98,38 @@ class AppDialogs {
         return showOutputNodeDialog(context, availableVariables: variables ?? const []);
 
       case FlowNodeKind.process:
-        return showProcessNodeDialog(context, files: files ?? const []);
+        final fileOptions = files ?? const <MyFile>[];
+        if (fileOptions.isEmpty) {
+          return showInfoDialog(
+            context,
+            title: 'Nessun file disponibile',
+            message:
+            'Non è possibile creare un nodo Processo perché non ci sono file nel programma.\n'
+                'Aggiungi prima un file e riprova.',
+            type: DialogType.warning,
+          ).then((_) => null);
+        }
+
+        return showProcessNodeDialog(
+          context,
+          files: fileOptions,
+          availableVariables: variables ?? const <VariableDeclaration>[],
+        );
+
 
       case FlowNodeKind.decision:
-        final decisionVars = (variables ?? [])
+        final vars = variables ?? const [];
+        if (vars.isEmpty) {
+          return showInfoDialog(
+            context,
+            title: 'Nessuna variabile disponibile',
+            message:
+                'Non è possibile creare una condizione perché non ci sono variabili nel programma.\n'
+                'Aggiungi prima una variabile (es. con un nodo Input o Processo) e riprova.',
+            type: DialogType.warning,
+          ).then((_) => null);
+        }
+        final decisionVars = vars
             .map((v) => {'name': v.name, 'type': v.dataType})
             .toList();
         return showDecisionNodeDialog(context, variables: decisionVars);
@@ -116,8 +145,8 @@ class AppDialogs {
   static Future<void> showNodeDetailsDialog({
     required BuildContext context,
     required FlowNode node,
-  }) async {
-    // return node_info.showNodeDetailsDialog(context: context, node: node);
+  }) {
+     return node_info.showNodeDetailsDialog(context: context, node: node);
   }
 
 

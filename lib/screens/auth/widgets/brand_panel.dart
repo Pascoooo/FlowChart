@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class BrandPanel extends StatefulWidget {
@@ -8,8 +8,7 @@ class BrandPanel extends StatefulWidget {
   State<BrandPanel> createState() => _BrandPanelState();
 }
 
-class _BrandPanelState extends State<BrandPanel>
-    with TickerProviderStateMixin {
+class _BrandPanelState extends State<BrandPanel> with TickerProviderStateMixin {
   late AnimationController _floatingController;
   late AnimationController _rotationController;
   late Animation<double> _floatingAnimation;
@@ -56,7 +55,7 @@ class _BrandPanelState extends State<BrandPanel>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final size = MediaQuery.of(context).size;
 
     return Container(
@@ -66,9 +65,9 @@ class _BrandPanelState extends State<BrandPanel>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            theme.colorScheme.primary.withOpacity(0.05),
-            theme.colorScheme.primary.withOpacity(0.02),
-            theme.colorScheme.surface,
+            theme.accentColor.lighter.withOpacity(0.05),
+            theme.accentColor.lighter.withOpacity(0.02),
+            theme.scaffoldBackgroundColor,
           ],
         ),
       ),
@@ -88,7 +87,7 @@ class _BrandPanelState extends State<BrandPanel>
                     height: 120,
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color: theme.colorScheme.primary.withOpacity(0.1),
+                        color: theme.accentColor.withOpacity(0.1),
                         width: 2,
                       ),
                       borderRadius: BorderRadius.circular(30),
@@ -110,7 +109,7 @@ class _BrandPanelState extends State<BrandPanel>
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      color: theme.accentColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
@@ -137,14 +136,14 @@ class _BrandPanelState extends State<BrandPanel>
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              theme.colorScheme.primary,
-                              theme.colorScheme.primary.withOpacity(0.7),
+                              theme.accentColor.dark,
+                              theme.accentColor,
                             ],
                           ),
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: theme.colorScheme.primary.withOpacity(0.3),
+                              color: theme.accentColor.withOpacity(0.3),
                               blurRadius: 20,
                               offset: const Offset(0, 8),
                             ),
@@ -171,11 +170,8 @@ class _BrandPanelState extends State<BrandPanel>
                         offset: Offset(0, 50 * (1 - value)),
                         child: Text(
                           'Unichart',
-                          style: theme.textTheme.displayMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: theme.colorScheme.onSurface,
-                            height: 1.1,
-                          ),
+                          style: theme.typography.display
+                              ?.copyWith(fontWeight: FontWeight.w900, height: 1.1),
                         ),
                       ),
                     );
@@ -193,8 +189,9 @@ class _BrandPanelState extends State<BrandPanel>
                         offset: Offset(0, 30 * (1 - value)),
                         child: Text(
                           'Esegui, analizza e perfeziona la tua logica con un debugger visuale integrato. Dai vita alle tue idee, un blocco alla volta.',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          style: theme.typography.title?.copyWith(
+                            color: theme.typography.title?.color
+                                ?.withOpacity(0.7),
                             height: 1.5,
                             fontWeight: FontWeight.w400,
                           ),
@@ -215,7 +212,7 @@ class _BrandPanelState extends State<BrandPanel>
   }
 
   List<Widget> _buildFeatureList(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final features = [
       {
         'icon': FontAwesomeIcons.eye,
@@ -225,7 +222,8 @@ class _BrandPanelState extends State<BrandPanel>
       {
         'icon': FontAwesomeIcons.bugSlash,
         'title': 'Debug Potenziato',
-        'subtitle': 'Imposta breakpoint e naviga il codice, direttamente sul diagramma.'
+        'subtitle':
+        'Imposta breakpoint e naviga il codice, direttamente sul diagramma.'
       },
       {
         'icon': FontAwesomeIcons.magnifyingGlassChart,
@@ -251,7 +249,7 @@ class _BrandPanelState extends State<BrandPanel>
                   children: [
                     FaIcon(
                       feature['icon'] as IconData,
-                      color: theme.colorScheme.primary,
+                      color: theme.accentColor,
                       size: 20,
                     ),
                     const SizedBox(width: 20),
@@ -261,16 +259,15 @@ class _BrandPanelState extends State<BrandPanel>
                         children: [
                           Text(
                             feature['title'] as String,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.onSurface,
-                            ),
+                            style: theme.typography.subtitle
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             feature['subtitle'] as String,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+                            style: theme.typography.body?.copyWith(
+                              color: theme.typography.body?.color
+                                  ?.withOpacity(0.7),
                             ),
                           ),
                         ],
