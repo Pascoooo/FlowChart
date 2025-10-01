@@ -65,35 +65,46 @@ class FlowNodeFactory {
           condition: condition,
         );
 
+    // FIX: Separato il case per InputNode per maggiore chiarezza.
       case FlowNodeKind.input:
-      case FlowNodeKind.output:
         final declarations = (initialData?['declarations'] as List?)
-            ?.map((d) => VariableDeclaration.fromJson(d))
+            ?.map((d) => VariableDeclaration.fromMap(d as Map<String, dynamic>))
             .toList() ?? [];
+        return InputNode(
+          id: _uuid.v4(),
+          x: position.dx, y: position.dy,
+          width: 150.0, height: 60.0,
+          text: text,
+          declarations: declarations,
+        );
+
+    // FIX: Separato il case per OutputNode per maggiore chiarezza.
+      case FlowNodeKind.output:
         final template = initialData?['template'] as String? ?? '';
         final variables =
             (initialData?['variables'] as List?)?.cast<String>() ?? [];
+        return OutputNode(
+          id: _uuid.v4(),
+          x: position.dx, y: position.dy,
+          width: 150.0, height: 60.0,
+          text: text,
+          template: template,
+          variables: variables,
+        );
 
-        if (kind == FlowNodeKind.input) {
-          return InputNode(
-            id: _uuid.v4(),
-            x: position.dx, y: position.dy,
-            // **CORREZIONE**: Dimensioni più compatte
-            width: 150.0, height: 60.0,
-            text: text,
-            declarations: declarations,
-          );
-        } else {
-          return OutputNode(
-            id: _uuid.v4(),
-            x: position.dx, y: position.dy,
-            // **CORREZIONE**: Dimensioni più compatte
-            width: 150.0, height: 60.0,
-            text: text,
-            template: template,
-            variables: variables,
-          );
-        }
-    }
+      case FlowNodeKind.assignment:
+        final assignments = (initialData?['assignments'] as List?)
+            ?.map((a) => Assignment.fromMap(a as Map<String, dynamic>))
+            .toList() ?? [];
+        return AssignmentNode(
+          id: _uuid.v4(),
+          x: position.dx,
+          y: position.dy,
+          width: 150.0,
+          height: 60.0,
+          text: text,
+          assignments: assignments,
+        );
+      }
   }
 }

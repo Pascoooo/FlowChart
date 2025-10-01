@@ -20,14 +20,14 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<OpenFile>(_onOpenFile);
     on<DeleteFile>(_onDeleteFile);
     on<RenameFile>(_onRenameFile);
-    on<ExecuteActiveFile>(_onExecuteActiveFile);
-    on<ClearExecutionCode>(_onClearExecutionCode);
+
     on<StartDebugSession>(_onStartDebugSession);
     on<ComputeDebugStep>(_onComputeDebugStep);
     on<EndDebugSession>(_onEndDebugSession);
   }
 
-  // --- SEZIONE DEBUG ---
+
+// --- SEZIONE DEBUG (AGGIORNATA) ---
 
   Stream<Map<String, dynamic>> debugVariablesStream(String projectId) {
     return projectRepository.watchDebugVariables(projectId: projectId);
@@ -43,33 +43,37 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     }
   }
 
-// Dentro la classe FileSystemBloc
-
-  /// Gestisce il ricalcolo dello stato di debug a un dato step.
+// FIX: Reso più robusto con un try-catch specifico per trovare il nodo.
   Future<void> _onComputeDebugStep(
       ComputeDebugStep event, Emitter<FileSystemState> emit) async {
     try {
-
-      // FIX: Logica per trovare il nodo corrente dall'evento
       if (event.index < 0 || event.index >= event.debugPath.length) {
         debugPrint('Indice di debug fuori dai limiti.');
         return;
       }
       final currentNodeId = event.debugPath[event.index];
-      final currentNode = event.flowchart.nodes.firstWhere(
-            (n) => n.id == currentNodeId,
-        // orElse previene errori se il nodo non viene trovato
-        orElse: () => FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(0, 0)),
-      );
 
-      // FIX: Chiama il metodo corretto definito nell'interfaccia ProjectRepo
+      late final FlowNode currentNode;
+
+      try {
+        // Cerca il nodo. Se non lo trova, lancia StateError.
+        currentNode = event.flowchart.nodes.firstWhere(
+              (n) => n.id == currentNodeId,
+        );
+      } on StateError {
+        // Cattura l'errore se il nodo non viene trovato e interrompe l'esecuzione.
+        debugPrint('ERRORE: Nodo di debug non trovato per id: $currentNodeId.');
+        return;
+      }
+
+      // Se il nodo è stato trovato, chiama il repository.
       await projectRepository.advanceDebugStep(
         projectId: event.flowchart.flowchartId,
         currentNode: currentNode,
       );
 
     } catch (e) {
-      debugPrint('Errore durante il calcolo dello step di debug: $e');
+      debugPrint('Errore generico durante il calcolo dello step di debug: $e');
     }
   }
 
@@ -81,30 +85,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       debugPrint('Errore durante la terminazione della sessione di debug: $e');
     }
   }
-
-
-  // --- SEZIONE ESECUZIONE ---
-
-  Future<void> _onExecuteActiveFile(
-      ExecuteActiveFile event, Emitter<FileSystemState> emit) async {
-    if (state is! FileSystemLoaded) return;
-    final currentState = state as FileSystemLoaded;
-
-    try {
-      final cCode = _generateCCode(event.flowchart);
-      emit(currentState.copyWith(executionCode: cCode));
-    } catch (e) {
-      emit(currentState.copyWith(error: 'Errore durante la generazione del codice: $e'));
-    }
-  }
-
-  Future<void> _onClearExecutionCode(
-      ClearExecutionCode event, Emitter<FileSystemState> emit) async {
-    if (state is FileSystemLoaded) {
-      emit((state as FileSystemLoaded).copyWith(clearExecutionCode: true));
-    }
-  }
-
 
   // --- SEZIONE CRUD (OPERAZIONI SUI FILE) ---
 
@@ -227,169 +207,4 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     }
   }
 
-  // --- SEZIONE GENERAZIONE CODICE C ---
-
-  String _generateCCode(Flowchart flowchart) {
-    // ... La tua logica completa di _generateCCode e dei suoi metodi helper ...
-    // La incollo qui per completezza dalla tua versione
-    final buffer = StringBuffer();
-    buffer.writeln('/* Codice generato automaticamente da Unichart */');
-    buffer.writeln('#include <stdio.h>');
-    buffer.writeln('#include <stdlib.h>');
-    buffer.writeln('#include <string.h>');
-    buffer.writeln();
-
-    final signature = flowchart.signature;
-    buffer.write('${signature.returnType} ${flowchart.name}(');
-    if (signature.parameters.isNotEmpty) {
-      buffer.write(
-          signature.parameters.map((p) => '${p.type} ${p.name}').join(', '));
-    }
-    buffer.writeln(') {');
-
-    for (final variable in flowchart.variables) {
-      buffer.write('    ${variable.dataType} ${variable.name}');
-      if (variable.defaultValue != null) {
-        final value = variable.defaultValue;
-        if (variable.dataType.toLowerCase().contains('char')) {
-          buffer.write(' = "$value"');
-        } else {
-          buffer.write(' = $value');
-        }
-      }
-      buffer.writeln(';');
-    }
-    if (flowchart.variables.isNotEmpty) buffer.writeln();
-
-    final startNode =
-    flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
-    final visited = <String>{};
-    _generateNodeCode(buffer, flowchart, startNode.id, visited, indent: 1);
-
-    if (signature.returnType != 'void' && !buffer.toString().contains('return')) {
-      buffer.writeln('    return 0;');
-    }
-    buffer.writeln('}');
-
-    return buffer.toString();
-  }
-
-  void _generateNodeCode(StringBuffer buffer, Flowchart flowchart, String nodeId,
-      Set<String> visited,
-      {required int indent}) {
-    if (visited.contains(nodeId)) return;
-    visited.add(nodeId);
-
-    final node = flowchart.nodes.firstWhere((n) => n.id == nodeId);
-    final indentStr = '    ' * indent;
-
-    switch (node.kind) {
-      case FlowNodeKind.start:
-        final nextEdge = _findNextEdge(flowchart, nodeId);
-        if (nextEdge != null) {
-          _generateNodeCode(buffer, flowchart, nextEdge.to, visited,
-              indent: indent);
-        }
-        break;
-
-      case FlowNodeKind.end:
-        if (flowchart.signature.returnType != 'void') {
-          buffer.writeln('${indentStr}return 0; // Fine flowchart');
-        }
-        break;
-
-      case FlowNodeKind.input:
-        final inputNode = node as InputNode;
-        for (final decl in inputNode.declarations) {
-          if (decl.dataType.contains('char')) {
-            buffer.writeln('${indentStr}scanf("%s", ${decl.name});');
-          } else {
-            final format = _getScanfFormat(decl.dataType);
-            buffer.writeln('${indentStr}scanf("$format", &${decl.name});');
-          }
-        }
-        final nextEdge = _findNextEdge(flowchart, nodeId);
-        if (nextEdge != null) {
-          _generateNodeCode(buffer, flowchart, nextEdge.to, visited,
-              indent: indent);
-        }
-        break;
-
-      case FlowNodeKind.output:
-        final outputNode = node as OutputNode;
-        String printfStr = outputNode.template;
-        final vars = outputNode.variables;
-        if (vars.isNotEmpty) {
-          buffer.write('${indentStr}printf("$printfStr\\n"');
-          for (final varName in vars) {
-            buffer.write(', $varName');
-          }
-          buffer.writeln(');');
-        } else {
-          buffer.writeln('${indentStr}printf("$printfStr\\n");');
-        }
-        final nextEdge = _findNextEdge(flowchart, nodeId);
-        if (nextEdge != null) {
-          _generateNodeCode(buffer, flowchart, nextEdge.to, visited,
-              indent: indent);
-        }
-        break;
-
-      case FlowNodeKind.process:
-        final processNode = node as ProcessNode;
-        if (processNode.flowchartToCall.isNotEmpty) {
-          final args = processNode.arguments.join(', ');
-          if (processNode.resultTarget != null &&
-              processNode.resultTarget!.isNotEmpty) {
-            buffer.writeln(
-                '$indentStr${processNode.resultTarget} = ${processNode.flowchartToCall}($args);');
-          } else {
-            buffer.writeln('$indentStr${processNode.flowchartToCall}($args);');
-          }
-        }
-        final nextEdge = _findNextEdge(flowchart, nodeId);
-        if (nextEdge != null) {
-          _generateNodeCode(buffer, flowchart, nextEdge.to, visited,
-              indent: indent);
-        }
-        break;
-
-      case FlowNodeKind.decision:
-        final decisionNode = node as DecisionNode;
-        buffer.writeln('${indentStr}if (${decisionNode.condition}) {');
-        final trueEdge = flowchart.edges.firstWhere(
-                (e) => e.from == nodeId && e.port == 'true',
-            orElse: () => const FlowchartEdge(from: '', to: ''));
-        if (trueEdge.from.isNotEmpty) {
-          _generateNodeCode(buffer, flowchart, trueEdge.to, visited,
-              indent: indent + 1);
-        }
-        buffer.writeln('$indentStr} else {');
-        final falseEdge = flowchart.edges.firstWhere(
-                (e) => e.from == nodeId && e.port == 'false',
-            orElse: () => const FlowchartEdge(from: '', to: ''));
-        if (falseEdge.from.isNotEmpty) {
-          _generateNodeCode(buffer, flowchart, falseEdge.to, visited,
-              indent: indent + 1);
-        }
-        buffer.writeln('$indentStr}');
-        break;
-    }
-  }
-
-  FlowchartEdge? _findNextEdge(Flowchart flowchart, String fromNodeId) {
-    try {
-      return flowchart.edges.firstWhere((e) => e.from == fromNodeId && e.port == null);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _getScanfFormat(String dataType) {
-    if (dataType.contains('int')) return '%d';
-    if (dataType.contains('float')) return '%f';
-    if (dataType.contains('double')) return '%lf';
-    if (dataType.contains('char') && !dataType.contains('[')) return '%c';
-    return '%d';
-  }
 }

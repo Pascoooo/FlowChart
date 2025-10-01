@@ -1,18 +1,10 @@
+// Tuo file info_node_dialog.dart
+
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:file_repository/file_repository.dart';
 
-// Funzione placeholder per la creazione di nodi
-Future<Map<String, dynamic>?> showNodeCreationDialog({
-  required BuildContext context,
-  required FlowNodeKind kind,
-  List<MyFile>? files,
-  List<VariableDeclaration>? variables,
-}) {
-  debugPrint("Mostra dialogo di creazione per il tipo: $kind");
-  return Future.value(null);
-}
+// ... (il resto degli import)
 
 /// 📋 Node Details Dialog - Professional Information Display
 Future<void> showNodeDetailsDialog({
@@ -35,6 +27,7 @@ class _NodeDetailsDialog extends StatelessWidget {
     final (String title, IconData icon, Color iconColor) = _getTitleIconAndColor(node.kind, theme);
 
     return Center(
+      // ... (Widget del ContentDialog rimane invariato)
       child: ContentDialog(
         constraints: const BoxConstraints(
           minWidth: 700,
@@ -210,6 +203,7 @@ class _NodeDetailsDialog extends StatelessWidget {
     required String title,
     required List<Widget> children,
   }) {
+    // ... (implementazione invariata)
     final theme = FluentTheme.of(context);
 
     return Column(
@@ -231,17 +225,10 @@ class _NodeDetailsDialog extends StatelessWidget {
 
   /// 🎯 Get Title, Icon and Color for Node Types
   (String, IconData, Color) _getTitleIconAndColor(FlowNodeKind kind, FluentThemeData theme) {
-    // Use theme-based semantic colors
     final accentColor = theme.accentColor.defaultBrushFor(theme.brightness);
-    final successColor = theme.brightness == Brightness.light
-        ? const Color(0xFF059669) // AppColors.lightSuccess
-        : const Color(0xFF10B981); // AppColors.darkSuccess
-    final warningColor = theme.brightness == Brightness.light
-        ? const Color(0xFFD97706) // AppColors.lightWarning
-        : const Color(0xFFF59E0B); // AppColors.darkWarning
-    final errorColor = theme.brightness == Brightness.light
-        ? const Color(0xFFDC2626) // AppColors.lightError
-        : const Color(0xFFEF4444); // AppColors.darkError
+    final successColor = theme.brightness == Brightness.light ? const Color(0xFF059669) : const Color(0xFF10B981);
+    final warningColor = theme.brightness == Brightness.light ? const Color(0xFFD97706) : const Color(0xFFF59E0B);
+    final errorColor = theme.brightness == Brightness.light ? const Color(0xFFDC2626) : const Color(0xFFEF4444);
 
     return switch (kind) {
       FlowNodeKind.input => ('Nodo Input', FontAwesomeIcons.keyboard, accentColor),
@@ -250,6 +237,8 @@ class _NodeDetailsDialog extends StatelessWidget {
       FlowNodeKind.decision => ('Nodo Condizione', FontAwesomeIcons.codeBranch, warningColor),
       FlowNodeKind.start => ('Nodo Inizio', FontAwesomeIcons.play, successColor),
       FlowNodeKind.end => ('Nodo Fine', FontAwesomeIcons.flagCheckered, errorColor),
+    // NUOVO: Aggiunto titolo, icona e colore per il nodo di assegnazione.
+      FlowNodeKind.assignment => ('Nodo Assegnazione', FontAwesomeIcons.calculator, accentColor),
     };
   }
 
@@ -257,6 +246,7 @@ class _NodeDetailsDialog extends StatelessWidget {
   List<Widget> _buildSpecificDetails(BuildContext context, FluentThemeData theme) {
     switch (node.kind) {
       case FlowNodeKind.input:
+      // ... (implementazione invariata)
         final inputNode = node as InputNode;
         return [
           if (inputNode.declarations.isEmpty)
@@ -282,8 +272,6 @@ class _NodeDetailsDialog extends StatelessWidget {
                 children: inputNode.declarations.asMap().entries.map((entry) {
                   final index = entry.key;
                   final variable = entry.value;
-                  final hasValue = variable.defaultValue != null &&
-                      variable.defaultValue.toString().trim().isNotEmpty;
 
                   return Padding(
                     padding: EdgeInsets.only(
@@ -328,13 +316,6 @@ class _NodeDetailsDialog extends StatelessWidget {
                                   text: variable.name,
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                                if (hasValue)
-                                  TextSpan(
-                                    text: ' = ${variable.defaultValue}',
-                                    style: TextStyle(
-                                      color: theme.typography.body?.color?.withOpacity(0.7),
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
@@ -348,7 +329,67 @@ class _NodeDetailsDialog extends StatelessWidget {
           ],
         ];
 
+    // NUOVO: Aggiunto il case per visualizzare i dettagli di AssignmentNode
+      case FlowNodeKind.assignment:
+        final assignmentNode = node as AssignmentNode;
+        return [
+          if (assignmentNode.assignments.isEmpty)
+            _EmptyState(
+              message: 'Nessuna operazione di assegnazione definita.',
+              theme: theme,
+            )
+          else ...[
+            Text(
+              'Operazioni di Assegnazione',
+              style: theme.typography.caption?.copyWith(
+                color: theme.typography.body?.color?.withOpacity(0.8),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _BoxedDetail(
+              theme: theme,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: assignmentNode.assignments.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final assignment = entry.value;
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index < assignmentNode.assignments.length - 1 ? 8 : 0,
+                    ),
+                    child: RichText(
+                      text: TextSpan(
+                        style: theme.typography.body?.copyWith(
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                          color: theme.typography.body?.color,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: assignment.target,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text: ' = ${assignment.expression}',
+                            style: TextStyle(
+                              color: theme.typography.body?.color?.withOpacity(0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ];
+
       case FlowNodeKind.output:
+      // ... (implementazione invariata)
         final outputNode = node as OutputNode;
         return [
           _KeyValueDetail(
@@ -387,6 +428,7 @@ class _NodeDetailsDialog extends StatelessWidget {
         ];
 
       case FlowNodeKind.process:
+      // ... (implementazione invariata)
         final processNode = node as ProcessNode;
         return [
           _KeyValueDetail(
@@ -438,6 +480,7 @@ class _NodeDetailsDialog extends StatelessWidget {
         ];
 
       case FlowNodeKind.decision:
+      // ... (implementazione invariata)
         final decisionNode = node as DecisionNode;
         return [
           _BoxedDetail(
@@ -462,6 +505,7 @@ class _NodeDetailsDialog extends StatelessWidget {
 
   /// 🎯 Build Result Target Info for Process Node
   Widget _buildResultTargetInfo(dynamic resultTarget, FluentThemeData theme) {
+    // ... (implementazione invariata)
     if (resultTarget is String) {
       // Legacy string format
       return _KeyValueDetail(
@@ -545,9 +589,6 @@ class _NodeDetailsDialog extends StatelessWidget {
     );
   }
 }
-
-// --- HELPER WIDGETS ---
-
 /// 🎨 Key-Value Detail Component
 class _KeyValueDetail extends StatelessWidget {
   final String label;

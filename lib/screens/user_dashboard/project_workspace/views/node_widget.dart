@@ -1,14 +1,17 @@
-import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'package:flowchart_repository/flowchart_repository.dart';
+import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
+import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
+import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_repository/file_repository.dart';
-import '../../../../blocs/file_bloc/file_system_bloc.dart';
-import '../../../../blocs/file_bloc/file_system_state.dart';
-import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
-import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
-import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
-import '../../../../config/services/dialog_service/app_dialogs.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flowchart_thesis/config/services/dialog_service/app_dialogs.dart';
+import 'package:flowchart_thesis/blocs/file_bloc/file_system_bloc.dart';
+import 'package:flowchart_thesis/blocs/file_bloc/file_system_state.dart';
 import 'painters.dart';
 
 enum HandleDirection { top, right, bottom, left }
@@ -18,7 +21,7 @@ class NodeWidget extends StatefulWidget {
   final BoxConstraints canvasConstraints;
   final bool isSelected;
   final bool isReadOnly;
-  final bool allowDragInReadOnly; // nuovo
+  final bool allowDragInReadOnly;
 
   const NodeWidget({
     super.key,
@@ -80,7 +83,6 @@ class _NodeWidgetState extends State<NodeWidget> {
               clipBehavior: Clip.none,
               alignment: Alignment.topCenter,
               children: [
-                // Mostra l'eye button solo quando il nodo è selezionato.
                 if (widget.isSelected)
                   Positioned(
                     top: 0,
@@ -95,7 +97,6 @@ class _NodeWidgetState extends State<NodeWidget> {
                   top: topPaddingForButton,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    // Il tap seleziona sempre il nodo (anche in sola lettura). Il dialog si apre dall'eye button.
                     onTap: () {
                       if (!widget.isSelected) {
                         context.read<FlowchartBloc>().add(SelectNode(widget.node.id));
@@ -106,25 +107,25 @@ class _NodeWidgetState extends State<NodeWidget> {
                         : null,
                     onPanUpdate: (!widget.isReadOnly || widget.allowDragInReadOnly) && widget.isSelected
                         ? (details) {
-                            setState(() {
-                              _dragPosition = Offset(
-                                _clampX(_dragPosition.dx + details.delta.dx),
-                                _clampY(_dragPosition.dy + details.delta.dy),
-                              );
-                            });
-                          }
+                      setState(() {
+                        _dragPosition = Offset(
+                          _clampX(_dragPosition.dx + details.delta.dx),
+                          _clampY(_dragPosition.dy + details.delta.dy),
+                        );
+                      });
+                    }
                         : null,
                     onPanEnd: (!widget.isReadOnly || widget.allowDragInReadOnly) && widget.isSelected
                         ? (_) {
-                            setState(() => _isDragging = false);
-                            context.read<FlowchartBloc>().add(UpdateNodePosition(
-                                  nodeId: widget.node.id,
-                                  newX: _dragPosition.dx,
-                                  newY: _dragPosition.dy,
-                                  oldX: widget.node.x,
-                                  oldY: widget.node.y,
-                                ));
-                          }
+                      setState(() => _isDragging = false);
+                      context.read<FlowchartBloc>().add(UpdateNodePosition(
+                        nodeId: widget.node.id,
+                        newX: _dragPosition.dx,
+                        newY: _dragPosition.dy,
+                        oldX: widget.node.x,
+                        oldY: widget.node.y,
+                      ));
+                    }
                         : null,
                     child: MouseRegion(
                       cursor: (!widget.isReadOnly || widget.allowDragInReadOnly)
@@ -179,7 +180,6 @@ class _NodeWidgetState extends State<NodeWidget> {
 
   List<HandleDirection> _getAvailableHandles(BuildContext context) {
     if (widget.isReadOnly || !widget.isSelected) return [];
-    // in sola lettura, anche con drag abilitato, gli handle restano disabilitati
 
     final state = context.read<FlowchartBloc>().state;
     if (state is! FlowchartLoaded) return [];
@@ -216,7 +216,6 @@ class _NodeWidgetState extends State<NodeWidget> {
             message: 'Esiste già un nodo di fine nel flowchart. Vuoi collegare questo nodo al "Fine" esistente?',
             confirmText: 'Collega',
             cancelText: 'Annulla',
-
           );
           if (confirmed == true && mounted) {
             bloc.add(LinkToExistingEnd(fromNodeId: widget.node.id, fromPort: fromPort));
@@ -233,13 +232,16 @@ class _NodeWidgetState extends State<NodeWidget> {
           filesForProcess = fsState.files.where((f) => f.fileId != fsState.activeFileId).toList();
         }
       }
-      if (kind == FlowNodeKind.input || kind == FlowNodeKind.decision || kind == FlowNodeKind.output) {
+
+      // FIX: Aggiunto FlowNodeKind.assignment alla condizione.
+      if (kind == FlowNodeKind.input ||
+          kind == FlowNodeKind.decision ||
+          kind == FlowNodeKind.output ||
+          kind == FlowNodeKind.assignment) {
         if (flowState is FlowchartLoaded) {
           variablesForDialog = flowState.flowchart.variables;
         }
       }
-
-
 
       final Map<String, dynamic>? nodeData = await AppDialogs.showNodeCreationDialog(
         context: context,
@@ -248,7 +250,7 @@ class _NodeWidgetState extends State<NodeWidget> {
         variables: variablesForDialog,
       );
 
-      if (nodeData != null) {
+      if (nodeData != null && mounted) {
         bloc.add(AddNode(
           kind: kind,
           fromNodeId: widget.node.id,
@@ -282,16 +284,16 @@ class _EyeButton extends StatelessWidget {
     return Button(
       onPressed: onTap,
       style: ButtonStyle(
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-        shape: const WidgetStatePropertyAll(CircleBorder()),
-        backgroundColor: WidgetStatePropertyAll(theme.cardColor.withValues(alpha: 0.95)),
+        padding: WidgetStateProperty.all(EdgeInsets.zero),
+        shape: WidgetStateProperty.all(const CircleBorder()),
+        backgroundColor: WidgetStateProperty.all(theme.cardColor.withOpacity(0.95)),
       ),
       child: Container(
         width: 36,
         height: 36,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)],
         ),
         child: Center(
           child: Icon(FluentIcons.view, size: 18, color: theme.typography.body?.color),
@@ -359,7 +361,7 @@ class NodeRenderer extends StatelessWidget {
             color: fillColor,
             borderRadius: BorderRadius.circular((node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 8),
             border: Border.all(color: borderColor, width: borderWidth),
-            boxShadow: [if (isSelected) BoxShadow(color: theme.accentColor.withValues(alpha: 0.25), blurRadius: 8)],
+            boxShadow: [if (isSelected) BoxShadow(color: theme.accentColor.withOpacity(0.25), blurRadius: 8)],
           ),
           child: Center(
             child: Padding(
@@ -424,7 +426,7 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
           if (isOpen) {
             _flyoutController.close();
           } else {
-            const double estimatedMenuHeight = 230.0;
+            const double estimatedMenuHeight = 260.0; // Aumentato leggermente lo spazio
             final double spaceBelow =
                 widget.canvasConstraints.maxHeight - (widget.absolutePosition.dy + handleSize);
 
@@ -448,10 +450,9 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
           height: handleSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            // --- STILE UGUALE A _EyeButton ---
-            color: theme.cardColor.withValues(alpha: 0.95),
+            color: theme.cardColor.withOpacity(0.95),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
+              BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
             ],
           ),
           child: Center(
@@ -480,14 +481,15 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
           widget.onNodeCreate(kind);
         },
         text: Text(label, style: TextStyle(fontSize: 13, color: theme.typography.body?.color)),
-        leading: Icon(icon, size: 16, color: theme.typography.body?.color?.withValues(alpha: 0.8)),
+        leading: Icon(icon, size: 16, color: theme.typography.body?.color?.withOpacity(0.8)),
       );
     }
     return [
       buildItem('Input', FontAwesomeIcons.download, FlowNodeKind.input),
+      buildItem('Assegnazione', FontAwesomeIcons.calculator, FlowNodeKind.assignment),
       buildItem('Output', FontAwesomeIcons.upload, FlowNodeKind.output),
-      buildItem('Processo', FontAwesomeIcons.gear, FlowNodeKind.process),
       buildItem('Condizione', FontAwesomeIcons.codeBranch, FlowNodeKind.decision),
+      buildItem('Sottoprogramma', FontAwesomeIcons.gears, FlowNodeKind.process),
       const MenuFlyoutSeparator(),
       buildItem('Fine', FontAwesomeIcons.flagCheckered, FlowNodeKind.end),
     ];

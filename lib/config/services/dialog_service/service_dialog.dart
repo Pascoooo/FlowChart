@@ -530,72 +530,156 @@ class GenericDialogs {
       },
     );
   }
-
-  static Future<bool?> showGridRecommendationDialog(
+  static Future<void> showInfoWithRememberDialog(
       BuildContext context, {
         required String title,
         required String message,
-        String confirmText = 'Disattiva Griglia',
-        String cancelText = 'Mantieni',
+        String closeText = 'Ho capito',
         required Function(bool) onRememberPreference,
       }) {
     final theme = FluentTheme.of(context);
     bool rememberPreference = false;
 
-    return showDialog<bool>(
+    return showDialog<void>( // FIX: Il tipo di ritorno è void, non bool?
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-            return ContentDialog(
-              constraints: const BoxConstraints(
-                minWidth: 520,
-                maxWidth: 600,
-              ),
-              title: Text(title, style: theme.typography.title),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    message,
-                    style: theme.typography.body,
+            return Center(
+              child: ContentDialog(
+                constraints: const BoxConstraints(
+                  minWidth: 520,
+                  maxWidth: 600,
+                  minHeight: 280,
+                ),
+                content: Container(
+                  padding: const EdgeInsets.fromLTRB(40, 32, 40, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Icon & Title
+                      Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
+                              border: Border.all(
+                                color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.2),
+                                width: 2,
+                              ),
+                            ),
+                            // FIX: Icona cambiata per riflettere un'informazione
+                            child: Icon(
+                              FluentIcons.info,
+                              size: 28,
+                              color: theme.accentColor.defaultBrushFor(theme.brightness),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            title,
+                            style: theme.typography.title?.copyWith(
+                              color: theme.typography.body?.color,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Divider
+                      Container(
+                        height: 1,
+                        width: double.infinity,
+                        color: theme.resources.dividerStrokeColorDefault,
+                        margin: const EdgeInsets.symmetric(horizontal: 20),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Message
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
+                        child: Text(
+                          message,
+                          style: theme.typography.body?.copyWith(
+                            color: theme.typography.body?.color?.withOpacity(0.8),
+                            height: 1.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Remember Preference Checkbox (Invariato)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.resources.cardBackgroundFillColorSecondary,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.resources.cardStrokeColorDefault,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Checkbox(
+                              checked: rememberPreference,
+                              onChanged: (checked) {
+                                if (checked != null) {
+                                  setState(() => rememberPreference = checked);
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Non mostrare più questo messaggio',
+                              style: theme.typography.body?.copyWith(
+                                color: theme.typography.body?.color,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 24),
-                  Checkbox(
-                    content: const Text('Non mostrare più questo messaggio'),
-                    checked: rememberPreference,
-                    onChanged: (checked) {
-                      if (checked != null) {
-                        setState(() => rememberPreference = checked);
-                      }
-                    },
+                ),
+                // FIX: Azioni modificate per avere un solo pulsante
+                actions: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Center(
+                      child: FilledButton(
+                        onPressed: () {
+                          // Esegue entrambe le azioni e chiude il dialogo
+                          onRememberPreference(rememberPreference);
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
+                          child: Text(closeText),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
-              actions: [
-                Button(
-                  onPressed: () {
-                    onRememberPreference(rememberPreference);
-                    Navigator.of(dialogContext).pop(false); // Non disattivare
-                  },
-                  child: Text(cancelText),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    onRememberPreference(rememberPreference);
-                    Navigator.of(dialogContext).pop(true); // Disattiva
-                  },
-                  child: Text(confirmText),
-                ),
-              ],
             );
           },
         );
       },
     );
   }
-
 }
-

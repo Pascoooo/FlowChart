@@ -98,6 +98,13 @@ class LinkToExistingEnd extends FlowchartEvent {
   List<Object?> get props => [fromNodeId, fromPort];
 }
 
+class AddGlobalVariable extends FlowchartEvent {
+  final VariableDeclaration variable;
+  const AddGlobalVariable(this.variable);
+  @override
+  List<Object> get props => [variable];
+}
+
 class Undo extends FlowchartEvent {
   const Undo();
 }

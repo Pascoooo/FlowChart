@@ -56,7 +56,7 @@ dev_dependencies:
   flutter_lints: ^3.0.0
 
 dependency_overrides:
-  math_expressions: ^2.7.0
+  math_expressions: ^3.1.0
 
 flutter:
   uses-material-design: true

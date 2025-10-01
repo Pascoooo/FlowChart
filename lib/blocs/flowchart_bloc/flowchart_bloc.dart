@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:bloc/bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter/material.dart';
+import '../../screens/user_dashboard/project_workspace/views/rules/flowchart_rule.dart';
 import 'commands/command_history.dart';
 import 'commands/flowchart_command.dart';
 import 'flowchart_event.dart';
@@ -29,76 +30,50 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<DebugNextNode>(_onDebugNext);
     on<DebugPrevNode>(_onDebugPrev);
     on<DebugExit>(_onDebugExit);
+    on<AddGlobalVariable>(_onAddGlobalVariable);
   }
 
   bool get canUndo => _history.canUndo;
   bool get canRedo => _history.canRedo;
 
-  dynamic _parseValue(String type, String value) {
-    if (value.isEmpty) return null;
-    switch (type) {
-      case 'int':
-        return int.tryParse(value);
-      case 'float':
-      case 'double':
-        return double.tryParse(value);
-      case 'bool':
-        return ['true', '1'].contains(value.toLowerCase());
-      case 'char':
-        if (value.length > 1 && value.startsWith("'") && value.endsWith("'")) {
-          return value.substring(1, value.length - 1);
-        }
-        return value;
-      case 'string':
-        if (value.length > 1 && value.startsWith('"') && value.endsWith('"')) {
-          return value.substring(1, value.length - 1);
-        }
-        return value;
-      default:
-        return value;
-    }
-  }
-
-  List<VariableDeclaration> _recalculateGlobalVariablesAndAssignments(List<FlowNode> nodes) {
-    final variableMap = <String, VariableDeclaration>{};
-
+  /// Estrae le dichiarazioni da tutti gli InputNode e crea la lista globale.
+  List<VariableDeclaration> _recalculateGlobalVariables(List<FlowNode> nodes) {
+    final newVariables = <VariableDeclaration>[];
+    final seenNames = <String>{};
     for (final node in nodes) {
       if (node is InputNode) {
         for (final decl in node.declarations) {
-          variableMap.putIfAbsent(decl.name, () => decl);
-        }
-      }
-    }
-
-    for (final node in nodes) {
-      if (node is InputNode) {
-        for (final assignment in node.assignments) {
-          final targetName = assignment.target;
-          if (variableMap.containsKey(targetName)) {
-            final targetVar = variableMap[targetName]!;
-            final dynamic newValue = _parseValue(targetVar.dataType, assignment.expression);
-            variableMap[targetName] = targetVar.copyWith(defaultValue: newValue);
+          if (seenNames.add(decl.name)) {
+            newVariables.add(decl);
           }
         }
       }
     }
-    return variableMap.values.toList();
+    return newVariables;
   }
 
+  void _onAddGlobalVariable(AddGlobalVariable event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final currentState = state as FlowchartLoaded;
+
+    // Controlla se una variabile con lo stesso nome esiste già
+    if (currentState.flowchart.variables.any((v) => v.name == event.variable.name)) {
+      // In un'app reale, potresti voler gestire questo errore in modo più visibile
+      debugPrint('Errore: una variabile con questo nome esiste già.');
+      return;
+    }
+
+    final newVariables = [...currentState.flowchart.variables, event.variable];
+    final newFlowchart = currentState.flowchart.copyWith(variables: newVariables);
+
+    // Emetti il nuovo stato con la variabile aggiunta
+    emit(currentState.copyWith(flowchart: newFlowchart));
+  }
+
+  /// Crea un nodo aggiornato con type safety.
   FlowNode _createUpdatedNode(FlowNode oldNode, Map<String, dynamic> newData) {
     if (oldNode is InputNode) {
-      final newDeclarations = (newData['declarations'] as List<Map<String, dynamic>>?)
-          ?.map((d) => VariableDeclaration.fromMap(d))
-          .toList();
-      final newAssignments = (newData['assignments'] as List<Map<String, dynamic>>?)
-          ?.map((a) => Assignment.fromMap(a))
-          .toList();
-
-      return oldNode.copyWith(
-        text: newData['text'] as String?,
-        declarations: newDeclarations,
-        assignments: newAssignments,
-      );
+      return oldNode.copyWith(declarations: newData['declarations'] as List<VariableDeclaration>?);
     } else if (oldNode is ProcessNode) {
       return oldNode.copyWith(
         flowchartToCall: newData['flowchartToCall'] as String?,
@@ -110,7 +85,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     } else if (oldNode is OutputNode) {
       return oldNode.copyWith(
           template: newData['template'] as String?,
-          variables: (newData['variables'] as List?)?.cast<String>());
+          variables: (newData['variables'] as List?)?.cast<String>()
+      );
     }
     return oldNode;
   }
@@ -130,10 +106,27 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   void _onAddNode(AddNode event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
+    final validator = FlowchartValidator();
+
+    final potentialNode = FlowNodeFactory.createNode(
+      event.kind,
+      Offset.zero,
+      initialData: event.initialData,
+    );
+
+    var validationResult = validator.validate(currentState, potentialNode);
+    if (!validationResult.isValid) {
+      emit(FlowchartActionFailure(
+        title: "Azione non permessa",
+        message: validationResult.errorMessage!,
+      ));
+      emit(currentState);
+      return;
+    }
+
     final fromNode = currentState.getNodeById(event.fromNodeId);
     if (fromNode == null) return;
 
-    final potentialNode = FlowNodeFactory.createNode(event.kind, Offset.zero, initialData: event.initialData);
     final optimalPosition = PlacementEngine.findOptimalPosition(
       fromNode: fromNode,
       newNodeSize: Size(potentialNode.width, potentialNode.height),
@@ -141,17 +134,41 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       canvasConstraints: event.canvasConstraints,
       fromPort: event.fromPort,
     );
-    if (optimalPosition == null) return;
+
+    if (optimalPosition == null) {
+      emit(const FlowchartActionFailure(
+        title: "Posizione non disponibile",
+        message: "Non c'è spazio sufficiente per aggiungere un nuovo nodo qui.",
+      ));
+      emit(currentState);
+      return;
+    }
 
     final newNode = (potentialNode as dynamic).copyWith(x: optimalPosition.dx, y: optimalPosition.dy) as FlowNode;
     final newEdge = FlowchartEdge(from: fromNode.id, to: newNode.id, port: event.fromPort);
+
+    validationResult = validator.validate(currentState, newEdge);
+    if (!validationResult.isValid) {
+      emit(FlowchartActionFailure(
+        title: "Connessione non permessa",
+        message: validationResult.errorMessage!,
+      ));
+      emit(currentState);
+      return;
+    }
+
     final newNodes = [...currentState.flowchart.nodes, newNode];
     final newEdges = [...currentState.flowchart.edges, newEdge];
-    final newVariables = _recalculateGlobalVariablesAndAssignments(newNodes);
+    final newVariables = _recalculateGlobalVariables(newNodes);
     final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes, edges: newEdges, variables: newVariables);
 
-    final command = UpdateFlowchartCommand(oldFlowchart: currentState.flowchart, newFlowchart: newFlowchart, description: 'Aggiungi nodo');
+    final command = UpdateFlowchartCommand(
+      oldFlowchart: currentState.flowchart,
+      newFlowchart: newFlowchart,
+      description: 'Aggiungi nodo ${newNode.kind.name}',
+    );
     _history.executeCommand(command);
+
     emit(command.execute(currentState).copyWith(selectedNodeId: newNode.id));
   }
 
@@ -159,18 +176,42 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
     final nodeToRemove = currentState.getNodeById(event.nodeId);
-    if (nodeToRemove == null || nodeToRemove.kind == FlowNodeKind.start) return;
+    if (nodeToRemove == null) return;
+
+    if (nodeToRemove.kind == FlowNodeKind.start) {
+      emit(const FlowchartActionFailure(
+          title: "Azione non permessa",
+          message: "Il nodo 'Inizio' non può essere eliminato."));
+      emit(currentState);
+      return;
+    }
+
+    if (currentState.getOutgoingEdges(nodeToRemove.id).isNotEmpty) {
+      emit(const FlowchartActionFailure(
+          title: "Azione non permessa",
+          message: "Rimuovi prima le connessioni in uscita da questo nodo."));
+      emit(currentState);
+      return;
+    }
 
     final incomingEdges = currentState.flowchart.edges.where((e) => e.to == nodeToRemove.id).toList();
-    String? parentId = incomingEdges.isNotEmpty ? incomingEdges.first.from : null;
+    String? parentId;
+    if (incomingEdges.length == 1) {
+      parentId = incomingEdges.first.from;
+    }
 
     final newNodes = currentState.flowchart.nodes.where((n) => n.id != event.nodeId).toList();
     final newEdges = currentState.flowchart.edges.where((e) => e.to != event.nodeId && e.from != event.nodeId).toList();
-    final newVariables = _recalculateGlobalVariablesAndAssignments(newNodes);
+    final newVariables = _recalculateGlobalVariables(newNodes);
     final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes, edges: newEdges, variables: newVariables);
 
-    final command = UpdateFlowchartCommand(oldFlowchart: currentState.flowchart, newFlowchart: newFlowchart, description: 'Rimuovi nodo');
+    final command = UpdateFlowchartCommand(
+      oldFlowchart: currentState.flowchart,
+      newFlowchart: newFlowchart,
+      description: 'Rimuovi nodo',
+    );
     _history.executeCommand(command);
+
     emit(command.execute(currentState).copyWith(selectedNodeId: parentId, clearSelection: parentId == null));
   }
 
@@ -182,38 +223,61 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
     final updatedNode = _createUpdatedNode(oldNode, event.newData);
     final newNodes = currentState.flowchart.nodes.map((n) => n.id == event.nodeId ? updatedNode : n).toList();
-    final newVariables = _recalculateGlobalVariablesAndAssignments(newNodes);
+    final newVariables = _recalculateGlobalVariables(newNodes);
     final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes, variables: newVariables);
 
-    final command = UpdateFlowchartCommand(oldFlowchart: currentState.flowchart, newFlowchart: newFlowchart, description: 'Aggiorna contenuto');
+    final command = UpdateFlowchartCommand(
+      oldFlowchart: currentState.flowchart,
+      newFlowchart: newFlowchart,
+      description: 'Aggiorna contenuto nodo',
+    );
     _history.executeCommand(command);
+
     emit(command.execute(currentState));
   }
 
   void _onUpdateNodePosition(UpdateNodePosition event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
+
     final newNodes = currentState.flowchart.nodes.map((n) {
-      return n.id == event.nodeId ? (n as dynamic).copyWith(x: event.newX, y: event.newY) as FlowNode : n;
+      if (n.id == event.nodeId) {
+        return (n as dynamic).copyWith(x: event.newX, y: event.newY) as FlowNode;
+      }
+      return n;
     }).toList();
     final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes);
 
-    final command = UpdateFlowchartCommand(oldFlowchart: currentState.flowchart, newFlowchart: newFlowchart, description: 'Sposta nodo');
+    final command = UpdateFlowchartCommand(
+      oldFlowchart: currentState.flowchart,
+      newFlowchart: newFlowchart,
+      description: 'Sposta nodo',
+    );
     if (event.newX != event.oldX || event.newY != event.oldY) {
       _history.executeCommand(command);
     }
+
     emit(command.execute(currentState));
   }
 
   void _onLinkToExistingEnd(LinkToExistingEnd event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
+    final fromNode = currentState.getNodeById(event.fromNodeId);
+    if (fromNode == null) return;
     final endNode = currentState.flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.end);
-    final newEdge = FlowchartEdge(from: event.fromNodeId, to: endNode.id, port: event.fromPort);
+    final alreadyLinked = currentState.flowchart.edges.any((e) => e.from == fromNode.id && e.to == endNode.id && e.port == event.fromPort);
+    if (alreadyLinked) return;
+
+    final newEdge = FlowchartEdge(from: fromNode.id, to: endNode.id, port: event.fromPort);
     final newFlowchart = currentState.flowchart.copyWith(edges: [...currentState.flowchart.edges, newEdge]);
 
-    final command = UpdateFlowchartCommand(oldFlowchart: currentState.flowchart, newFlowchart: newFlowchart, description: 'Collega a Fine');
+    final command = UpdateFlowchartCommand(
+        oldFlowchart: currentState.flowchart,
+        newFlowchart: newFlowchart,
+        description: 'Collega a Fine');
     _history.executeCommand(command);
+
     emit(command.execute(currentState));
   }
 
@@ -230,16 +294,20 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   }
 
   void _onUndo(Undo event, Emitter<FlowchartState> emit) {
-    if (state is FlowchartLoaded && _history.canUndo) {
+    if (state is FlowchartLoaded) {
       final command = _history.undo();
-      if (command != null) emit(command.undo(state as FlowchartLoaded));
+      if (command != null) {
+        emit(command.undo(state as FlowchartLoaded));
+      }
     }
   }
 
   void _onRedo(Redo event, Emitter<FlowchartState> emit) {
-    if (state is FlowchartLoaded && _history.canRedo) {
+    if (state is FlowchartLoaded) {
       final command = _history.redo();
-      if (command != null) emit(command.execute(state as FlowchartLoaded));
+      if (command != null) {
+        emit(command.execute(state as FlowchartLoaded));
+      }
     }
   }
 
@@ -247,9 +315,24 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
     _history.clear();
-    final startNode = currentState.flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
-    final newFlowchart = currentState.flowchart.copyWith(nodes: [startNode], edges: [], variables: []);
-    emit(FlowchartLoaded(flowchart: newFlowchart, selectedNodeId: startNode.id));
+
+    FlowNode startNode;
+    try {
+      startNode = currentState.flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
+    } catch (_) {
+      startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(120, 120));
+    }
+
+    final newFlowchart = currentState.flowchart.copyWith(
+      nodes: [startNode],
+      edges: <FlowchartEdge>[],
+      variables: <VariableDeclaration>[],
+    );
+
+    emit(FlowchartLoaded(
+      flowchart: newFlowchart,
+      selectedNodeId: startNode.id,
+    ));
   }
 
   void _onClearHistory(ClearHistory event, Emitter<FlowchartState> emit) {
@@ -260,6 +343,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     if (state is! FlowchartLoaded) return;
     final s = state as FlowchartLoaded;
 
+    // Trova il nodo start
     FlowNode? start;
     try {
       start = s.flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
@@ -267,8 +351,45 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       return;
     }
 
-    final path = _calculateDebugPath(s, start.id);
+    // Costruisci un percorso lineare dall'inizio seguendo le connessioni
+    final List<String> path = [];
+    final visited = <String>{};
+
+    String? currentId = start.id;
+    while (currentId != null && currentId.isNotEmpty && !visited.contains(currentId)) {
+      path.add(currentId);
+      visited.add(currentId);
+
+      // Edge di default (port == null) oppure per decisioni prova true poi false
+      final outgoing = s.flowchart.edges.where((e) => e.from == currentId).toList();
+      if (outgoing.isEmpty) break;
+
+      FlowchartEdge? next;
+      // prova port null (lineare)
+      next = outgoing.firstWhere(
+        (e) => e.port == null,
+        orElse: () => const FlowchartEdge(from: '', to: ''),
+      );
+      if (next.from.isEmpty) {
+        // decisione: prova true poi false
+        next = outgoing.firstWhere(
+          (e) => e.port == 'true',
+          orElse: () => const FlowchartEdge(from: '', to: ''),
+        );
+        if (next.from.isEmpty) {
+          next = outgoing.firstWhere(
+            (e) => e.port == 'false',
+            orElse: () => const FlowchartEdge(from: '', to: ''),
+          );
+        }
+      }
+
+      if (next.from.isEmpty) break;
+      currentId = next.to;
+    }
+
     if (path.isEmpty) return;
+
     emit(s.copyWith(
       isDebugMode: true,
       debugPath: path,
@@ -280,9 +401,11 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   void _onDebugNext(DebugNextNode event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final s = state as FlowchartLoaded;
-    if (!s.isDebugMode) return;
+    if (!s.isDebugMode || s.debugPath.isEmpty) return;
+
     final nextIndex = (s.debugIndex + 1).clamp(0, s.debugPath.length - 1);
     if (nextIndex == s.debugIndex) return;
+
     final newNodeId = s.debugPath[nextIndex];
     emit(s.copyWith(debugIndex: nextIndex, selectedNodeId: newNodeId));
   }
@@ -290,9 +413,11 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   void _onDebugPrev(DebugPrevNode event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final s = state as FlowchartLoaded;
-    if (!s.isDebugMode) return;
+    if (!s.isDebugMode || s.debugPath.isEmpty) return;
+
     final prevIndex = (s.debugIndex - 1).clamp(0, s.debugPath.length - 1);
     if (prevIndex == s.debugIndex) return;
+
     final newNodeId = s.debugPath[prevIndex];
     emit(s.copyWith(debugIndex: prevIndex, selectedNodeId: newNodeId));
   }
@@ -300,21 +425,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   void _onDebugExit(DebugExit event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final s = state as FlowchartLoaded;
-    emit(s.copyWith(isDebugMode: false, debugPath: const [], debugIndex: 0, clearSelection: true));
-  }
-
-  List<String> _calculateDebugPath(FlowchartLoaded s, String startNodeId) {
-    final List<String> path = [];
-    final visited = <String>{};
-    String? currentId = startNodeId;
-    while (currentId != null && currentId.isNotEmpty && !visited.contains(currentId)) {
-      path.add(currentId);
-      visited.add(currentId);
-      final outgoing = s.flowchart.edges.where((e) => e.from == currentId).toList();
-      if (outgoing.isEmpty) break;
-      final next = outgoing.firstWhere((e) => e.port != 'false', orElse: () => outgoing.first);
-      currentId = next.to;
-    }
-    return path;
+    emit(s.copyWith(isDebugMode: false, debugPath: const [], debugIndex: 0));
   }
 }

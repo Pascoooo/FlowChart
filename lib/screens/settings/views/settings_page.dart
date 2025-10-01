@@ -136,7 +136,7 @@ class Header extends StatelessWidget {
         color: theme.cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: theme.inactiveColor.withOpacity(0.3),
+          color: theme.inactiveColor.withValues(alpha: 0.3),
           width: 1.0,
         ),
       ),
@@ -148,7 +148,7 @@ class Header extends StatelessWidget {
               return Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: theme.accentColor.withOpacity(states.isHovered ? 0.1 : 0.05),
+                  color: theme.accentColor.withValues(alpha: states.isHovered ? 0.1 : 0.05),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: FaIcon(
@@ -198,7 +198,7 @@ class Header extends StatelessWidget {
                   'Gestisci profilo, integrazioni e preferenze',
                   style: theme.typography.body?.copyWith(
                     fontSize: 14,
-                    color: theme.typography.body?.color?.withOpacity(0.7),
+                    color: theme.typography.body?.color?.withValues(alpha: 0.7),
                   ),
                 ),
               ],
@@ -324,9 +324,9 @@ class _ProfileSettingsState extends State<ProfileSettings> {
                                     ? DecorationImage(
                                     image: backgroundImage, fit: BoxFit.cover)
                                     : null,
-                                color: theme.accentColor.withOpacity(0.1),
+                                color: theme.accentColor.withValues(alpha: 0.1),
                                 border: Border.all(
-                                  color: theme.accentColor.withOpacity(0.3),
+                                  color: theme.accentColor.withValues(alpha: 0.3),
                                   width: 2,
                                 ),
                               ),
@@ -394,7 +394,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
                           child: Text(
                             'Email: ${user.email}',
                             style: theme.typography.body?.copyWith(
-                              color: theme.typography.body?.color?.withOpacity(0.7),
+                              color: theme.typography.body?.color?.withValues(alpha: 0.7),
                             ),
                           ),
                         ),
@@ -524,6 +524,17 @@ class IntegrationSettings extends StatelessWidget {
                         settingsProvider.updateLocalExecutorPort(value);
                         BannerService.showSuccess(context, "Porta salvata!");
                       },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Hint su una sola riga (nessun a capo)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    child: Text(
+                      'Premi Invio per aggiornare la porta',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.typography.caption,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -722,10 +733,10 @@ class _StatusLabel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: color.withOpacity(0.3),
+          color: color.withValues(alpha: 0.3),
           width: 1.0,
         ),
       ),

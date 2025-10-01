@@ -1,12 +1,14 @@
 import 'dart:typed_data';
 
 import 'package:flowchart_thesis/config/services/dialog_service/service_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../blocs/project_bloc/project_state.dart';
 import '../banner_service.dart';
+import 'node_dialogs/declaration_node_dialog.dart';
 import 'recovery_dialogs.dart';
 import 'share_dialogs.dart';
 import 'node_dialogs/decision_node_dialog.dart';
@@ -15,6 +17,9 @@ import 'node_dialogs/input_node_dialog.dart';
 import 'node_dialogs/output_node_dialog.dart';
 import 'node_dialogs/process_node_dialog.dart';
 import 'docker_dialog.dart';
+
+// NOTA: Ho aggiunto il file del nuovo dialogo di assegnazione che sarà necessario
+import 'node_dialogs/assignment_node_dialog.dart';
 
 
 class AppDialogs {
@@ -77,6 +82,20 @@ class AppDialogs {
     );
   }
 
+
+  static Future<VariableDeclaration?> showAddVariableDialog({
+    required BuildContext context,
+    required List<VariableDeclaration> existingDeclarations,
+    required VariableScope defaultScope,
+  }) {
+    // FIX: La chiamata a showVariableDialog richiede 'context' come argomento posizionale.
+    return showVariableDialog(
+      context, // Argomento posizionale
+      defaultScope: defaultScope,
+      existingDeclarations: existingDeclarations,
+    );
+  }
+
   // --- Dialoghi per Setup Docker ---
   static Future<void> showDockerInfoDialog(
       BuildContext context, {
@@ -97,17 +116,18 @@ class AppDialogs {
   }) {
     switch (kind) {
       case FlowNodeKind.input:
-      // --- MODIFICA QUI ---
-      // Aggiunto il parametro 'existingDeclarations' mancante alla chiamata.
-        return showInputNodeDialog(
+        return showOutputNodeDialog(context, availableVariables: variables ?? const []);
+    //showInputNodeDialog(
+          //context,
+          //availableInputVariables: variables?.where((v) => v.scope == VariableScope.input).toList() ?? [],
+          //;
+      case FlowNodeKind.assignment:
+        return showAssignmentNodeDialog(
           context,
-          existingVariableNames: existingVariableNames ?? const {},
-          existingDeclarations: variables ?? const [],
+          availableVariables: variables ?? const [],
         );
-
       case FlowNodeKind.output:
         return showOutputNodeDialog(context, availableVariables: variables ?? const []);
-
       case FlowNodeKind.process:
         final fileOptions = files ?? const <MyFile>[];
         if (fileOptions.isEmpty) {
@@ -115,19 +135,15 @@ class AppDialogs {
             context,
             title: 'Nessun file disponibile',
             message:
-            'Non è possibile creare un nodo Processo perché non ci sono file nel programma.\n'
-                'Aggiungi prima un file e riprova.',
+            'Non è possibile creare un nodo Processo perché non ci sono altri flowchart da chiamare.',
             type: DialogType.warning,
           ).then((_) => null);
         }
-
         return showProcessNodeDialog(
           context,
           files: fileOptions,
           availableVariables: variables ?? const <VariableDeclaration>[],
         );
-
-
       case FlowNodeKind.decision:
         final vars = variables ?? const [];
         if (vars.isEmpty) {
@@ -135,8 +151,7 @@ class AppDialogs {
             context,
             title: 'Nessuna variabile disponibile',
             message:
-            'Non è possibile creare una condizione perché non ci sono variabili nel programma.\n'
-                'Aggiungi prima una variabile (es. con un nodo Input o Processo) e riprova.',
+            'Non è possibile creare una condizione perché non ci sono variabili nel programma.',
             type: DialogType.warning,
           ).then((_) => null);
         }
@@ -144,10 +159,8 @@ class AppDialogs {
             .map((v) => {'name': v.name, 'type': v.dataType})
             .toList();
         return showDecisionNodeDialog(context, variables: decisionVars);
-
       case FlowNodeKind.start:
         return Future.value({'text': 'Inizio'});
-
       case FlowNodeKind.end:
         return Future.value({'text': 'Fine'});
     }

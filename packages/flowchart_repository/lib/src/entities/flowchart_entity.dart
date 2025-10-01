@@ -1,6 +1,4 @@
-import 'package:flowchart_repository/src/models/flow_node.dart';
 import '../../flowchart_repository.dart';
-import 'flow_node_entity.dart';
 
 class FlowchartEntity {
   final String flowchartId;
@@ -30,7 +28,7 @@ class FlowchartEntity {
         'parameters': signature.parameters.map((p) => p.toJson()).toList(),
         'returnType': signature.returnType,
       },
-      'variables': variables.map((v) => v.toJson()).toList(),
+      'variables': variables.map((v) => v.toMap()).toList(),
       'nodes': nodes.map((n) => n.toDocument()).toList(),
       'edges': edges.map((e) => e.toDocument()).toList(),
     };
@@ -46,11 +44,16 @@ class FlowchartEntity {
       name: doc['name'],
       schemaVersion: doc['schemaVersion'] ?? 1,
       signature: FlowchartSignature(
-        parameters: paramsList.map((p) => FunctionParam.fromJson(p)).toList(),
+        parameters: paramsList
+            .map((p) => FunctionParam.fromJson(p as Map<String, dynamic>))
+            .toList(),
         returnType: signatureDoc['returnType'] ?? 'void',
       ),
-      variables:
-      variablesList.map((v) => VariableDeclaration.fromJson(v)).toList(),
+      // FIX: Chiamato VariableDeclaration.fromMap() invece di fromJson.
+      // Aggiunto un cast (as Map<String, dynamic>) per sicurezza sui tipi.
+      variables: variablesList
+          .map((v) => VariableDeclaration.fromMap(v as Map<String, dynamic>))
+          .toList(),
       nodes: (doc['nodes'] as List)
           .map((n) => FlowNodeEntity.fromDocument(n))
           .toList(),

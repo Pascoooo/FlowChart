@@ -204,55 +204,56 @@ class _SidebarHeaderState extends State<_SidebarHeader>
   }
 }
 
-class _FileSystemView extends StatelessWidget {
-  final String projectId;
-  final bool isReadOnly;
-  const _FileSystemView({required this.projectId, this.isReadOnly = false});
+  class _FileSystemView extends StatelessWidget {
+    final String projectId;
+    final bool isReadOnly;
+    const _FileSystemView({required this.projectId, this.isReadOnly = false});
 
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<FileSystemBloc, FileSystemState>(
-      builder: (context, state) {
-        if (state is FileSystemLoading) {
-          return const Center(child: ProgressRing());
-        }
-        if (state is FileSystemError) {
-          return Center(child: Text(state.message));
-        }
-        if (state is FileSystemLoaded) {
-          if (state.files.isEmpty) {
-            return const Center(
-                child: Text("Nessun file presente.\nCreane uno per iniziare!",
-                    textAlign: TextAlign.center));
+    @override
+    Widget build(BuildContext context) {
+      return BlocBuilder<FileSystemBloc, FileSystemState>(
+        builder: (context, state) {
+          if (state is FileSystemLoading) {
+            return const Center(child: ProgressRing());
           }
-          final orderedFiles = List<MyFile>.from(state.files);
-          orderedFiles.sort((a, b) {
-            if (a.name == 'main') return -1;
-            if (b.name == 'main') return 1;
-            return a.name.compareTo(b.name);
-          });
+          if (state is FileSystemError) {
+            return Center(child: Text(state.message));
+          }
+          if (state is FileSystemLoaded) {
+            if (state.files.isEmpty) {
+              return const Center(
+                  child: Text("Nessun file presente.\nCreane uno per iniziare!",
+                      textAlign: TextAlign.center));
+            }
+            final orderedFiles = List<MyFile>.from(state.files);
+            orderedFiles.sort((a, b) {
+              if (a.name == 'main') return -1;
+              if (b.name == 'main') return 1;
+              return a.name.compareTo(b.name);
+            });
 
-          return Scrollbar(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: orderedFiles.length,
-              itemBuilder: (context, index) {
-                final file = orderedFiles[index];
-                return FileListItem(
-                  file: file,
-                  isSelected: file.fileId == state.activeFileId,
-                  projectId: projectId,
-                  isReadOnly: isReadOnly,
-                );
-              },
-            ),
-          );
-        }
-        return const SizedBox.shrink();
-      },
-    );
+            return Scrollbar(
+              child: ListView.builder(
+                primary: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                itemCount: orderedFiles.length,
+                itemBuilder: (context, index) {
+                  final file = orderedFiles[index];
+                  return FileListItem(
+                    file: file,
+                    isSelected: file.fileId == state.activeFileId,
+                    projectId: projectId,
+                    isReadOnly: isReadOnly,
+                  );
+                },
+              ),
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      );
+    }
   }
-}
 
 /// Elemento della lista che rappresenta un singolo file.
 class FileListItem extends StatelessWidget {
@@ -429,7 +430,6 @@ class FileListItem extends StatelessWidget {
               OpenFile(
                 fileId: file.fileId,
                 projectId: projectId,
-                fileName: file.name,
               ),
             );
           }
@@ -476,7 +476,7 @@ class CreateFileButton extends StatelessWidget {
 
     context
         .read<FileSystemBloc>()
-        .add(CreateNewFile(projectId: projectId, fileName: newName.toLowerCase()));
+        .add(CreateFile(projectId: projectId, fileName: newName.toLowerCase()));
   }
 
   @override

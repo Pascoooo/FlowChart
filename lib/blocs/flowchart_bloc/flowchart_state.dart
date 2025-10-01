@@ -25,7 +25,6 @@ class FlowchartActionFailure extends FlowchartState {
 class FlowchartLoaded extends FlowchartState {
   final Flowchart flowchart;
   final String? selectedNodeId;
-  // Debug mode
   final bool isDebugMode;
   final List<String> debugPath; // lista di nodeId in ordine di visita
   final int debugIndex; // indice del nodo corrente dentro debugPath

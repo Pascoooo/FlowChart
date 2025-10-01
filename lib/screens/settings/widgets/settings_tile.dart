@@ -52,16 +52,22 @@ class SettingsTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Titolo su una riga con ellissi
                     Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.typography.body?.copyWith( // Typography ridotta
                         color: finalTitleColor ?? theme.typography.body?.color,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 2), // Spazio ridotto
+                    // Sottotitolo su una riga con ellissi
                     Text(
                       subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.typography.caption?.copyWith( // Caption invece di body
                         color: theme.typography.caption?.color?.withValues(alpha: 0.7),
                       ),

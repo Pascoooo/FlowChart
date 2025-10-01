@@ -50,26 +50,6 @@ class OpenFile extends FileSystemEvent {
   List<Object?> get props => [projectId, fileId];
 }
 
-// --- Eventi di Esecuzione ---
-
-class ExecuteActiveFile extends FileSystemEvent {
-  final String projectId;
-  final String fileId;
-  final Flowchart flowchart; // Esegue la versione piÃ¹ aggiornata
-  const ExecuteActiveFile({
-    required this.projectId,
-    required this.fileId,
-    required this.flowchart,
-  });
-  @override
-  List<Object?> get props => [projectId, fileId, flowchart];
-}
-
-class ClearExecutionCode extends FileSystemEvent {
-  const ClearExecutionCode();
-}
-
-// --- Eventi di Debug ---
 
 class StartDebugSession extends FileSystemEvent {
   final Flowchart flowchart;

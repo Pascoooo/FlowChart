@@ -5,57 +5,62 @@ import 'package:flowchart_repository/src/entities/entities.dart';
 const int kFlowNodeSchemaVersion = 2;
 
 /// Enum fortemente tipizzato per i tipi di nodi.
-enum FlowNodeKind { start, end, process, decision, input, output }
+// MODIFICATO: Aggiunto il nuovo tipo di nodo 'assignment'.
+enum FlowNodeKind { start, end, process, decision, input, output, assignment }
+// NUOVO: Enum per le categorie di variabili
+enum VariableScope {
+  input,
+  output,
+  local,
+}
 
 /// Rappresenta una singola dichiarazione di variabile.
+// MODIFICATO: Rimossa la proprietà 'defaultValue'.
 class VariableDeclaration extends Equatable {
   final String name;
   final String dataType;
-  final dynamic defaultValue;
+  final VariableScope scope;
 
   const VariableDeclaration({
     required this.name,
     required this.dataType,
-    this.defaultValue,
+    this.scope = VariableScope.local,
   });
 
   @override
-  List<Object?> get props => [name, dataType, defaultValue];
+  List<Object?> get props => [name, dataType, scope];
 
   VariableDeclaration copyWith({
     String? name,
     String? dataType,
-    dynamic defaultValue,
+    VariableScope? scope,
   }) {
     return VariableDeclaration(
       name: name ?? this.name,
       dataType: dataType ?? this.dataType,
-      defaultValue: defaultValue ?? this.defaultValue,
+      scope: scope ?? this.scope,
     );
   }
 
   Map<String, dynamic> toMap() => {
     'name': name,
     'dataType': dataType,
-    'defaultValue': defaultValue,
+    'scope': scope.name,
   };
 
   factory VariableDeclaration.fromMap(Map<String, dynamic> map) {
     return VariableDeclaration(
       name: map['name'],
       dataType: map['dataType'],
-      defaultValue: map['defaultValue'],
+      scope: VariableScope.values.firstWhere(
+            (e) => e.name == map['scope'],
+        orElse: () => VariableScope.local,
+      ),
     );
   }
-
-  static fromJson(Map<String, dynamic> json) => VariableDeclaration(
-    name: json['name'],
-    dataType: json['dataType'],
-    defaultValue: json['defaultValue'],
-  );
 }
 
-/// NUOVA CLASSE: Rappresenta una singola operazione di assegnazione.
+/// Rappresenta una singola operazione di assegnazione.
 class Assignment extends Equatable {
   final String target;
   final String expression;
@@ -95,27 +100,24 @@ abstract class FlowNode extends Equatable {
 
   static FlowNode fromEntity(
       FlowNodeEntity entity, List<VariableDeclaration> allVariables) {
-    switch (entity.kind) {
-      case FlowNodeKind.start:
-        return StartNode.fromEntity(entity);
-      case FlowNodeKind.end:
-        return EndNode.fromEntity(entity);
-      case FlowNodeKind.process:
-        return ProcessNode.fromEntity(entity);
-      case FlowNodeKind.decision:
-        return DecisionNode.fromEntity(entity);
-      case FlowNodeKind.input:
-        return InputNode.fromEntity(entity, allVariables);
-      case FlowNodeKind.output:
-        return OutputNode.fromEntity(entity);
-    }
+    return switch (entity.kind) {
+      FlowNodeKind.start => StartNode.fromEntity(entity),
+      FlowNodeKind.end => EndNode.fromEntity(entity),
+      FlowNodeKind.process => ProcessNode.fromEntity(entity),
+      FlowNodeKind.decision => DecisionNode.fromEntity(entity),
+      FlowNodeKind.input => InputNode.fromEntity(entity, allVariables),
+      FlowNodeKind.output => OutputNode.fromEntity(entity),
+      FlowNodeKind.assignment => AssignmentNode.fromEntity(entity),
+    };
   }
 
   @override
   List<Object?> get props => [id, kind, x, y, width, height, text, metadata];
 }
 
+
 class StartNode extends FlowNode {
+  // ... (Nessuna modifica qui)
   const StartNode(
       {required super.id,
         required super.x,
@@ -159,6 +161,7 @@ class StartNode extends FlowNode {
 }
 
 class EndNode extends FlowNode {
+  // ... (Nessuna modifica qui)
   const EndNode(
       {required super.id,
         required super.x,
@@ -202,6 +205,7 @@ class EndNode extends FlowNode {
 }
 
 class FunctionParam extends Equatable {
+  // ... (Nessuna modifica qui)
   final String name;
   final String type;
   const FunctionParam({required this.name, required this.type});
@@ -213,6 +217,7 @@ class FunctionParam extends Equatable {
 }
 
 class ProcessNode extends FlowNode {
+  // ... (Nessuna modifica qui)
   final String flowchartToCall;
   final List<String> arguments;
   final String? resultTarget;
@@ -290,6 +295,7 @@ class ProcessNode extends FlowNode {
 }
 
 class DecisionNode extends FlowNode {
+  // ... (Nessuna modifica qui)
   final String condition;
   const DecisionNode(
       {required super.id,
@@ -340,9 +346,11 @@ class DecisionNode extends FlowNode {
   }
 }
 
+// MODIFICATO: InputNode è stato semplificato.
 class InputNode extends FlowNode {
   final List<VariableDeclaration> declarations;
-  final List<Assignment> assignments;
+  // RIMOSSO: La lista di 'assignments' è stata tolta da questo nodo.
+  // final List<Assignment> assignments;
 
   const InputNode({
     required super.id,
@@ -352,7 +360,8 @@ class InputNode extends FlowNode {
     required super.height,
     required super.text,
     this.declarations = const [],
-    this.assignments = const [],
+    // RIMOSSO: 'assignments' rimosso dal costruttore.
+    // this.assignments = const [],
     super.metadata,
   }) : super(kind: FlowNodeKind.input);
 
@@ -367,7 +376,7 @@ class InputNode extends FlowNode {
     text: text,
     data: {
       'targetVariables': declarations.map((d) => d.name).toList(),
-      'assignments': assignments.map((a) => a.toMap()).toList(),
+      // RIMOSSO: Serializzazione di 'assignments' tolta.
     },
     metadata: metadata,
   );
@@ -381,10 +390,7 @@ class InputNode extends FlowNode {
             VariableDeclaration(name: name, dataType: 'unknown')))
         .toList();
 
-    final assignmentsData = e.data?['assignments'] as List? ?? [];
-    final assignments = assignmentsData
-        .map((a) => Assignment.fromMap(a as Map<String, dynamic>))
-        .toList();
+    // RIMOSSO: Deserializzazione di 'assignments' tolta.
 
     return InputNode(
         id: e.id,
@@ -394,19 +400,18 @@ class InputNode extends FlowNode {
         height: e.height,
         text: e.text,
         declarations: declarations,
-        assignments: assignments,
         metadata: e.metadata);
   }
 
+  // MODIFICATO: 'assignments' rimosso da props e copyWith.
   @override
-  List<Object?> get props => [...super.props, declarations, assignments];
+  List<Object?> get props => [...super.props, declarations];
 
   InputNode copyWith({
     double? x,
     double? y,
     String? text,
     List<VariableDeclaration>? declarations,
-    List<Assignment>? assignments,
   }) {
     return InputNode(
       id: id,
@@ -416,6 +421,72 @@ class InputNode extends FlowNode {
       height: height,
       text: text ?? this.text,
       declarations: declarations ?? this.declarations,
+      metadata: metadata,
+    );
+  }
+}
+
+// NUOVO: La classe per il nodo di Assegnazione.
+class AssignmentNode extends FlowNode {
+  final List<Assignment> assignments;
+
+  const AssignmentNode({
+    required super.id,
+    required super.x,
+    required super.y,
+    required super.width,
+    required super.height,
+    required super.text,
+    this.assignments = const [],
+    super.metadata,
+  }) : super(kind: FlowNodeKind.assignment);
+
+  @override
+  FlowNodeEntity toEntity() => FlowNodeEntity(
+    id: id,
+    kind: kind,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    text: text,
+    data: {'assignments': assignments.map((a) => a.toMap()).toList()},
+    metadata: metadata,
+  );
+
+  static AssignmentNode fromEntity(FlowNodeEntity e) {
+    final assignmentsData = e.data?['assignments'] as List? ?? [];
+    final assignments = assignmentsData
+        .map((a) => Assignment.fromMap(a as Map<String, dynamic>))
+        .toList();
+    return AssignmentNode(
+      id: e.id,
+      x: e.x,
+      y: e.y,
+      width: e.width,
+      height: e.height,
+      text: e.text,
+      assignments: assignments,
+      metadata: e.metadata,
+    );
+  }
+
+  @override
+  List<Object?> get props => [...super.props, assignments];
+
+  AssignmentNode copyWith({
+    double? x,
+    double? y,
+    String? text,
+    List<Assignment>? assignments,
+  }) {
+    return AssignmentNode(
+      id: id,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width,
+      height: height,
+      text: text ?? this.text,
       assignments: assignments ?? this.assignments,
       metadata: metadata,
     );
@@ -423,6 +494,7 @@ class InputNode extends FlowNode {
 }
 
 class OutputNode extends FlowNode {
+  // ... (Nessuna modifica qui)
   final String template;
   final List<String> variables;
   const OutputNode(
@@ -489,6 +561,7 @@ class OutputNode extends FlowNode {
 }
 
 class FlowchartEdge extends Equatable {
+  // ... (Nessuna modifica qui)
   final String from;
   final String to;
   final String? port;

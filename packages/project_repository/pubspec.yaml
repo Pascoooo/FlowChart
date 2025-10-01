@@ -15,8 +15,14 @@ dependencies:
   cloud_firestore:
   firebase_database:
   google_sign_in:
+
+  # AGGIUNTO: Questa è la dipendenza chiave che mancava.
+  math_expressions: ^3.1.0
+
   file_repository:
     path: ../file_repository
+  flowchart_repository:
+    path: ../flowchart_repository
 
   # utils
   rxdart: ^0.27.7
@@ -25,7 +31,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: 4.0.0
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true

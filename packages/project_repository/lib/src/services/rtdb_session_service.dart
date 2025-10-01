@@ -75,12 +75,7 @@ class RtdbSessionService {
           .child(fileId)
           .update({'name': newName});
 
-
-  // ==========================================================
-  // NUOVI METODI PER LA SESSIONE DI DEBUG
-  // ==========================================================
-
-  /// Aggiunge lo stato di debug alla sessione di lavoro esistente.
+  /// Aggiunge lo stato di debug alla sessione di lavoro esistente. (dal tuo codice)
   Future<void> initializeDebugSession(String projectId, Map<String, dynamic> initialVariables) {
     // Scrive su .../sessions/{uid}/{projectId}/debugState
     return _rtdbSessionRef.child(projectId).child('debugState').set({
@@ -89,13 +84,13 @@ class RtdbSessionService {
     });
   }
 
-  /// Aggiorna le variabili nello stato di debug della sessione corrente.
+  /// Aggiorna le variabili nello stato di debug della sessione corrente. (dal tuo codice)
   Future<void> updateDebugVariables(String projectId, Map<String, dynamic> newValues) {
     // Aggiorna .../sessions/{uid}/{projectId}/debugState/variables
     return _rtdbSessionRef.child(projectId).child('debugState').child('variables').update(newValues);
   }
 
-  /// Ascolta le modifiche nel nodo delle variabili di debug della sessione corrente.
+  /// Ascolta le modifiche nel nodo delle variabili di debug. (dal tuo codice)
   Stream<Map<String, dynamic>> watchDebugVariables(String projectId) {
     // Ascolta .../sessions/{uid}/{projectId}/debugState/variables
     return _rtdbSessionRef
@@ -111,9 +106,24 @@ class RtdbSessionService {
     });
   }
 
-  /// Rimuove lo stato di debug dalla sessione corrente, lasciando il resto intatto.
+  /// Rimuove lo stato di debug dalla sessione corrente. (dal tuo codice)
   Future<void> clearDebugSession(String projectId) {
-    // Rimuove .../sessions/{uid}/{projectId}/debugState
     return _rtdbSessionRef.child(projectId).child('debugState').remove();
+  }
+
+  /// Legge una sola volta lo stato corrente delle variabili di debug.
+  /// FIX: Aggiornato per usare la nuova struttura dati.
+  Future<Map<String, dynamic>> getCurrentDebugVariables(String projectId) async {
+    final snapshot = await _rtdbSessionRef
+        .child(projectId)
+        .child('debugState')
+        .child('variables')
+        .get();
+
+    if (snapshot.exists && snapshot.value != null) {
+      return Map<String, dynamic>.from(snapshot.value as Map);
+    }
+
+    return {};
   }
 }
