@@ -20,11 +20,11 @@ import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
+import '../../../../config/services/dialog_service/service_dialog.dart';
 import '../../../../config/services/export_service.dart';
 import '../../../settings/widgets/settings_provider.dart';
+import '../views/InteractiveConsoleView.dart';
 import '../views/workarea.dart';
-import '../../../../config/services/dialog_service/service_dialog.dart';
-
 
 class ProjectWorkspace extends StatefulWidget {
   final MyProject selectedProject;
@@ -173,9 +173,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       content: MultiBlocProvider(
         providers: [
           BlocProvider<FlowchartBloc>(
-            create: (context) => FlowchartBloc(
-              projectRepo: context.read<ProjectBloc>().projectRepository,
-            ),
+            create: (context) => FlowchartBloc(),
           ),
           BlocProvider<FileSystemBloc>(
             key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
@@ -189,32 +187,40 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (prev, curr) {
                 if (prev is FlowchartLoaded && curr is FlowchartLoaded) {
-                  return !prev.isDebugMode && curr.isDebugMode;
+                  return prev.isDebugMode != curr.isDebugMode || (curr.isDebugMode && prev.debugIndex != curr.debugIndex);
                 }
                 return false;
               },
               listener: (context, state) async {
-                if (_showGrid && !_dontShowGridDialogAgain) {
-                  final bool? shouldDisableGrid =
-                  await GenericDialogs.showGridRecommendationDialog(
-                    context,
-                    title: 'Migliora Visualizzazione Debug',
-                    message:
-                    'Per un\'esperienza di debug ottimale, si consiglia di disattivare la griglia. Vuoi disattivarla ora?',
-                    onRememberPreference: (remember) {
-                      if (remember) {
-                        setState(() {
-                          _dontShowGridDialogAgain = true;
-                        });
-                      }
-                    },
-                  );
+                final curr = state as FlowchartLoaded;
+                final fsBloc = context.read<FileSystemBloc>();
+                final flowchart = curr.flowchart;
 
-                  if (shouldDisableGrid == true && mounted) {
-                    setState(() {
-                      _showGrid = false;
-                    });
+                // Transizione da !debug -> debug (ingresso)
+                if (curr.isDebugMode && (context.read<FlowchartBloc>().state as FlowchartLoaded).isDebugMode) {
+                  // Mostra il dialogo se necessario
+                  if (_showGrid && !_dontShowGridDialogAgain) {
+                    final bool? shouldDisableGrid = await GenericDialogs.showGridRecommendationDialog(
+                      context, title: 'Migliora Visualizzazione Debug',
+                      message: 'Per un\'esperienza di debug ottimale, si consiglia di disattivare la griglia. Vuoi disattivarla ora?',
+                      onRememberPreference: (remember) {
+                        if (remember) setState(() => _dontShowGridDialogAgain = true);
+                      },
+                    );
+                    if (shouldDisableGrid == true && mounted) setState(() => _showGrid = false);
                   }
+
+                  // Avvia la sessione di debug nel backend e calcola il primo step
+                  fsBloc.add(StartDebugSession(flowchart: flowchart));
+                  fsBloc.add(ComputeDebugStep(index: curr.debugIndex, debugPath: curr.debugPath, flowchart: flowchart));
+                }
+                // Transizione da debug -> !debug (uscita)
+                else if (!curr.isDebugMode) {
+                  fsBloc.add(EndDebugSession(projectId: flowchart.flowchartId));
+                }
+                // Cambio di step all'interno del debug
+                else {
+                  fsBloc.add(ComputeDebugStep(index: curr.debugIndex, debugPath: curr.debugPath, flowchart: flowchart));
                 }
               },
             ),
@@ -258,39 +264,21 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
               },
             ),
             BlocListener<FileSystemBloc, FileSystemState>(
-              listenWhen: (previous, current) => current is ShowExecutionJsonDialog,
+              listenWhen: (previous, current) => current is ShowExecutionConsole,
               listener: (context, state) {
-                if (state is ShowExecutionJsonDialog) {
+                if (state is ShowExecutionConsole) {
                   showDialog(
-                    context: context,
-                    barrierDismissible: true,
-                    builder: (_) => ContentDialog(
-                      constraints: const BoxConstraints(maxWidth: 900, maxHeight: 700),
-                      title: Text('JSON esecuzione: \n${state.fileName}'),
-                      content: SizedBox(
-                        width: double.infinity,
-                        child: Scrollbar(
-                          child: SingleChildScrollView(
-                            child: SelectableText(
-                              state.formattedJson,
-                              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                            ),
-                          ),
-                        ),
-                      ),
-                      actions: [
-                        Button(
-                          child: const Text('Chiudi'),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
-                    ),
-                  );
+                      context: context,
+                      builder: (_) => InteractiveConsoleDialog(
+                        serviceUrl: "YOUR_SERVICE_URL", // Sostituisci con il tuo URL
+                        cCode: state.cCode,
+                        fileName: state.fileName,
+                      ));
                 }
               },
             ),
             BlocListener<FileSystemBloc, FileSystemState>(
-              listenWhen: (previous, current) => current is! ShowExecutionJsonDialog,
+              listenWhen: (previous, current) => current is! ShowExecutionConsole,
               listener: (context, state) async {
                 if (state is FileSystemLoaded) {
                   _currentFileId = state.activeFileId;

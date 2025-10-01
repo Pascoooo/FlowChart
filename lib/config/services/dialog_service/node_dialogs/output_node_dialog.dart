@@ -1,12 +1,12 @@
+// file: lib/config/services/dialog_service/node_dialogs/output_node_dialog.dart
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-/// 📤 Output Node Configuration Dialog - Professional Web-First Design
 Future<Map<String, dynamic>?> showOutputNodeDialog(
-  BuildContext context, {
-  required List<VariableDeclaration> availableVariables,
-}) {
+    BuildContext context, {
+      required List<VariableDeclaration> availableVariables,
+    }) {
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
@@ -23,13 +23,11 @@ class _OutputNodeDialog extends StatefulWidget {
 }
 
 class _OutputNodeDialogState extends State<_OutputNodeDialog> {
-  late final TextEditingController _labelController;
   late final TextEditingController _messageController;
 
   @override
   void initState() {
     super.initState();
-    _labelController = TextEditingController();
     _messageController = TextEditingController();
     _messageController.addListener(() {
       setState(() {});
@@ -38,19 +36,16 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
 
   @override
   void dispose() {
-    _labelController.dispose();
     _messageController.dispose();
     super.dispose();
   }
-
-  // --- BUSINESS LOGIC (Preserved) ---
 
   void _insertVariable(String variableName) {
     final textToInsert = '{{$variableName}}';
     final currentText = _messageController.text;
     final selection = _messageController.selection;
     final newText =
-        currentText.replaceRange(selection.start, selection.end, textToInsert);
+    currentText.replaceRange(selection.start, selection.end, textToInsert);
 
     _messageController.value = TextEditingValue(
       text: newText,
@@ -59,17 +54,24 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     );
   }
 
+  String _buildAutoLabel(String template) {
+    if (template.isEmpty) return "stampa ''";
+    var cleaned = template.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (cleaned.length > 48) cleaned = '${cleaned.substring(0, 48)}…';
+    cleaned = cleaned.replaceAll("'", r"\'");
+    return "stampa '$cleaned'";
+  }
+
   void _onConfirm() {
-    if (_messageController.text.trim().isNotEmpty) {
+    final raw = _messageController.text.trim();
+    if (raw.isNotEmpty) {
       final RegExp regex = RegExp(r'\{\{(\w+)\}\}');
-      final matches = regex.allMatches(_messageController.text);
+      final matches = regex.allMatches(raw);
       final usedVariables = matches.map((m) => m.group(1)!).toSet().toList();
 
       final result = {
-        'text': _labelController.text.trim().isEmpty
-            ? 'Output'
-            : _labelController.text.trim(),
-        'template': _messageController.text.trim(),
+        'text': _buildAutoLabel(raw),     // etichetta autogenerata
+        'template': raw,
         'variables': usedVariables,
       };
       Navigator.of(context).pop(result);
@@ -94,40 +96,19 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 🎯 Header Section
               _buildHeader(context, theme),
-
               const SizedBox(height: 24),
-
-              // 🎯 Divider
               Container(
                 height: 1,
                 width: double.infinity,
                 color: theme.resources.dividerStrokeColorDefault,
               ),
-
               const SizedBox(height: 24),
-
-              // 🎯 Form Content - Scrollable
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Label Input
-                      _buildSectionLabel(context, 'Etichetta Personalizzata'),
-                      const SizedBox(height: 8),
-                      TextBox(
-                        controller: _labelController,
-                        placeholder:
-                            'Es. Mostra Risultato, Messaggio Finale...',
-                        style: theme.typography.body?.copyWith(
-                          color: theme.typography.body?.color,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Message Template
                       _buildSectionLabel(
                         context,
                         'Messaggio di Output',
@@ -137,7 +118,7 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
                       TextBox(
                         controller: _messageController,
                         placeholder:
-                            'Es. Il risultato del calcolo è: {{risultato}}',
+                        'Es. Il risultato del calcolo è: {{risultato}}',
                         maxLines: 6,
                         style: theme.typography.body?.copyWith(
                           color: theme.typography.body?.color,
@@ -145,10 +126,21 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
                           fontSize: 13,
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      if (_messageController.text.trim().isNotEmpty)
+                        InfoLabel(
+                          label: 'Etichetta Generata',
+                          child: Text(
+                            _buildAutoLabel(_messageController.text.trim()),
+                            style: theme.typography.caption?.copyWith(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 24),
                       _buildSectionLabel(context, 'Variabili Disponibili'),
                       const SizedBox(height: 8),
-
                       if (widget.variables.isNotEmpty) ...[
                         Text(
                           'Clicca su una variabile per inserirla nel messaggio',
@@ -169,7 +161,6 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
           ),
         ),
         actions: [
-          // 🎯 Actions - Centered Row
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
@@ -202,15 +193,13 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     );
   }
 
-  /// 🎨 Header Section
   Widget _buildHeader(BuildContext context, FluentThemeData theme) {
     final warningColor = theme.brightness == Brightness.light
-        ? const Color(0xFFD97706) // AppColors.lightWarning
-        : const Color(0xFFF59E0B); // AppColors.darkWarning
+        ? const Color(0xFFD97706)
+        : const Color(0xFFF59E0B);
 
     return Row(
       children: [
-        // Icon Container
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -226,10 +215,7 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
             color: warningColor,
           ),
         ),
-
         const SizedBox(width: 16),
-
-        // Title and Description
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,11 +243,9 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     );
   }
 
-  /// 🎨 Section Label
   Widget _buildSectionLabel(BuildContext context, String label,
       {bool isRequired = false}) {
     final theme = FluentTheme.of(context);
-
     return Row(
       children: [
         Text(
@@ -289,7 +273,6 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     );
   }
 
-  /// 🎨 Variable Grid
   Widget _buildVariableGrid(BuildContext context, FluentThemeData theme) {
     return Wrap(
       spacing: 8.0,
@@ -304,7 +287,6 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     );
   }
 
-  /// 🎨 Empty Variables State
   Widget _buildEmptyVariablesState(
       BuildContext context, FluentThemeData theme) {
     return Container(
@@ -349,9 +331,6 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
   }
 }
 
-// --- HELPER WIDGETS ---
-
-/// 🎨 Variable Chip Component
 class _VariableChip extends StatelessWidget {
   final VariableDeclaration variable;
   final VoidCallback onPressed;
@@ -366,86 +345,82 @@ class _VariableChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return HoverButton(
-        onPressed: onPressed,
-        builder: (context, states) {
-          // Fluent UI v4 usa WidgetState invece di ButtonStates
-          final isHovering = states.isHovered;
-          final isPressed = states.isPressed;
+      onPressed: onPressed,
+      builder: (context, states) {
+        final isHovering = states.isHovered;
+        final isPressed = states.isPressed;
 
-          Color backgroundColor;
-          Color foregroundColor;
-          double elevation;
+        Color backgroundColor;
+        Color foregroundColor;
+        double elevation;
+        final accent = theme.accentColor.defaultBrushFor(theme.brightness);
 
-          final accent = theme.accentColor.defaultBrushFor(theme.brightness);
+        if (isPressed) {
+          backgroundColor = accent.withValues(alpha: 0.25);
+          foregroundColor = accent;
+          elevation = 0;
+        } else if (isHovering) {
+          backgroundColor = accent.withValues(alpha: 0.15);
+          foregroundColor = accent;
+          elevation = 2;
+        } else {
+          backgroundColor = accent.withValues(alpha: 0.10);
+          foregroundColor = accent;
+          elevation = 0;
+        }
 
-          if (isPressed) {
-            backgroundColor = accent.withValues(alpha: 0.25);
-            foregroundColor = accent;
-            elevation = 0;
-          } else if (isHovering) {
-            backgroundColor = accent.withValues(alpha: 0.15);
-            foregroundColor = accent;
-            elevation = 2;
-          } else {
-            backgroundColor = accent.withValues(alpha: 0.10);
-            foregroundColor = accent;
-            elevation = 0;
-          }
-
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: accent.withValues(alpha: 0.30),
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: accent.withValues(alpha: 0.30),
+            ),
+            boxShadow: elevation > 0
+                ? [
+              BoxShadow(
+                color: theme.shadowColor.withValues(alpha: 0.10),
+                offset: Offset(0, elevation),
+                blurRadius: elevation * 2,
               ),
-              boxShadow: elevation > 0
-                  ? [
-                      BoxShadow(
-                        color: theme.shadowColor.withValues(alpha: 0.10),
-                        offset: Offset(0, elevation),
-                        blurRadius: elevation * 2,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Type Badge
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: foregroundColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    variable.dataType.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: foregroundColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
+            ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: foregroundColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-
-                const SizedBox(width: 8),
-                // Variable Name
-                Text(
-                  variable.name,
+                child: Text(
+                  variable.dataType.toUpperCase(),
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
                     color: foregroundColor,
+                    letterSpacing: 0.5,
                   ),
                 ),
-              ],
-            ),
-          );
-        });
+              ),
+              const SizedBox(width: 8),
+              Text(
+                variable.name,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: foregroundColor,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

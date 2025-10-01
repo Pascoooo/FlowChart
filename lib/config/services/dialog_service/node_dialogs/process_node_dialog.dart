@@ -1,19 +1,21 @@
+// dart
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-/// 🔄 Process Node Configuration Dialog - Professional Web-First Design
 Future<Map<String, dynamic>?> showProcessNodeDialog(
-  BuildContext context, {
-  required List<MyFile> files,
-  required List<VariableDeclaration> availableVariables,
-}) {
+    BuildContext context, {
+      required List<MyFile> files,
+      required List<VariableDeclaration> availableVariables,
+    }) {
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
     builder: (_) => _ProcessNodeDialog(
-        files: files, availableVariables: availableVariables),
+      files: files,
+      availableVariables: availableVariables,
+    ),
   );
 }
 
@@ -21,57 +23,56 @@ class _ProcessNodeDialog extends StatefulWidget {
   final List<MyFile> files;
   final List<VariableDeclaration> availableVariables;
 
-  const _ProcessNodeDialog(
-      {required this.files, required this.availableVariables});
+  const _ProcessNodeDialog({
+    required this.files,
+    required this.availableVariables,
+  });
 
   @override
   State<_ProcessNodeDialog> createState() => _ProcessNodeDialogState();
 }
 
 class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
-  final _labelController = TextEditingController();
   final _resultVariableNameController = TextEditingController();
   final List<String?> _arguments = [];
   MyFile? _selectedFile;
-  String? _resultVariableType = 'void'; // Default to void
+  String? _resultVariableType = 'void';
   bool _attemptedSubmit = false;
 
   @override
   void dispose() {
-    _labelController.dispose();
     _resultVariableNameController.dispose();
     super.dispose();
   }
 
   void _addArgument() => setState(() => _arguments.add(null));
+  void _removeArgument(int index) => setState(() => _arguments.removeAt(index));
 
-  void _removeArgument(int index) {
-    setState(() => _arguments.removeAt(index));
-  }
-
-  /// 🎯 Get available data types for result variable
   List<String> get _availableDataTypes => [
-        'string',
-        'int',
-        'double',
-        'bool',
-        'void',
-      ];
+    'string',
+    'int',
+    'double',
+    'bool',
+    'void',
+  ];
+
+  String _autoLabel() {
+    if (_selectedFile == null) return "chiama ''";
+    final name = _selectedFile!.name.replaceAll("'", r"\'");
+    return "chiama '$name'";
+  }
 
   void _onConfirm() {
     setState(() => _attemptedSubmit = true);
     if (_selectedFile == null) return;
 
-    // Filter valid arguments
     final arguments = _arguments
-        .where((arg) => arg != null && arg.isNotEmpty)
+        .where((arg) => arg != null && arg!.isNotEmpty)
         .cast<String>()
         .toList();
 
-    // Prepare result target data
     Map<String, dynamic>? resultTarget;
     final resultVarName = _resultVariableNameController.text.trim();
-
     if (resultVarName.isNotEmpty) {
       resultTarget = {
         'name': resultVarName,
@@ -80,9 +81,7 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     }
 
     Navigator.of(context).pop({
-      'text': _labelController.text.trim().isNotEmpty
-          ? _labelController.text.trim()
-          : 'Chiama: ${_selectedFile!.name}',
+      'text': _autoLabel(), // Etichetta automatica
       'flowchartToCall': _selectedFile!.fileId,
       'arguments': arguments,
       'resultTarget': resultTarget,
@@ -94,27 +93,15 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     final theme = FluentTheme.of(context);
     final errorColor = Colors.red.defaultBrushFor(theme.brightness);
 
-    // GIUSTIFICAZIONE (Principio #1):
-    // Rimosso il `Center` ridondante. `ContentDialog` è già centrato.
-    // Aumentato `maxWidth` per un layout web più spazioso.
     return ContentDialog(
       constraints: const BoxConstraints(maxWidth: 750),
       title: _buildHeader(context),
       content: SingleChildScrollView(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- File Selection ---
-            _buildSectionLabel(context, 'Flowchart da Chiamare',
-                isRequired: true),
+            _buildSectionLabel(context, 'Flowchart da Chiamare', isRequired: true),
             const SizedBox(height: 8),
-
-            // GIUSTIFICAZIONE (Fix Validazione):
-            // `ComboBox` non ha una proprietà 'style' o 'decoration'. La soluzione
-            // corretta per la validazione è affidarsi a un messaggio di errore
-            // testuale sottostante, che è un pattern UX chiaro e non invadente.
-            // Ho rimosso i tentativi di applicare stili errati.
             ComboBox<MyFile>(
               isExpanded: true,
               value: _selectedFile,
@@ -124,24 +111,23 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
               onChanged: (val) => setState(() => _selectedFile = val),
               placeholder: const Text('Seleziona un file da chiamare'),
             ),
-
             if (_attemptedSubmit && _selectedFile == null)
-              _buildErrorMessage(
-                  context, 'Devi selezionare un flowchart da chiamare'),
-
+              _buildErrorMessage(context, 'Devi selezionare un flowchart da chiamare'),
             const SizedBox(height: 24),
 
-            // --- Custom Label ---
-            _buildSectionLabel(context, 'Etichetta Personalizzata'),
-            const SizedBox(height: 8),
-            TextBox(
-              controller: _labelController,
-              placeholder: 'Es. Calcola Media, Processa Dati...',
-            ),
+            // Etichetta generata (anteprima)
+            if (_selectedFile != null)
+              InfoLabel(
+                label: 'Etichetta Generata',
+                child: Text(
+                  _autoLabel(),
+                  style: theme.typography.caption?.copyWith(
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
 
             const SizedBox(height: 24),
-
-            // --- Result Variable Section ---
             _buildSectionLabel(context, 'Variabile per il Risultato'),
             const SizedBox(height: 8),
             Text(
@@ -172,21 +158,19 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
                       value: _resultVariableType,
                       items: _availableDataTypes
                           .map((type) => ComboBoxItem(
-                              value: type, child: Text(type.toUpperCase())))
+                        value: type,
+                        child: Text(type.toUpperCase()),
+                      ))
                           .toList(),
-                      onChanged: (val) =>
-                          setState(() => _resultVariableType = val),
+                      onChanged: (val) => setState(() => _resultVariableType = val),
                     ),
                   ),
                 ),
               ],
             ),
-
             const SizedBox(height: 24),
             const Divider(),
             const SizedBox(height: 20),
-
-            // --- Arguments Section ---
             Row(
               children: [
                 Expanded(
@@ -210,20 +194,18 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
               style: theme.typography.caption,
             ),
             const SizedBox(height: 16),
-
-            // Arguments List
             Container(
               constraints: const BoxConstraints(maxHeight: 220),
               child: _arguments.isEmpty
                   ? _buildEmptyArgumentsState(context)
                   : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _arguments.length,
-                      itemBuilder: (context, index) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _buildArgumentItem(context, index, errorColor),
-                      ),
-                    ),
+                shrinkWrap: true,
+                itemCount: _arguments.length,
+                itemBuilder: (context, index) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _buildArgumentItem(context, index, errorColor),
+                ),
+              ),
             ),
           ],
         ),
@@ -236,7 +218,8 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
               onPressed: () => Navigator.of(context).pop(null),
               style: ButtonStyle(
                 padding: ButtonState.all(
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
               ),
               child: const Text('Annulla'),
             ),
@@ -245,7 +228,8 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
               onPressed: _selectedFile != null ? _onConfirm : null,
               style: ButtonStyle(
                 padding: ButtonState.all(
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
               ),
               child: const Text('Conferma'),
             ),
@@ -255,7 +239,6 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     );
   }
 
-  /// 🎨 Header Builder
   Widget _buildHeader(BuildContext context) {
     final theme = FluentTheme.of(context);
     return Row(
@@ -277,8 +260,7 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Configura Nodo di Processo',
-                  style: theme.typography.subtitle),
+              Text('Configura Nodo di Processo', style: theme.typography.subtitle),
               const SizedBox(height: 4),
               Text(
                 'Imposta la chiamata ad un altro flowchart con parametri.',
@@ -291,7 +273,6 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     );
   }
 
-  /// 🎨 Section Label Builder
   Widget _buildSectionLabel(BuildContext context, String label,
       {bool isRequired = false}) {
     final theme = FluentTheme.of(context);
@@ -312,7 +293,6 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     );
   }
 
-  /// 🎨 Error Message Builder
   Widget _buildErrorMessage(BuildContext context, String message) {
     final theme = FluentTheme.of(context);
     final errorColor = Colors.red.defaultBrushFor(theme.brightness);
@@ -332,7 +312,6 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     );
   }
 
-  /// 🎨 Empty Arguments State
   Widget _buildEmptyArgumentsState(BuildContext context) {
     final theme = FluentTheme.of(context);
     return Container(
@@ -345,16 +324,13 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            FaIcon(
-              FontAwesomeIcons.listUl,
-              size: 24,
-              color: theme.inactiveBackgroundColor,
-            ),
+            FaIcon(FontAwesomeIcons.listUl,
+                size: 24, color: theme.inactiveBackgroundColor),
             const SizedBox(height: 12),
             Text(
               'Nessun argomento specificato',
-              style:
-                  theme.typography.body?.copyWith(color: theme.inactiveColor),
+              style: theme.typography.body
+                  ?.copyWith(color: theme.inactiveColor),
             ),
           ],
         ),
@@ -362,7 +338,6 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     );
   }
 
-  /// 🎨 Argument Item Builder
   Widget _buildArgumentItem(BuildContext context, int index, Color errorColor) {
     final theme = FluentTheme.of(context);
     return Container(
@@ -377,7 +352,7 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
           Text(
             '${index + 1}',
             style:
-                theme.typography.bodyStrong?.copyWith(color: theme.accentColor),
+            theme.typography.bodyStrong?.copyWith(color: theme.accentColor),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -386,30 +361,34 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
               value: _arguments[index],
               placeholder: Text('Seleziona la Variabile ${index + 1}'),
               items: widget.availableVariables
-                  .map((v) => ComboBoxItem(
-                      value: v.name,
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: theme.accentColor
-                                  .defaultBrushFor(theme.brightness)
-                                  .withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              v.dataType.toUpperCase(),
-                              style: theme.typography.caption?.copyWith(
-                                  color: theme.accentColor,
-                                  fontWeight: FontWeight.bold),
-                            ),
+                  .map(
+                    (v) => ComboBoxItem(
+                  value: v.name,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: theme.accentColor
+                              .defaultBrushFor(theme.brightness)
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          v.dataType.toUpperCase(),
+                          style: theme.typography.caption?.copyWith(
+                            color: theme.accentColor,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(width: 8),
-                          Text(v.name),
-                        ],
-                      )))
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(v.name),
+                    ],
+                  ),
+                ),
+              )
                   .toList(),
               onChanged: (value) {
                 setState(() => _arguments[index] = value);
@@ -420,15 +399,12 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
           IconButton(
             icon: FaIcon(FontAwesomeIcons.trash, size: 16, color: errorColor),
             onPressed: () => _removeArgument(index),
-            // GIUSTIFICAZIONE (Fix Hover Color):
-            // Aggiornato il colore di sfondo al passaggio del mouse per il pulsante
-            // di rimozione argomento, seguendo le linee guida di design.
             style: ButtonStyle(
               backgroundColor: ButtonState.resolveWith((states) {
                 if (states.contains(ButtonStates.hovered)) {
                   return (theme.brightness == Brightness.light
-                          ? const Color(0xFFDC2626)
-                          : const Color(0xFFEF4444))
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFFEF4444))
                       .withValues(alpha: 0.1);
                 }
                 return Colors.transparent;

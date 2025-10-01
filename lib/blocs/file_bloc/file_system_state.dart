@@ -20,23 +20,23 @@ class FileSystemError extends FileSystemState {
   List<Object> get props => [message];
 }
 
-/// Stato di caricamento iniziale, quando la lista file non è ancora disponibile.
 class FileSystemLoading extends FileSystemState {
   const FileSystemLoading();
 }
 
-/// Stato che rappresenta il filesystem caricato.
 class FileSystemLoaded extends FileSystemState {
   final List<MyFile> files;
   final String? activeFileId;
   final String? error;
   final bool isLoading;
+  final String? executionCode; // Proprietà per contenere il codice C generato
 
   const FileSystemLoaded({
     required this.files,
     this.activeFileId,
     this.error,
     this.isLoading = false,
+    this.executionCode,
   });
 
   FileSystemLoaded copyWith({
@@ -46,27 +46,18 @@ class FileSystemLoaded extends FileSystemState {
     String? error,
     bool clearError = false,
     bool? isLoading,
+    String? executionCode,
+    bool clearExecutionCode = false, // Flag per pulire il codice
   }) {
     return FileSystemLoaded(
       files: files ?? this.files,
       activeFileId: clearActiveFile ? null : (activeFileId ?? this.activeFileId),
       error: clearError ? null : error,
       isLoading: isLoading ?? this.isLoading,
+      executionCode: clearExecutionCode ? null : (executionCode ?? this.executionCode),
     );
   }
 
   @override
-  List<Object?> get props => [files, activeFileId, error, isLoading];
-}
-
-/// Stato "side-effect" per comunicare alla UI di mostrare un dialogo
-/// con il contenuto JSON del flowchart da eseguire.
-class ShowExecutionJsonDialog extends FileSystemState {
-  final String formattedJson;
-  final String fileName;
-
-  const ShowExecutionJsonDialog({required this.formattedJson, required this.fileName});
-
-  @override
-  List<Object?> get props => [formattedJson, fileName];
+  List<Object?> get props => [files, activeFileId, error, isLoading, executionCode];
 }

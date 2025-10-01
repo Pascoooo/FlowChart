@@ -1,78 +1,99 @@
 import 'package:equatable/equatable.dart';
-import 'package:flutter/material.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 
-import 'file_system_state.dart';
-
-@immutable
 abstract class FileSystemEvent extends Equatable {
   const FileSystemEvent();
   @override
   List<Object?> get props => [];
 }
 
-/// Carica (o ricarica) la lista dei file per un dato progetto.
+// --- Eventi CRUD ---
+
 class RefreshFileSystem extends FileSystemEvent {
   final String projectId;
   const RefreshFileSystem({required this.projectId});
   @override
-  List<Object> get props => [projectId];
+  List<Object?> get props => [projectId];
 }
 
-/// Crea un nuovo file all'interno di un progetto.
-class CreateNewFile extends FileSystemEvent {
+class CreateFile extends FileSystemEvent {
   final String projectId;
   final String fileName;
-  const CreateNewFile({required this.projectId, required this.fileName});
+  const CreateFile({required this.projectId, required this.fileName});
   @override
-  List<Object> get props => [projectId, fileName];
+  List<Object?> get props => [projectId, fileName];
 }
 
-/// Imposta un file come attivo per la visualizzazione e la modifica.
-class OpenFile extends FileSystemEvent {
-  final String projectId;
-  final String fileId;
-  final String fileName;
-  const OpenFile({required this.projectId, required this.fileId, required this.fileName});
-  @override
-  List<Object> get props => [projectId, fileId, fileName];
-}
-
-/// Elimina un file da un progetto.
 class DeleteFile extends FileSystemEvent {
   final String projectId;
   final String fileId;
   const DeleteFile({required this.projectId, required this.fileId});
   @override
-  List<Object> get props => [projectId, fileId];
+  List<Object?> get props => [projectId, fileId];
 }
 
-/// Rinomina un file esistente.
 class RenameFile extends FileSystemEvent {
   final String projectId;
   final String fileId;
   final String newName;
-  const RenameFile({required this.projectId, required this.fileId, required this.newName});
+  const RenameFile(
+      {required this.projectId, required this.fileId, required this.newName});
   @override
-  List<Object> get props => [projectId, fileId, newName];
+  List<Object?> get props => [projectId, fileId, newName];
 }
 
-/// Richiede l'esecuzione/interpretazione del file attualmente attivo.
+class OpenFile extends FileSystemEvent {
+  final String projectId;
+  final String fileId;
+  const OpenFile({required this.projectId, required this.fileId});
+  @override
+  List<Object?> get props => [projectId, fileId];
+}
+
+// --- Eventi di Esecuzione ---
+
 class ExecuteActiveFile extends FileSystemEvent {
   final String projectId;
   final String fileId;
-
-  const ExecuteActiveFile({required this.projectId, required this.fileId});
-
+  final Flowchart flowchart; // Esegue la versione piÃ¹ aggiornata
+  const ExecuteActiveFile({
+    required this.projectId,
+    required this.fileId,
+    required this.flowchart,
+  });
   @override
-  List<Object> get props => [projectId, fileId];
+  List<Object?> get props => [projectId, fileId, flowchart];
 }
 
-class ShowExecutionConsole extends FileSystemState {
-  final String cCode;
-  final String fileName;
+class ClearExecutionCode extends FileSystemEvent {
+  const ClearExecutionCode();
+}
 
-  const ShowExecutionConsole({required this.cCode, required this.fileName});
+// --- Eventi di Debug ---
 
+class StartDebugSession extends FileSystemEvent {
+  final Flowchart flowchart;
+  const StartDebugSession({required this.flowchart});
   @override
-  List<Object?> get props => [cCode, fileName];
+  List<Object> get props => [flowchart];
+}
+
+class ComputeDebugStep extends FileSystemEvent {
+  final int index;
+  final List<String> debugPath;
+  final Flowchart flowchart;
+  const ComputeDebugStep({
+    required this.index,
+    required this.debugPath,
+    required this.flowchart,
+  });
+  @override
+  List<Object> get props => [index, debugPath, flowchart];
+}
+
+class EndDebugSession extends FileSystemEvent {
+  final String projectId;
+  const EndDebugSession({required this.projectId});
+  @override
+  List<Object> get props => [projectId];
 }

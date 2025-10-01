@@ -2,7 +2,6 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-// La logica di business e la firma della funzione rimangono invariate.
 Future<Map<String, dynamic>?> showDecisionNodeDialog(
     BuildContext context, {
       required List<Map<String, String>> variables,
@@ -10,7 +9,6 @@ Future<Map<String, dynamic>?> showDecisionNodeDialog(
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
-    // Il redesign si concentra sul widget del dialogo stesso.
     builder: (_) => _DecisionNodeDialog(variables: variables),
   );
 }
@@ -27,9 +25,7 @@ class _DecisionNodeDialog extends StatefulWidget {
 }
 
 class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
-  // --- STATO E LOGICA INVARIATI ---
   _ConditionMode _mode = _ConditionMode.simple;
-  final TextEditingController _labelController = TextEditingController();
   bool _attemptedSubmit = false;
 
   late _ComparisonRow _simpleRow;
@@ -50,7 +46,6 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
 
   @override
   void dispose() {
-    _labelController.dispose();
     _simpleRow.dispose();
     for (final r in _advancedRows) {
       r.dispose();
@@ -58,7 +53,6 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
     super.dispose();
   }
 
-  // --- METODI DI LOGICA E VALIDAZIONE (NON MODIFICATI) ---
   List<String> _opsForType(String? type) {
     switch (type) {
       case 'int':
@@ -172,9 +166,8 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   void _addRow() {
     setState(() {
       _advancedRows.add(_ComparisonRow(
-          leftVariable: widget.variables.isNotEmpty
-              ? widget.variables.first['name']
-              : null));
+          leftVariable:
+          widget.variables.isNotEmpty ? widget.variables.first['name'] : null));
       if (_advancedRows.length > 1) _connectors.add('AND');
     });
   }
@@ -237,22 +230,20 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   void _confirm() {
     setState(() => _attemptedSubmit = true);
     if (!_validateForm()) return;
+    final condition = _buildExpression();
     Navigator.of(context).pop({
-      'text': _labelController.text.trim().isEmpty
-          ? 'Condizione'
-          : _labelController.text.trim(),
-      'condition': _buildExpression(),
+      // Etichetta autogenerata: coincide con la condizione.
+      'text': condition,
+      'condition': condition,
     });
   }
 
-  // --- METODO BUILD (COMPLETAMENTE RIPROGETTATO) ---
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
     final expressionPreview = _buildExpression();
 
     return ContentDialog(
-      // DESIGN: Aumentata la larghezza per un layout web più arioso.
       constraints: const BoxConstraints(maxWidth: 800),
       title: Row(children: [
         FaIcon(FontAwesomeIcons.codeBranch,
@@ -262,58 +253,47 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
       ]),
       content: widget.variables.isEmpty
           ? Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 48.0),
-            child: Text('Nessuna variabile definita per creare una condizione.',
-                style: theme.typography.body),
-          ))
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 48.0),
+          child: Text(
+            'Nessuna variabile definita per creare una condizione.',
+            style: theme.typography.body,
+          ),
+        ),
+      )
           : SingleChildScrollView(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // DESIGN: Layout a due colonne per dare equilibrio visivo.
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: InfoLabel(
-                    label: 'Etichetta Nodo (opzionale)',
-                    child: TextBox(
-                      controller: _labelController,
-                      placeholder: 'Es: Controllo età utente',
+            // Solo selezione modalità (rimossa etichetta manuale).
+            Align(
+              alignment: Alignment.centerLeft,
+              child: InfoLabel(
+                label: 'Modalità di Costruzione',
+                child: Row(
+                  children: [
+                    RadioButton(
+                      checked: _mode == _ConditionMode.simple,
+                      content: const Text('Semplice'),
+                      onChanged: (v) {
+                        if (v) {
+                          setState(() => _mode = _ConditionMode.simple);
+                        }
+                      },
                     ),
-                  ),
+                    const SizedBox(width: 16),
+                    RadioButton(
+                      checked: _mode == _ConditionMode.advanced,
+                      content: const Text('Avanzata'),
+                      onChanged: (v) {
+                        if (v) _switchToAdvanced();
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 32),
-                InfoLabel(
-                  label: 'Modalità di Costruzione',
-                  child: Row(
-                    children: [
-                      RadioButton(
-                        checked: _mode == _ConditionMode.simple,
-                        content: const Text('Semplice'),
-                        onChanged: (v) {
-                          if (v) {
-                            setState(() => _mode = _ConditionMode.simple);
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 16),
-                      RadioButton(
-                        checked: _mode == _ConditionMode.advanced,
-                        content: const Text('Avanzata'),
-                        onChanged: (v) {
-                          if (v) _switchToAdvanced();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
-            const SizedBox(height: 32),
-            // DESIGN: L'AnimatedSwitcher gestisce la transizione tra le UI.
+            const SizedBox(height: 24),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
               transitionBuilder: (child, animation) =>
@@ -328,28 +308,28 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
         ),
       ),
       actions: [
-      Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Button(
-          onPressed: () => Navigator.of(context).pop(null),
-          style: ButtonStyle(
-            padding: ButtonState.all(
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
-          ),
-          child: const Text('Annulla'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Button(
+              onPressed: () => Navigator.of(context).pop(null),
+              style: ButtonStyle(
+                padding: ButtonState.all(
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+              ),
+              child: const Text('Annulla'),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: _confirm,
+              style: ButtonStyle(
+                padding: ButtonState.all(
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+              ),
+              child: const Text('Conferma'),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        FilledButton(
-          onPressed: _confirm,
-          style: ButtonStyle(
-            padding: ButtonState.all(
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
-          ),
-          child: const Text('Conferma'),
-        ),
-      ],
-    ),
       ],
     );
   }
@@ -361,9 +341,7 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   Widget _buildAdvancedUI(FluentThemeData theme) {
     return Column(
       key: const ValueKey('advanced-ui'),
-      mainAxisSize: MainAxisSize.min,
       children: [
-        // DESIGN: Box con altezza massima per evitare dialoghi troppo estesi.
         ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 350),
           child: ListView.separated(
@@ -376,7 +354,8 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
             separatorBuilder: (context, index) {
               if (index < _connectors.length) {
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 60.0),
+                  padding:
+                  const EdgeInsets.symmetric(vertical: 8.0, horizontal: 60.0),
                   child: ComboBox<String>(
                     value: _connectors[index],
                     isExpanded: true,
@@ -395,11 +374,12 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
         if (_attemptedSubmit && !_areParenthesesBalanced())
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
-            // DESIGN: Utilizzo del colore di errore standard del tema Fluent.
-            child: Text('Errore: le parentesi non sono bilanciate.',
-                style: theme.typography.caption?.copyWith(
-                  color: theme.resources.systemFillColorCritical,
-                )),
+            child: Text(
+              'Errore: le parentesi non sono bilanciate.',
+              style: theme.typography.caption?.copyWith(
+                color: theme.resources.systemFillColorCritical,
+              ),
+            ),
           ),
         const SizedBox(height: 16),
         Align(
@@ -423,9 +403,6 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
     final availableOps = _opsForType(leftType);
     if (!availableOps.contains(row.operator)) row.operator = availableOps.first;
 
-    // DESIGN: L'intera riga è stata riprogettata per essere più robusta.
-    // Ogni campo è in una Column con il proprio messaggio di errore,
-    // evitando layout disallineati e fragili.
     return Column(
       key: ValueKey(row),
       children: [
@@ -435,12 +412,10 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
             if (!isSimpleMode)
               SizedBox(
                 width: 60,
-                child: TextBox(
-                    controller: row.leftParenController, placeholder: '('),
+                child:
+                TextBox(controller: row.leftParenController, placeholder: '('),
               ),
             if (!isSimpleMode) const SizedBox(width: 8),
-
-            // --- CAMPO 1: VARIABILE SINISTRA ---
             Expanded(
               flex: 3,
               child: _FormField(
@@ -462,8 +437,6 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
               ),
             ),
             const SizedBox(width: 16),
-
-            // --- CAMPO 2: OPERATORE ---
             Expanded(
               flex: 2,
               child: ComboBox<String>(
@@ -477,8 +450,6 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
               ),
             ),
             const SizedBox(width: 16),
-
-            // --- CAMPO 3: VALORE DESTRO (LITERAL/VARIABLE) ---
             Expanded(
               flex: 3,
               child: _FormField(
@@ -506,26 +477,27 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
                     controller: row.literalController,
                     placeholder: 'Valore',
                     onChanged: (_) {
-                      if (_attemptedSubmit) setState(() => _validateRow(row));
+                      if (_attemptedSubmit) {
+                        setState(() => _validateRow(row));
+                      }
                     },
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
-
             if (!isSimpleMode)
               SizedBox(
                 width: 60,
-                child: TextBox(
-                    controller: row.rightParenController, placeholder: ')'),
+                child:
+                TextBox(controller: row.rightParenController, placeholder: ')'),
               ),
-
             const SizedBox(width: 8),
             ToggleSwitch(
               checked: row.rightMode == _RightHandMode.variable,
               onChanged: (v) => setState(() {
-                row.rightMode = v ? _RightHandMode.variable : _RightHandMode.literal;
+                row.rightMode =
+                v ? _RightHandMode.variable : _RightHandMode.literal;
                 if (_attemptedSubmit) _validateRow(row);
               }),
               content: FaIcon(
@@ -535,7 +507,6 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
                 size: 14,
               ),
             ),
-
             if (!isSimpleMode) ...[
               const SizedBox(width: 8),
               HoverButton(
@@ -550,7 +521,7 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
                   ),
                 ),
               ),
-            ]
+            ],
           ],
         ),
       ],
@@ -564,25 +535,25 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.resources.cardStrokeColorDefaultSolid,
-        borderRadius:  BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Anteprima Espressione',
-              style: theme.typography.caption
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(expr,
               style:
-              theme.typography.body?.copyWith(fontFamily: 'monospace')),
+              theme.typography.caption?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(
+            expr,
+            style: theme.typography.body?.copyWith(fontFamily: 'monospace'),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Widget di utilità per incapsulare un campo e il suo testo di errore.
 class _FormField extends StatelessWidget {
   final Widget child;
   final String? errorText;
@@ -603,7 +574,7 @@ class _FormField extends StatelessWidget {
             child: Text(
               errorText!,
               style: theme.typography.caption?.copyWith(
-                color: theme.resources.systemFillColorCritical
+                color: theme.resources.systemFillColorCritical,
               ),
             ),
           )
@@ -612,8 +583,6 @@ class _FormField extends StatelessWidget {
   }
 }
 
-
-// La classe di stato per la riga rimane invariata nella sua logica.
 class _ComparisonRow {
   String? leftVariable;
   String operator;
@@ -627,7 +596,7 @@ class _ComparisonRow {
 
   _ComparisonRow({
     this.leftVariable,
-    this.operator = '==',
+    this.operator = '=',
     this.rightMode = _RightHandMode.literal,
     this.rightVariable,
   })  : literalController = TextEditingController(),
