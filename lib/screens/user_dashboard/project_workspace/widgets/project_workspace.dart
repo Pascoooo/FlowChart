@@ -199,22 +199,32 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     }
   }
 
-// dentro _ProjectWorkspaceState in project_workspace.dart
+  // Gestione aggiunta variabile usando il contesto che contiene i Bloc (providerCtx)
+  void _handleAddVariable(BuildContext providerCtx, VariableScope scope) async {
+    final flowchartState = providerCtx.read<FlowchartBloc>().state;
 
-// dentro _ProjectWorkspaceState in project_workspace.dart
-
-  void _handleAddVariable(VariableScope scope) async {
-    final flowchartState = context.read<FlowchartBloc>().state;
-    if (flowchartState is! FlowchartLoaded) return;
+    final existing = flowchartState is FlowchartLoaded
+        ? flowchartState.flowchart.variables
+        : <VariableDeclaration>[];
 
     final newVariable = await AppDialogs.showAddVariableDialog(
-      context: context,
-      existingDeclarations: flowchartState.flowchart.variables,
+      context: providerCtx,
+      existingDeclarations: existing,
       defaultScope: scope,
     );
 
     if (newVariable != null && mounted) {
-      context.read<FlowchartBloc>().add(AddGlobalVariable(newVariable));
+      if (flowchartState is FlowchartLoaded) {
+        providerCtx.read<FlowchartBloc>().add(AddGlobalVariable(newVariable));
+      } else {
+        AppDialogs.showInfoDialog(
+          providerCtx,
+          title: 'Flowchart non pronto',
+          message:
+              'La variabile è stata definita ma il flowchart non è ancora disponibile. Riprova quando il flowchart è caricato.',
+          type: DialogType.warning,
+        );
+      }
     }
   }
 
@@ -378,8 +388,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                     showGrid: _showGrid,
                     toggleGrid: _toggleGrid,
                     onStartDebug: () => _handleStartDebug(innerContext),
-                    // FIX: Passa la funzione handler a _WorkspaceLayout
-                    onAddVariable: _handleAddVariable,
+                    onAddVariable: (scope) => _handleAddVariable(innerContext, scope),
                     isReadOnly: widget.isReadOnly,
                     onLeave: widget.onLeave,
                   );
