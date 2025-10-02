@@ -133,7 +133,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     emit(currentState.copyWith(isLoading: true));
     try {
       final emptyFlowchart = FlowchartLoaded.empty(fileName: fileName).flowchart;
-      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(120.0, 120.0));
+      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(1030.0, 50.0));
       final initialFlowchart = emptyFlowchart.copyWith(nodes: [startNode]);
       final initialContent = jsonEncode(initialFlowchart.toEntity().toDocument());
 

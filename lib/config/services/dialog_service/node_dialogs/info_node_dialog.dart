@@ -4,6 +4,9 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import '../app_dialogs.dart';
+import '../service_dialog.dart';
+
 // ... (il resto degli import)
 
 /// 📋 Node Details Dialog - Professional Information Display
@@ -841,6 +844,143 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// Enum per definire come visualizzare gli elementi: in colonna o a capo.
+enum _TruncatedListDisplayMode { column, wrap }
+
+/// NUOVO: Widget helper per visualizzare liste lunghe in modo troncato.
+class _TruncatedList extends StatelessWidget {
+  final String title;
+  final List<dynamic> items;
+  final Widget Function(dynamic item) itemBuilder;
+  final String Function(List<dynamic> items) fullListBuilder;
+  final _TruncatedListDisplayMode displayMode;
+  final int maxVisibleItems;
+
+  const _TruncatedList({
+    required this.title,
+    required this.items,
+    required this.itemBuilder,
+    required this.fullListBuilder,
+    this.displayMode = _TruncatedListDisplayMode.column,
+    this.maxVisibleItems = 4,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+
+    if (items.isEmpty) {
+      return _EmptyState(message: 'Nessun elemento in questa lista.', theme: theme);
+    }
+
+    final visibleItems = items.take(maxVisibleItems).toList();
+    final hiddenItemCount = items.length - maxVisibleItems;
+
+    Widget listWidget;
+    if (displayMode == _TruncatedListDisplayMode.wrap) {
+      listWidget = Wrap(
+        spacing: 8.0,
+        runSpacing: 8.0,
+        children: visibleItems.map((item) => itemBuilder(item)).toList(),
+      );
+    } else {
+      listWidget = _BoxedDetail(
+        theme: theme,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: visibleItems.asMap().entries.map((entry) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: entry.key < visibleItems.length - 1 ? 8 : 0),
+              child: itemBuilder(entry.value),
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.typography.caption?.copyWith(
+            color: theme.typography.body?.color?.withOpacity(0.8),
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        listWidget,
+        if (hiddenItemCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: HoverButton(
+              onPressed: () {
+                AppDialogs.showInfoDialog(
+                  context,
+                  title: title,
+                  message: fullListBuilder(items),
+                  type: DialogType.info,
+                );
+              },
+              builder: (context, states) {
+                return Text(
+                  '... e altri $hiddenItemCount',
+                  style: theme.typography.caption?.copyWith(
+                    color: states.isHovering ? theme.accentColor : theme.resources.textFillColorSecondary,
+                    decoration: TextDecoration.underline,
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// NUOVO: Widget helper per la riga della variabile in _TruncatedList
+class _VariableRowDisplay extends StatelessWidget {
+  final VariableDeclaration variable;
+  final FluentThemeData theme;
+
+  const _VariableRowDisplay({required this.variable, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.3)),
+          ),
+          child: Text(
+            variable.dataType.toUpperCase(),
+            style: TextStyle(
+              color: theme.accentColor.defaultBrushFor(theme.brightness),
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            variable.name,
+            style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+        ),
+      ],
     );
   }
 }

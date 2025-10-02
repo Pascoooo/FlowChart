@@ -246,18 +246,23 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
     return assignmentsText.join(', ');
   }
 
+// Dentro la classe _AssignmentNodeDialogState
+
   void _confirm() {
     setState(() => _attemptedSubmit = true);
     if (!_validateForm()) return;
 
     Navigator.of(context).pop({
       'text': _generateAutoLabel(),
-      'assignments': _assignments.where((a) => a.target != null && a.target!.isNotEmpty).map((a) {
+      'assignments': _assignments
+          .where((a) => a.target != null && a.target!.isNotEmpty)
+          .map((a) {
         return {
           'target': a.target,
           'expression': a.value.text.trim(),
         };
-      }).toList(),
+      })
+          .toList(),
     });
   }
 

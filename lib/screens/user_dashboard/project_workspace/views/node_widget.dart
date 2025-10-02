@@ -12,6 +12,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flowchart_thesis/config/services/dialog_service/app_dialogs.dart';
 import 'package:flowchart_thesis/blocs/file_bloc/file_system_bloc.dart';
 import 'package:flowchart_thesis/blocs/file_bloc/file_system_state.dart';
+import '../../../../config/services/dialog_service/service_dialog.dart';
 import 'painters.dart';
 
 enum HandleDirection { top, right, bottom, left }
@@ -202,12 +203,17 @@ class _NodeWidgetState extends State<NodeWidget> {
     }
   }
 
+// Dentro la classe _NodeWidgetState nel file node_widget.dart
+
   void _createNode(BuildContext context, FlowNodeKind kind, String? fromPort) async {
     try {
       final bloc = context.read<FlowchartBloc>();
       final flowState = bloc.state;
 
-      if (kind == FlowNodeKind.end && flowState is FlowchartLoaded) {
+      if (flowState is! FlowchartLoaded) return;
+
+      // Gestione speciale per collegare al nodo 'Fine' esistente
+      if (kind == FlowNodeKind.end) {
         final hasEndNode = flowState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
         if (hasEndNode) {
           final bool? confirmed = await AppDialogs.showConfirmationDialog(
@@ -226,6 +232,35 @@ class _NodeWidgetState extends State<NodeWidget> {
 
       List<MyFile>? filesForProcess;
       List<VariableDeclaration>? variablesForDialog;
+
+      // Logica di preparazione dei dati
+      if (kind == FlowNodeKind.input) {
+        // 1. Filtra le variabili UNA SOLA VOLTA per trovare quelle di input.
+        final inputVariables = flowState.flowchart.variables
+            .where((v) => v.scope == VariableScope.input)
+            .toList();
+
+        // 2. Controlla se esistono variabili di input. Se no, mostra un avviso e ferma.
+        if (inputVariables.isEmpty) {
+          await AppDialogs.showInfoDialog(
+            context,
+            title: 'Nessuna Variabile di Input',
+            message:
+            'Per creare un nodo di Input, devi prima dichiarare una o più variabili come "Input" nel pannello delle variabili.',
+            type: DialogType.warning,
+          );
+          return;
+        }
+
+        // 3. Assegna la lista GIÀ FILTRATA da passare al dialogo.
+        variablesForDialog = inputVariables;
+
+      } else {
+        // Per tutti gli altri tipi di nodi che usano variabili, passa la lista completa.
+        variablesForDialog = flowState.flowchart.variables;
+      }
+
+      // Logica specifica per il nodo Processo (invariata)
       if (kind == FlowNodeKind.process) {
         final fsState = context.read<FileSystemBloc>().state;
         if (fsState is FileSystemLoaded) {
@@ -233,16 +268,7 @@ class _NodeWidgetState extends State<NodeWidget> {
         }
       }
 
-      // FIX: Aggiunto FlowNodeKind.assignment alla condizione.
-      if (kind == FlowNodeKind.input ||
-          kind == FlowNodeKind.decision ||
-          kind == FlowNodeKind.output ||
-          kind == FlowNodeKind.assignment) {
-        if (flowState is FlowchartLoaded) {
-          variablesForDialog = flowState.flowchart.variables;
-        }
-      }
-
+      // Chiama il gestore di dialoghi con i dati corretti
       final Map<String, dynamic>? nodeData = await AppDialogs.showNodeCreationDialog(
         context: context,
         kind: kind,
@@ -250,6 +276,7 @@ class _NodeWidgetState extends State<NodeWidget> {
         variables: variablesForDialog,
       );
 
+      // Se il dialogo ha restituito dei dati, aggiungi il nuovo nodo
       if (nodeData != null && mounted) {
         bloc.add(AddNode(
           kind: kind,
@@ -259,9 +286,10 @@ class _NodeWidgetState extends State<NodeWidget> {
           initialData: nodeData,
         ));
       }
-    } catch (_) {}
+    } catch (_) {
+      // Gestisce eventuali errori in modo silenzioso
+    }
   }
-
   String? _resolvePort(HandleDirection direction) {
     if (widget.node.kind == FlowNodeKind.decision) {
       switch (direction) {

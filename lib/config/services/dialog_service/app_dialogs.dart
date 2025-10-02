@@ -107,6 +107,8 @@ class AppDialogs {
 
   // --- Dialoghi per Editor Nodi ---
 
+// Dentro la classe AppDialogs, nel file app_dialogs.dart
+
   static Future<Map<String, dynamic>?> showNodeCreationDialog({
     required BuildContext context,
     required FlowNodeKind kind,
@@ -116,18 +118,21 @@ class AppDialogs {
   }) {
     switch (kind) {
       case FlowNodeKind.input:
-        return showOutputNodeDialog(context, availableVariables: variables ?? const []);
-    //showInputNodeDialog(
-          //context,
-          //availableInputVariables: variables?.where((v) => v.scope == VariableScope.input).toList() ?? [],
-          //;
+      // La lista 'variables' che arriva qui è già filtrata, la passiamo direttamente.
+        return showInputNodeDialog(
+          context,
+          availableInputVariables: variables ?? const [],
+        );
+
       case FlowNodeKind.assignment:
         return showAssignmentNodeDialog(
           context,
           availableVariables: variables ?? const [],
         );
+
       case FlowNodeKind.output:
         return showOutputNodeDialog(context, availableVariables: variables ?? const []);
+
       case FlowNodeKind.process:
         final fileOptions = files ?? const <MyFile>[];
         if (fileOptions.isEmpty) {
@@ -144,6 +149,7 @@ class AppDialogs {
           files: fileOptions,
           availableVariables: variables ?? const <VariableDeclaration>[],
         );
+
       case FlowNodeKind.decision:
         final vars = variables ?? const [];
         if (vars.isEmpty) {
@@ -159,8 +165,10 @@ class AppDialogs {
             .map((v) => {'name': v.name, 'type': v.dataType})
             .toList();
         return showDecisionNodeDialog(context, variables: decisionVars);
+
       case FlowNodeKind.start:
         return Future.value({'text': 'Inizio'});
+
       case FlowNodeKind.end:
         return Future.value({'text': 'Fine'});
     }

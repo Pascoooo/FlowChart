@@ -1,6 +1,9 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/dialog_service/service_dialog.dart';
 import 'flowchart_canvas.dart';
@@ -14,7 +17,7 @@ class WorkArea extends StatefulWidget {
   final bool isReadOnly;
   final bool allowDragInReadOnly;
 
-  // FIX: Rese le callback opzionali per permettere l'uso del widget in contesti di sola lettura.
+  // Callback per gestire l'aggiunta di variabili per ogni categoria.
   final VoidCallback? onAddInputVariable;
   final VoidCallback? onAddOutputVariable;
   final VoidCallback? onAddLocalVariable;
@@ -64,7 +67,6 @@ class _WorkAreaState extends State<WorkArea>
 
   @override
   Widget build(BuildContext context) {
-    // FIX: Verifica se le callback sono state fornite per decidere se mostrare il pannello.
     final bool canAddVariables = widget.onAddInputVariable != null &&
         widget.onAddOutputVariable != null &&
         widget.onAddLocalVariable != null;
@@ -87,10 +89,21 @@ class _WorkAreaState extends State<WorkArea>
               scale: _buttonAnimation,
               child: FadeTransition(
                 opacity: _buttonAnimation,
-                child: _VariablesPanel(
-                  onAddInput: widget.onAddInputVariable!,
-                  onAddOutput: widget.onAddOutputVariable!,
-                  onAddLocal: widget.onAddLocalVariable!,
+                // Avvolge il pannello in un BlocBuilder per accedere allo stato
+                child: BlocBuilder<FlowchartBloc, FlowchartState>(
+                  builder: (context, state) {
+                    // Passa la lista di variabili solo se lo stato è caricato
+                    final variables = (state is FlowchartLoaded)
+                        ? state.flowchart.variables
+                        : <VariableDeclaration>[];
+
+                    return _VariablesPanel(
+                      variables: variables,
+                      onAddInput: widget.onAddInputVariable!,
+                      onAddOutput: widget.onAddOutputVariable!,
+                      onAddLocal: widget.onAddLocalVariable!,
+                    );
+                  },
                 ),
               ),
             ),
@@ -170,11 +183,13 @@ class _WorkAreaContent extends StatelessWidget {
 }
 
 class _VariablesPanel extends StatelessWidget {
+  final List<VariableDeclaration> variables;
   final VoidCallback onAddInput;
   final VoidCallback onAddOutput;
   final VoidCallback onAddLocal;
 
   const _VariablesPanel({
+    required this.variables,
     required this.onAddInput,
     required this.onAddOutput,
     required this.onAddLocal,
@@ -183,6 +198,12 @@ class _VariablesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+
+    // Filtra le variabili per categoria
+    final inputVars = variables.where((v) => v.scope == VariableScope.input).toList();
+    final outputVars = variables.where((v) => v.scope == VariableScope.output).toList();
+    final localVars = variables.where((v) => v.scope == VariableScope.local).toList();
+
     return Container(
       width: 220,
       padding: const EdgeInsets.all(12.0),
@@ -200,6 +221,7 @@ class _VariablesPanel extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -215,7 +237,7 @@ class _VariablesPanel extends StatelessWidget {
               decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
             ),
           ),
-          _VariableCategory(title: 'Input', onAdd: onAddInput),
+          _VariableCategory(title: 'Input', variables: inputVars, onAdd: onAddInput),
           Divider(
             style: DividerThemeData(
               horizontalMargin: const EdgeInsets.symmetric(vertical: 8),
@@ -223,7 +245,7 @@ class _VariablesPanel extends StatelessWidget {
               decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
             ),
           ),
-          _VariableCategory(title: 'Output', onAdd: onAddOutput),
+          _VariableCategory(title: 'Output', variables: outputVars, onAdd: onAddOutput),
           Divider(
             style: DividerThemeData(
               horizontalMargin: const EdgeInsets.symmetric(vertical: 8),
@@ -231,7 +253,7 @@ class _VariablesPanel extends StatelessWidget {
               decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
             ),
           ),
-          _VariableCategory(title: 'Di Lavoro', onAdd: onAddLocal),
+          _VariableCategory(title: 'Di Lavoro', variables: localVars, onAdd: onAddLocal),
         ],
       ),
     );
@@ -240,33 +262,99 @@ class _VariablesPanel extends StatelessWidget {
 
 class _VariableCategory extends StatelessWidget {
   final String title;
+  final List<VariableDeclaration> variables;
   final VoidCallback onAdd;
-  const _VariableCategory({required this.title, required this.onAdd});
+
+  const _VariableCategory({
+    required this.title,
+    required this.variables,
+    required this.onAdd,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4.0),
-          child: Text(
-            title,
-            style: theme.typography.bodyStrong?.copyWith(
-              color: theme.resources.textFillColorSecondary,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: Text(
+                title,
+                style: theme.typography.bodyStrong?.copyWith(
+                  color: theme.resources.textFillColorSecondary,
+                ),
+              ),
+            ),
+            Button(
+              onPressed: onAdd,
+              style: ButtonStyle(
+                padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
+                shape: WidgetStateProperty.all(const CircleBorder()),
+              ),
+              child: const Icon(FluentIcons.add, size: 16),
+            ),
+          ],
+        ),
+        if (variables.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, left: 4.0, right: 4.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: variables.map((variable) => _VariableDisplay(variable: variable)).toList(),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0, left: 4.0, right: 4.0),
+            child: Text(
+              'Nessuna',
+              style: theme.typography.caption?.copyWith(fontStyle: FontStyle.italic),
             ),
           ),
-        ),
-        Button(
-          onPressed: onAdd,
-          style: ButtonStyle(
-            padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
-            shape: WidgetStateProperty.all(const CircleBorder()),
-          ),
-          child: const Icon(FluentIcons.add, size: 16),
-        ),
       ],
+    );
+  }
+}
+
+class _VariableDisplay extends StatelessWidget {
+  final VariableDeclaration variable;
+  const _VariableDisplay({required this.variable});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: theme.accentColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              variable.dataType,
+              style: theme.typography.caption?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.accentColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              variable.name,
+              style: theme.typography.body,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -295,7 +383,7 @@ class _InfoRulesButton extends StatelessWidget {
         ),
         child: IconButton(
           onPressed: onTap,
-          icon: Icon(FontAwesomeIcons.listCheck, color: theme.accentColor, size:  25,),
+          icon: Icon(FontAwesomeIcons.listCheck, color: theme.accentColor, size: 25),
           style: ButtonStyle(
             backgroundColor: WidgetStateProperty.all(Colors.transparent),
           ),
