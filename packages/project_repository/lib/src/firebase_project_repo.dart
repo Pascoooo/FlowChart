@@ -246,56 +246,6 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<void> advanceDebugStep({required String projectId, required FlowNode? currentNode}) async {
-    if (currentNode == null) return;
 
-    final currentVariables = await _session.getCurrentDebugVariables(projectId);
-    final Map<String, dynamic> updates = {};
-
-    if (currentNode is InputNode) {
-      for (final decl in currentNode.declarations) {
-      }
-    }
-    else if (currentNode is AssignmentNode) {
-      final p = ShuntingYardParser(); // Sostituisce il Parser deprecato
-      final cm = ContextModel();
-
-      currentVariables.forEach((key, value) {
-        if (value is num) {
-          cm.bindVariable(Variable(key), Number(value));
-        }
-      });
-
-      for (final assignment in currentNode.assignments) {
-        try {
-          Expression exp = p.parse(assignment.expression);
-
-          // FIX: Il ContextModel (cm) va passato al costruttore del RealEvaluator.
-          final evaluator = RealEvaluator(cm);
-
-          // FIX: Il metodo si chiama .evaluate(exp), non .eval(exp, cm).
-          num result = evaluator.evaluate(exp); // Restituisce un 'num'
-
-          updates[assignment.target] = result;
-          cm.bindVariable(Variable(assignment.target), Number(result));
-        } catch (e) {
-          updates[assignment.target] = '<errore espressione>';
-        }
-      }
-    }
-    else if (currentNode is ProcessNode) {
-      if (currentNode.resultTarget != null && currentNode.resultTarget!.isNotEmpty) {
-        updates[currentNode.resultTarget!] = 123.45;
-      }
-    }
-    else if (currentNode is DecisionNode ||
-        currentNode is OutputNode ||
-        currentNode is StartNode ||
-        currentNode is EndNode) {
-      // Nessuna modifica allo stato delle variabili
-    }
-
-    if (updates.isNotEmpty) {
-      await _session.updateDebugVariables(projectId, updates);
-    }
   }
 }

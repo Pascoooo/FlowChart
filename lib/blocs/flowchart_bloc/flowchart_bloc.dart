@@ -24,41 +24,64 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<LinkToExistingEnd>(_onLinkToExistingEnd);
     on<Undo>(_onUndo);
     on<Redo>(_onRedo);
-    on<ResetFlowchart>(_onResetFlowchart);
+    on<ResetCanvasAndVariables>(_onResetCanvasAndVariables);
+    on<ResetCanvasPreserveVariables>(_onResetCanvasPreserveVariables); // nuovo
     on<ClearHistory>(_onClearHistory);
     on<DebugFlowchart>(_onDebugFlowchart);
     on<DebugNextNode>(_onDebugNext);
     on<DebugPrevNode>(_onDebugPrev);
     on<DebugExit>(_onDebugExit);
     on<AddGlobalVariable>(_onAddGlobalVariable);
+    on<UpdateGlobalVariables>(_onUpdateGlobalVariables);
+    on<AssignmentNodeCreationRequested>(_onAssignmentNodeCreationRequested);
   }
 
   bool get canUndo => _history.canUndo;
   bool get canRedo => _history.canRedo;
 
-  /// Estrae le dichiarazioni da tutti gli InputNode e crea la lista globale.
-  List<VariableDeclaration> _recalculateGlobalVariables(List<FlowNode> nodes) {
-    final newVariables = <VariableDeclaration>[];
-    final seenNames = <String>{};
-    for (final node in nodes) {
-      if (node is InputNode) {
-        for (final decl in node.declarations) {
-          if (seenNames.add(decl.name)) {
-            newVariables.add(decl);
-          }
-        }
-      }
-    }
-    return newVariables;
-  }
 
+  void _onAssignmentNodeCreationRequested(
+      AssignmentNodeCreationRequested event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final currentState = state as FlowchartLoaded;
+
+    // a. Trova tutti i nomi delle variabili disponibili tramite i nodi di Input
+    final assignableVariableNames = currentState.flowchart.nodes
+        .whereType<InputNode>()
+        .expand((node) => node.targetVariables)
+        .toSet();
+
+    // b. Controlla se ci sono variabili assegnabili. Se no, emetti un errore.
+    if (assignableVariableNames.isEmpty) {
+      emit(const FlowchartActionFailure(
+        title: 'Nessuna Variabile Disponibile',
+        message: 'Per usare un nodo di Assegnazione, devi prima inserire un nodo di Input e specificare quali variabili può usare.',
+      ));
+      // Ri-emetti lo stato corrente per assicurarti che la UI non rimanga bloccata
+      emit(currentState);
+      return;
+    }
+
+    // c. Recupera gli oggetti VariableDeclaration completi
+    final availableVariables = currentState.flowchart.variables
+        .where((v) => assignableVariableNames.contains(v.name))
+        .toList();
+
+    // d. Emetti lo stato "comando" per dire alla UI di mostrare il dialogo
+    emit(ShowNodeCreationDialog(
+      kind: FlowNodeKind.assignment,
+      fromNodeId: event.fromNodeId,
+      fromPort: event.fromPort,
+      availableVariables: availableVariables,
+    ));
+    // Ri-emetti lo stato corrente per assicurarti che la UI non rimanga bloccata
+    emit(currentState);
+  }
   void _onAddGlobalVariable(AddGlobalVariable event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
 
-    // Controlla se una variabile con lo stesso nome esiste già
     if (currentState.flowchart.variables.any((v) => v.name == event.variable.name)) {
-      // In un'app reale, potresti voler gestire questo errore in modo più visibile
       debugPrint('Errore: una variabile con questo nome esiste già.');
       return;
     }
@@ -66,14 +89,25 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     final newVariables = [...currentState.flowchart.variables, event.variable];
     final newFlowchart = currentState.flowchart.copyWith(variables: newVariables);
 
-    // Emetti il nuovo stato con la variabile aggiunta
     emit(currentState.copyWith(flowchart: newFlowchart));
   }
 
-  /// Crea un nodo aggiornato con type safety.
+  void _onUpdateGlobalVariables(UpdateGlobalVariables event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final currentState = state as FlowchartLoaded;
+
+    final newFlowchart = currentState.flowchart.copyWith(variables: event.variables);
+    emit(currentState.copyWith(flowchart: newFlowchart));
+  }
+
   FlowNode _createUpdatedNode(FlowNode oldNode, Map<String, dynamic> newData) {
     if (oldNode is InputNode) {
-      return oldNode.copyWith(declarations: newData['declarations'] as List<VariableDeclaration>?);
+      final declarations = newData['declarations'] as List<VariableDeclaration>?;
+      return oldNode.copyWith(
+          targetVariables: declarations?.map((d) => d.name).toList());
+    } else if (oldNode is AssignmentNode) {
+      return oldNode.copyWith(
+          assignments: newData['assignments'] as List<Assignment>?);
     } else if (oldNode is ProcessNode) {
       return oldNode.copyWith(
         flowchartToCall: newData['flowchartToCall'] as String?,
@@ -85,8 +119,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     } else if (oldNode is OutputNode) {
       return oldNode.copyWith(
           template: newData['template'] as String?,
-          variables: (newData['variables'] as List?)?.cast<String>()
-      );
+          variables: newData['variables'] as List<VariableDeclaration>?);
     }
     return oldNode;
   }
@@ -111,6 +144,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     final potentialNode = FlowNodeFactory.createNode(
       event.kind,
       Offset.zero,
+      allVariables: currentState.flowchart.variables,
       initialData: event.initialData,
     );
 
@@ -159,8 +193,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
     final newNodes = [...currentState.flowchart.nodes, newNode];
     final newEdges = [...currentState.flowchart.edges, newEdge];
-    final newVariables = _recalculateGlobalVariables(newNodes);
-    final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes, edges: newEdges, variables: newVariables);
+
+    final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes, edges: newEdges);
 
     final command = UpdateFlowchartCommand(
       oldFlowchart: currentState.flowchart,
@@ -202,8 +236,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
     final newNodes = currentState.flowchart.nodes.where((n) => n.id != event.nodeId).toList();
     final newEdges = currentState.flowchart.edges.where((e) => e.to != event.nodeId && e.from != event.nodeId).toList();
-    final newVariables = _recalculateGlobalVariables(newNodes);
-    final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes, edges: newEdges, variables: newVariables);
+
+    final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes, edges: newEdges);
 
     final command = UpdateFlowchartCommand(
       oldFlowchart: currentState.flowchart,
@@ -223,8 +257,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
     final updatedNode = _createUpdatedNode(oldNode, event.newData);
     final newNodes = currentState.flowchart.nodes.map((n) => n.id == event.nodeId ? updatedNode : n).toList();
-    final newVariables = _recalculateGlobalVariables(newNodes);
-    final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes, variables: newVariables);
+
+    final newFlowchart = currentState.flowchart.copyWith(nodes: newNodes);
 
     final command = UpdateFlowchartCommand(
       oldFlowchart: currentState.flowchart,
@@ -311,7 +345,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     }
   }
 
-  void _onResetFlowchart(ResetFlowchart event, Emitter<FlowchartState> emit) {
+  void _onResetCanvasAndVariables(ResetCanvasAndVariables event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
     _history.clear();
@@ -320,13 +354,17 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     try {
       startNode = currentState.flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
     } catch (_) {
-      startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(120, 120));
+      startNode = FlowNodeFactory.createNode(
+        FlowNodeKind.start,
+        const Offset(1030, 50),
+        allVariables: [],
+      );
     }
 
     final newFlowchart = currentState.flowchart.copyWith(
       nodes: [startNode],
       edges: <FlowchartEdge>[],
-      variables: <VariableDeclaration>[],
+      variables: <VariableDeclaration>[], // <-- Le variabili vengono CANCELLATE
     );
 
     emit(FlowchartLoaded(
@@ -334,6 +372,37 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       selectedNodeId: startNode.id,
     ));
   }
+
+  /// --- NUOVO METODO 2 ---
+  /// Resetta solo la canvas (nodi e connessioni), MANTENENDO le variabili.
+  void _onResetCanvasPreserveVariables(ResetCanvasPreserveVariables event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final currentState = state as FlowchartLoaded;
+    _history.clear();
+
+    FlowNode startNode;
+    try {
+      startNode = currentState.flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
+    } catch (_) {
+      startNode = FlowNodeFactory.createNode(
+        FlowNodeKind.start,
+        const Offset(1030, 50),
+        allVariables: [],
+      );
+    }
+
+    final newFlowchart = currentState.flowchart.copyWith(
+      nodes: [startNode],
+      edges: <FlowchartEdge>[],
+      variables: currentState.flowchart.variables, // <-- Le variabili vengono MANTENUTE
+    );
+
+    emit(FlowchartLoaded(
+      flowchart: newFlowchart,
+      selectedNodeId: startNode.id,
+    ));
+  }
+
 
   void _onClearHistory(ClearHistory event, Emitter<FlowchartState> emit) {
     _history.clear();
@@ -343,7 +412,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     if (state is! FlowchartLoaded) return;
     final s = state as FlowchartLoaded;
 
-    // Trova il nodo start
     FlowNode? start;
     try {
       start = s.flowchart.nodes.firstWhere((n) => n.kind == FlowNodeKind.start);
@@ -351,7 +419,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       return;
     }
 
-    // Costruisci un percorso lineare dall'inizio seguendo le connessioni
     final List<String> path = [];
     final visited = <String>{};
 
@@ -360,25 +427,22 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       path.add(currentId);
       visited.add(currentId);
 
-      // Edge di default (port == null) oppure per decisioni prova true poi false
       final outgoing = s.flowchart.edges.where((e) => e.from == currentId).toList();
       if (outgoing.isEmpty) break;
 
       FlowchartEdge? next;
-      // prova port null (lineare)
       next = outgoing.firstWhere(
-        (e) => e.port == null,
+            (e) => e.port == null,
         orElse: () => const FlowchartEdge(from: '', to: ''),
       );
       if (next.from.isEmpty) {
-        // decisione: prova true poi false
         next = outgoing.firstWhere(
-          (e) => e.port == 'true',
+              (e) => e.port == 'true',
           orElse: () => const FlowchartEdge(from: '', to: ''),
         );
         if (next.from.isEmpty) {
           next = outgoing.firstWhere(
-            (e) => e.port == 'false',
+                (e) => e.port == 'false',
             orElse: () => const FlowchartEdge(from: '', to: ''),
           );
         }

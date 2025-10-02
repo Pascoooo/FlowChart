@@ -8,7 +8,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../blocs/project_bloc/project_state.dart';
 import '../banner_service.dart';
-import 'node_dialogs/declaration_node_dialog.dart';
+import 'node_dialogs/declaration_dialogs/add_declared_variable.dart';
+import 'node_dialogs/declaration_dialogs/edit_variable_dialog.dart';
 import 'recovery_dialogs.dart';
 import 'share_dialogs.dart';
 import 'node_dialogs/decision_node_dialog.dart';
@@ -17,10 +18,7 @@ import 'node_dialogs/input_node_dialog.dart';
 import 'node_dialogs/output_node_dialog.dart';
 import 'node_dialogs/process_node_dialog.dart';
 import 'docker_dialog.dart';
-
-// NOTA: Ho aggiunto il file del nuovo dialogo di assegnazione che sarà necessario
 import 'node_dialogs/assignment_node_dialog.dart';
-
 
 class AppDialogs {
 
@@ -82,22 +80,27 @@ class AppDialogs {
     );
   }
 
-
-  static Future<VariableDeclaration?> showAddVariableDialog({
-    required BuildContext context,
-    required List<VariableDeclaration> existingDeclarations,
-    required VariableScope defaultScope,
-  }) {
-    // FIX: La chiamata a showVariableDialog richiede 'context' come argomento posizionale.
-    return showVariableDialog(
-      context, // Argomento posizionale
-      defaultScope: defaultScope,
-      existingDeclarations: existingDeclarations,
+  /// Mostra un dialogo per scegliere tra il reset del solo canvas o di tutto.
+  static Future<ResetChoice?> showResetOptionsDialog(
+      BuildContext context, {
+        required String title,
+        required String message,
+      }) {
+    // Questo metodo chiama il dialogo generico con i testi specifici.
+    return GenericDialogs.showResetOptionsDialog(
+      context,
+      title: title,
+      message: message,
+      cancelText: 'Annulla',
+      canvasOnlyText: 'Resetta solo i nodi',
+      everythingText: 'Resetta anche variabili',
     );
   }
 
+
+
   // --- Dialoghi per Setup Docker ---
-  static Future<void> showDockerInfoDialog(
+  static  Future<void> showDockerInfoDialog(
       BuildContext context, {
         DialogType type = DialogType.info,
         String closeText = 'Ho capito',
@@ -105,9 +108,40 @@ class AppDialogs {
     return showDockerSetupDialog(context);
   }
 
-  // --- Dialoghi per Editor Nodi ---
+  // --- NUOVA SEZIONE: Dialoghi per la Gestione delle Variabili ---
 
-// Dentro la classe AppDialogs, nel file app_dialogs.dart
+  /// Mostra un dialogo per creare una nuova variabile globale.
+  static Future<VariableDeclaration?> showAddVariableDialog({
+    required BuildContext context,
+    required VariableScope scope,
+    required Set<String> existingVariableNames,
+  }) {
+    return showDialog<VariableDeclaration>(
+      context: context,
+      builder: (_) => AddVariableDialog(
+        scope: scope,
+        existingVariableNames: existingVariableNames,
+      ),
+    );
+  }
+
+  /// Mostra un dialogo per modificare una variabile globale esistente.
+  static Future<VariableDeclaration?> showEditVariableDialog({
+    required BuildContext context,
+    required VariableDeclaration variableToEdit,
+    required Set<String> existingVariableNames,
+  }) {
+    return showDialog<VariableDeclaration>(
+      context: context,
+      builder: (_) => EditVariableDialog(
+        variableToEdit: variableToEdit,
+        existingVariableNames: existingVariableNames,
+      ),
+    );
+  }
+
+
+  // --- Dialoghi per Editor Nodi ---
 
   static Future<Map<String, dynamic>?> showNodeCreationDialog({
     required BuildContext context,
@@ -118,7 +152,6 @@ class AppDialogs {
   }) {
     switch (kind) {
       case FlowNodeKind.input:
-      // La lista 'variables' che arriva qui è già filtrata, la passiamo direttamente.
         return showInputNodeDialog(
           context,
           availableInputVariables: variables ?? const [],

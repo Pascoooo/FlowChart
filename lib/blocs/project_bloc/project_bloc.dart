@@ -169,7 +169,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     try {
       final newProject = await projectRepository.createProject(name: event.projectName.trim());
 
-      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(1030.0, 50.0));
+      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(1030.0, 50.0), allVariables:  []);
       const mainSignature = FlowchartSignature(returnType: 'int');
 
       final initialFlowchart = Flowchart(

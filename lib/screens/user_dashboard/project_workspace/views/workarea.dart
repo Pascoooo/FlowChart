@@ -9,7 +9,6 @@ import '../../../../config/services/dialog_service/service_dialog.dart';
 import 'flowchart_canvas.dart';
 import 'grid_toggle.dart';
 
-/// The main work area for the flowchart editor, containing the canvas and UI elements.
 class WorkArea extends StatefulWidget {
   final GlobalKey repaintKey;
   final bool showGrid;
@@ -17,19 +16,18 @@ class WorkArea extends StatefulWidget {
   final bool isReadOnly;
   final bool allowDragInReadOnly;
 
-  // Callback per gestire l'aggiunta di variabili per ogni categoria.
-  final VoidCallback? onAddInputVariable;
-  final VoidCallback? onAddOutputVariable;
-  final VoidCallback? onAddLocalVariable;
+  final void Function(VariableScope)? onAddVariable;
+  final void Function(VariableDeclaration)? onEditVariable;
+  final void Function(VariableDeclaration)? onDeleteVariable;
 
   const WorkArea({
     super.key,
     required this.repaintKey,
     required this.showGrid,
     required this.onToggleGrid,
-    this.onAddInputVariable,
-    this.onAddOutputVariable,
-    this.onAddLocalVariable,
+    this.onAddVariable,
+    this.onEditVariable,
+    this.onDeleteVariable,
     this.isReadOnly = false,
     this.allowDragInReadOnly = false,
   });
@@ -67,9 +65,9 @@ class _WorkAreaState extends State<WorkArea>
 
   @override
   Widget build(BuildContext context) {
-    final bool canAddVariables = widget.onAddInputVariable != null &&
-        widget.onAddOutputVariable != null &&
-        widget.onAddLocalVariable != null;
+    final bool canManageVariables = widget.onAddVariable != null &&
+        widget.onEditVariable != null &&
+        widget.onDeleteVariable != null;
 
     return Stack(
       children: [
@@ -80,8 +78,7 @@ class _WorkAreaState extends State<WorkArea>
           allowDragInReadOnly: widget.allowDragInReadOnly,
         ),
 
-        // Mostra il pannello solo se le callback sono disponibili e non è in sola lettura.
-        if (!widget.isReadOnly && canAddVariables)
+        if (!widget.isReadOnly && canManageVariables)
           Positioned(
             top: 24,
             left: 24,
@@ -89,19 +86,17 @@ class _WorkAreaState extends State<WorkArea>
               scale: _buttonAnimation,
               child: FadeTransition(
                 opacity: _buttonAnimation,
-                // Avvolge il pannello in un BlocBuilder per accedere allo stato
                 child: BlocBuilder<FlowchartBloc, FlowchartState>(
                   builder: (context, state) {
-                    // Passa la lista di variabili solo se lo stato è caricato
                     final variables = (state is FlowchartLoaded)
                         ? state.flowchart.variables
                         : <VariableDeclaration>[];
 
                     return _VariablesPanel(
                       variables: variables,
-                      onAddInput: widget.onAddInputVariable!,
-                      onAddOutput: widget.onAddOutputVariable!,
-                      onAddLocal: widget.onAddLocalVariable!,
+                      onAddVariable: widget.onAddVariable!,
+                      onEditVariable: widget.onEditVariable!,
+                      onDeleteVariable: widget.onDeleteVariable!,
                     );
                   },
                 ),
@@ -160,8 +155,7 @@ class _WorkAreaContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    return RepaintBoundary
-      (
+    return RepaintBoundary(
       key: repaintKey,
       child: Container(
         decoration: BoxDecoration(
@@ -184,22 +178,21 @@ class _WorkAreaContent extends StatelessWidget {
 
 class _VariablesPanel extends StatelessWidget {
   final List<VariableDeclaration> variables;
-  final VoidCallback onAddInput;
-  final VoidCallback onAddOutput;
-  final VoidCallback onAddLocal;
+  final void Function(VariableScope) onAddVariable;
+  final void Function(VariableDeclaration) onEditVariable;
+  final void Function(VariableDeclaration) onDeleteVariable;
 
   const _VariablesPanel({
     required this.variables,
-    required this.onAddInput,
-    required this.onAddOutput,
-    required this.onAddLocal,
+    required this.onAddVariable,
+    required this.onEditVariable,
+    required this.onDeleteVariable,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
 
-    // Filtra le variabili per categoria
     final inputVars = variables.where((v) => v.scope == VariableScope.input).toList();
     final outputVars = variables.where((v) => v.scope == VariableScope.output).toList();
     final localVars = variables.where((v) => v.scope == VariableScope.local).toList();
@@ -225,10 +218,7 @@ class _VariablesPanel extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: Text(
-              'Variabili',
-              style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.w600),
-            ),
+            child: Text('Variabili', style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.w600)),
           ),
           Divider(
             style: DividerThemeData(
@@ -237,7 +227,13 @@ class _VariablesPanel extends StatelessWidget {
               decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
             ),
           ),
-          _VariableCategory(title: 'Input', variables: inputVars, onAdd: onAddInput),
+          _VariableCategory(
+            title: 'Input',
+            variables: inputVars,
+            onAdd: () => onAddVariable(VariableScope.input),
+            onEdit: onEditVariable,
+            onDelete: onDeleteVariable,
+          ),
           Divider(
             style: DividerThemeData(
               horizontalMargin: const EdgeInsets.symmetric(vertical: 8),
@@ -245,7 +241,13 @@ class _VariablesPanel extends StatelessWidget {
               decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
             ),
           ),
-          _VariableCategory(title: 'Output', variables: outputVars, onAdd: onAddOutput),
+          _VariableCategory(
+            title: 'Output',
+            variables: outputVars,
+            onAdd: () => onAddVariable(VariableScope.output),
+            onEdit: onEditVariable,
+            onDelete: onDeleteVariable,
+          ),
           Divider(
             style: DividerThemeData(
               horizontalMargin: const EdgeInsets.symmetric(vertical: 8),
@@ -253,7 +255,13 @@ class _VariablesPanel extends StatelessWidget {
               decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
             ),
           ),
-          _VariableCategory(title: 'Di Lavoro', variables: localVars, onAdd: onAddLocal),
+          _VariableCategory(
+            title: 'Di Lavoro',
+            variables: localVars,
+            onAdd: () => onAddVariable(VariableScope.local),
+            onEdit: onEditVariable,
+            onDelete: onDeleteVariable,
+          ),
         ],
       ),
     );
@@ -264,11 +272,15 @@ class _VariableCategory extends StatelessWidget {
   final String title;
   final List<VariableDeclaration> variables;
   final VoidCallback onAdd;
+  final void Function(VariableDeclaration) onEdit;
+  final void Function(VariableDeclaration) onDelete;
 
   const _VariableCategory({
     required this.title,
     required this.variables,
     required this.onAdd,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -282,12 +294,7 @@ class _VariableCategory extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: Text(
-                title,
-                style: theme.typography.bodyStrong?.copyWith(
-                  color: theme.resources.textFillColorSecondary,
-                ),
-              ),
+              child: Text(title, style: theme.typography.bodyStrong?.copyWith(color: theme.resources.textFillColorSecondary)),
             ),
             Button(
               onPressed: onAdd,
@@ -304,16 +311,17 @@ class _VariableCategory extends StatelessWidget {
             padding: const EdgeInsets.only(top: 8.0, left: 4.0, right: 4.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: variables.map((variable) => _VariableDisplay(variable: variable)).toList(),
+              children: variables.map((variable) => _VariableDisplay(
+                variable: variable,
+                onEdit: () => onEdit(variable),
+                onDelete: () => onDelete(variable),
+              )).toList(),
             ),
           )
         else
           Padding(
             padding: const EdgeInsets.only(top: 4.0, left: 4.0, right: 4.0),
-            child: Text(
-              'Nessuna',
-              style: theme.typography.caption?.copyWith(fontStyle: FontStyle.italic),
-            ),
+            child: Text('Nessuna', style: theme.typography.caption?.copyWith(fontStyle: FontStyle.italic)),
           ),
       ],
     );
@@ -322,11 +330,20 @@ class _VariableCategory extends StatelessWidget {
 
 class _VariableDisplay extends StatelessWidget {
   final VariableDeclaration variable;
-  const _VariableDisplay({required this.variable});
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _VariableDisplay({
+    required this.variable,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final flyoutController = FlyoutController();
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3.0),
       child: Row(
@@ -339,18 +356,44 @@ class _VariableDisplay extends StatelessWidget {
             ),
             child: Text(
               variable.dataType,
-              style: theme.typography.caption?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: theme.accentColor,
-              ),
+              style: theme.typography.caption?.copyWith(fontWeight: FontWeight.w600, color: theme.accentColor),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              variable.name,
-              style: theme.typography.body,
-              overflow: TextOverflow.ellipsis,
+            child: Text(variable.name, style: theme.typography.body, overflow: TextOverflow.ellipsis),
+          ),
+          FlyoutTarget(
+            controller: flyoutController,
+            child: IconButton(
+              icon: const Icon(FluentIcons.more_vertical, size: 14),
+              onPressed: () {
+                flyoutController.showFlyout(
+                  placementMode: FlyoutPlacementMode.bottomRight,
+                  builder: (flyoutContext) {
+                    return MenuFlyout(
+                      items: [
+                        MenuFlyoutItem(
+                          leading: const Icon(FluentIcons.edit),
+                          text: const Text('Modifica'),
+                          onPressed: () {
+                            Navigator.pop(flyoutContext);
+                            onEdit();
+                          },
+                        ),
+                        MenuFlyoutItem(
+                          leading: Icon(FluentIcons.delete, color: Colors.red),
+                          text: Text('Elimina', style: TextStyle(color: Colors.red)),
+                          onPressed: () {
+                            Navigator.pop(flyoutContext);
+                            onDelete();
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
             ),
           ),
         ],

@@ -249,233 +249,81 @@ class _NodeDetailsDialog extends StatelessWidget {
   List<Widget> _buildSpecificDetails(BuildContext context, FluentThemeData theme) {
     switch (node.kind) {
       case FlowNodeKind.input:
-      // ... (implementazione invariata)
+      // FIX: Aggiornato per usare 'targetVariables' (List<String>) invece di 'declarations'.
         final inputNode = node as InputNode;
         return [
-          if (inputNode.declarations.isEmpty)
-            _EmptyState(
-              message: 'Nessuna variabile dichiarata in questo nodo.',
-              theme: theme,
-            )
-          else ...[
-            Text(
-              'Variabili Dichiarate',
-              style: theme.typography.caption?.copyWith(
-                color: theme.typography.body?.color?.withOpacity(0.8),
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _BoxedDetail(
-              theme: theme,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: inputNode.declarations.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final variable = entry.value;
-
-                  return Padding(
-                    padding: EdgeInsets.only(
-                        bottom: index < inputNode.declarations.length - 1 ? 12 : 0
-                    ),
-                    child: Row(
-                      children: [
-                        // Type Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.3),
-                            ),
-                          ),
-                          child: Text(
-                            variable.dataType.toUpperCase(),
-                            style: TextStyle(
-                              color: theme.accentColor.defaultBrushFor(theme.brightness),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(width: 12),
-
-                        // Variable Info
-                        Expanded(
-                          child: RichText(
-                            text: TextSpan(
-                              style: theme.typography.body?.copyWith(
-                                fontFamily: 'monospace',
-                                fontSize: 13,
-                                color: theme.typography.body?.color,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: variable.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
+          _TruncatedList(
+            title: 'Variabili in Input',
+            items: inputNode.targetVariables,
+            // La UI ora mostra dei chip, dato che abbiamo solo i nomi.
+            itemBuilder: (item) => _VariableChip(variable: item as String, theme: theme),
+            displayMode: _TruncatedListDisplayMode.wrap,
+            fullListBuilder: (items) => items.cast<String>().join(', '),
+          )
         ];
 
-    // NUOVO: Aggiunto il case per visualizzare i dettagli di AssignmentNode
       case FlowNodeKind.assignment:
         final assignmentNode = node as AssignmentNode;
         return [
-          if (assignmentNode.assignments.isEmpty)
-            _EmptyState(
-              message: 'Nessuna operazione di assegnazione definita.',
-              theme: theme,
-            )
-          else ...[
-            Text(
-              'Operazioni di Assegnazione',
-              style: theme.typography.caption?.copyWith(
-                color: theme.typography.body?.color?.withOpacity(0.8),
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _BoxedDetail(
-              theme: theme,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: assignmentNode.assignments.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final assignment = entry.value;
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: index < assignmentNode.assignments.length - 1 ? 8 : 0,
-                    ),
-                    child: RichText(
-                      text: TextSpan(
-                        style: theme.typography.body?.copyWith(
-                          fontFamily: 'monospace',
-                          fontSize: 13,
-                          color: theme.typography.body?.color,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: assignment.target,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          TextSpan(
-                            text: ' = ${assignment.expression}',
-                            style: TextStyle(
-                              color: theme.typography.body?.color?.withOpacity(0.8),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
+          _TruncatedList(
+            title: 'Operazioni di Assegnazione',
+            items: assignmentNode.assignments,
+            itemBuilder: (item) {
+              final assignment = item as Assignment;
+              return RichText(
+                text: TextSpan(
+                  style: theme.typography.body?.copyWith(fontFamily: 'monospace', fontSize: 13),
+                  children: [
+                    TextSpan(text: assignment.target, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    TextSpan(text: ' = ${assignment.expression}', style: TextStyle(color: theme.typography.body?.color?.withOpacity(0.8))),
+                  ],
+                ),
+              );
+            },
+            fullListBuilder: (items) {
+              return items.map((item) {
+                final assignment = item as Assignment;
+                return '• ${assignment.target} = ${assignment.expression};';
+              }).join('\n');
+            },
+          )
         ];
 
       case FlowNodeKind.output:
-      // ... (implementazione invariata)
         final outputNode = node as OutputNode;
         return [
-          _KeyValueDetail(
-            label: 'Messaggio Template',
-            value: outputNode.template.isNotEmpty ? outputNode.template : '–',
-            theme: theme,
-            isCode: true,
-          ),
-
+          _KeyValueDetail(label: 'Messaggio Template', value: outputNode.template.isNotEmpty ? outputNode.template : '–', theme: theme, isCode: true),
           const SizedBox(height: 20),
-
-          if (outputNode.variables.isEmpty)
-            _EmptyState(
-              message: 'Nessuna variabile specificata per l\'output.',
-              theme: theme,
-            )
-          else ...[
-            Text(
-              'Variabili Utilizzate',
-              style: theme.typography.caption?.copyWith(
-                color: theme.typography.body?.color?.withOpacity(0.8),
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8.0,
-              runSpacing: 8.0,
-              children: outputNode.variables
-                  .map((v) => _VariableChip(variable: v, theme: theme))
-                  .toList(),
-            ),
-          ],
+          // FIX: Aggiornato per leggere 'v.name' dall'oggetto VariableDeclaration.
+          _TruncatedList(
+            title: 'Variabili Utilizzate',
+            items: outputNode.variables,
+            itemBuilder: (item) {
+              final variable = item as VariableDeclaration;
+              return _VariableChip(variable: variable.name, theme: theme);
+            },
+            displayMode: _TruncatedListDisplayMode.wrap,
+            fullListBuilder: (items) {
+              return items.map((item) => (item as VariableDeclaration).name).join(', ');
+            },
+          ),
         ];
 
       case FlowNodeKind.process:
-      // ... (implementazione invariata)
         final processNode = node as ProcessNode;
         return [
-          _KeyValueDetail(
-            label: 'Flowchart Chiamato',
-            value: processNode.flowchartToCall.isNotEmpty
-                ? processNode.flowchartToCall
-                : '–',
-            theme: theme,
-            isMonospace: true,
-          ),
-
+          _KeyValueDetail(label: 'Flowchart Chiamato', value: processNode.flowchartToCall.isNotEmpty ? processNode.flowchartToCall : '–', theme: theme, isMonospace: true),
           const SizedBox(height: 20),
-
-          if (processNode.arguments.isEmpty)
-            _EmptyState(
-              message: 'Nessun argomento passato al flowchart.',
-              theme: theme,
-            )
-          else ...[
-            Text(
-              'Argomenti Passati',
-              style: theme.typography.caption?.copyWith(
-                color: theme.typography.body?.color?.withOpacity(0.8),
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8.0,
-              runSpacing: 8.0,
-              children: processNode.arguments.asMap().entries.map((entry) {
-                final index = entry.key;
-                final arg = entry.value;
-                return _ArgumentChip(
-                  variable: arg,
-                  index: index + 1,
-                  theme: theme,
-                );
-              }).toList(),
-            ),
-          ],
-
+          _TruncatedList(
+            title: 'Argomenti Passati',
+            items: processNode.arguments,
+            itemBuilder: (item) {
+              final index = processNode.arguments.indexOf(item as String);
+              return _ArgumentChip(variable: item, index: index + 1, theme: theme);
+            },
+            displayMode: _TruncatedListDisplayMode.wrap,
+            fullListBuilder: (items) => items.cast<String>().join(', '),
+          ),
           if (processNode.resultTarget != null) ...[
             const SizedBox(height: 20),
             _buildResultTargetInfo(processNode.resultTarget!, theme),
@@ -483,14 +331,11 @@ class _NodeDetailsDialog extends StatelessWidget {
         ];
 
       case FlowNodeKind.decision:
-      // ... (implementazione invariata)
         final decisionNode = node as DecisionNode;
         return [
           _BoxedDetail(
             label: 'Condizione',
-            value: decisionNode.condition.isNotEmpty
-                ? decisionNode.condition
-                : '–',
+            value: decisionNode.condition.isNotEmpty ? decisionNode.condition : '–',
             theme: theme,
             isCode: true,
           ),

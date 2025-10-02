@@ -105,8 +105,8 @@ abstract class FlowNode extends Equatable {
       FlowNodeKind.end => EndNode.fromEntity(entity),
       FlowNodeKind.process => ProcessNode.fromEntity(entity),
       FlowNodeKind.decision => DecisionNode.fromEntity(entity),
-      FlowNodeKind.input => InputNode.fromEntity(entity, allVariables),
-      FlowNodeKind.output => OutputNode.fromEntity(entity),
+      FlowNodeKind.input => InputNode.fromEntity(entity),
+      FlowNodeKind.output => OutputNode.fromEntity(entity, allVariables),
       FlowNodeKind.assignment => AssignmentNode.fromEntity(entity),
     };
   }
@@ -346,11 +346,10 @@ class DecisionNode extends FlowNode {
   }
 }
 
-// MODIFICATO: InputNode è stato semplificato.
 class InputNode extends FlowNode {
-  final List<VariableDeclaration> declarations;
-  // RIMOSSO: La lista di 'assignments' è stata tolta da questo nodo.
-  // final List<Assignment> assignments;
+  // SPIEGAZIONE: Questa non è più una lista di oggetti 'VariableDeclaration',
+  // ma una semplice lista di stringhe. Questo è il riferimento, non la dichiarazione.
+  final List<String> targetVariables;
 
   const InputNode({
     required super.id,
@@ -359,9 +358,7 @@ class InputNode extends FlowNode {
     required super.width,
     required super.height,
     required super.text,
-    this.declarations = const [],
-    // RIMOSSO: 'assignments' rimosso dal costruttore.
-    // this.assignments = const [],
+    this.targetVariables = const [],
     super.metadata,
   }) : super(kind: FlowNodeKind.input);
 
@@ -375,22 +372,16 @@ class InputNode extends FlowNode {
     height: height,
     text: text,
     data: {
-      'targetVariables': declarations.map((d) => d.name).toList(),
-      // RIMOSSO: Serializzazione di 'assignments' tolta.
+      // Salva direttamente la lista di nomi nel JSON.
+      'targetVariables': targetVariables,
     },
     metadata: metadata,
   );
 
-  static InputNode fromEntity(
-      FlowNodeEntity e, List<VariableDeclaration> allVariables) {
+  // SPIEGAZIONE: Il metodo 'fromEntity' ora è molto più semplice.
+  // Non ha più bisogno della lista 'allVariables' perché legge solo i nomi.
+  static InputNode fromEntity(FlowNodeEntity e) {
     final targetNames = (e.data?['targetVariables'] as List?)?.cast<String>() ?? [];
-    final declarations = targetNames
-        .map((name) => allVariables.firstWhere((v) => v.name == name,
-        orElse: () =>
-            VariableDeclaration(name: name, dataType: 'unknown')))
-        .toList();
-
-    // RIMOSSO: Deserializzazione di 'assignments' tolta.
 
     return InputNode(
         id: e.id,
@@ -399,19 +390,18 @@ class InputNode extends FlowNode {
         width: e.width,
         height: e.height,
         text: e.text,
-        declarations: declarations,
+        targetVariables: targetNames,
         metadata: e.metadata);
   }
 
-  // MODIFICATO: 'assignments' rimosso da props e copyWith.
   @override
-  List<Object?> get props => [...super.props, declarations];
+  List<Object?> get props => [...super.props, targetVariables];
 
   InputNode copyWith({
     double? x,
     double? y,
     String? text,
-    List<VariableDeclaration>? declarations,
+    List<String>? targetVariables,
   }) {
     return InputNode(
       id: id,
@@ -420,11 +410,12 @@ class InputNode extends FlowNode {
       width: width,
       height: height,
       text: text ?? this.text,
-      declarations: declarations ?? this.declarations,
+      targetVariables: targetVariables ?? this.targetVariables,
       metadata: metadata,
     );
   }
 }
+
 
 // NUOVO: La classe per il nodo di Assegnazione.
 class AssignmentNode extends FlowNode {
@@ -494,9 +485,10 @@ class AssignmentNode extends FlowNode {
 }
 
 class OutputNode extends FlowNode {
-  // ... (Nessuna modifica qui)
   final String template;
-  final List<String> variables;
+  // FIX: La proprietà 'variables' ora è una lista di oggetti completi.
+  final List<VariableDeclaration> variables;
+
   const OutputNode(
       {required super.id,
         required super.x,
@@ -518,24 +510,40 @@ class OutputNode extends FlowNode {
     width: width,
     height: height,
     text: text,
+    // FIX: Salva solo i NOMI delle variabili nel JSON, per coerenza.
     data: {
       'template': template,
-      'variables': variables,
+      'variables': variables.map((v) => v.name).toList(),
     },
     metadata: metadata,
   );
-  static OutputNode fromEntity(FlowNodeEntity e) => OutputNode(
-    id: e.id,
-    x: e.x,
-    y: e.y,
-    width: e.width,
-    height: e.height,
-    text: e.text,
-    template: e.data?['template'] ?? '',
-    variables:
-    (e.data?['variables'] as List?)?.cast<String>() ?? const [],
-    metadata: e.metadata,
-  );
+
+  // FIX: Il metodo ora accetta 'allVariables' per ricostruire gli oggetti.
+  static OutputNode fromEntity(FlowNodeEntity e, List<VariableDeclaration> allVariables) {
+    // Legge i nomi delle variabili dal JSON
+    final variableNames = (e.data?['variables'] as List?)?.cast<String>() ?? [];
+
+    // Ricostruisce la lista di oggetti VariableDeclaration completi
+    final resolvedVariables = variableNames
+        .map((name) => allVariables.firstWhere(
+          (v) => v.name == name,
+      orElse: () => VariableDeclaration(name: name, dataType: 'unknown'),
+    ))
+        .toList();
+
+    return OutputNode(
+      id: e.id,
+      x: e.x,
+      y: e.y,
+      width: e.width,
+      height: e.height,
+      text: e.text,
+      template: e.data?['template'] ?? '',
+      variables: resolvedVariables, // Usa la lista di oggetti ricostruita
+      metadata: e.metadata,
+    );
+  }
+
   @override
   List<Object?> get props => [...super.props, template, variables];
 
@@ -544,7 +552,7 @@ class OutputNode extends FlowNode {
     double? y,
     String? text,
     String? template,
-    List<String>? variables,
+    List<VariableDeclaration>? variables, // FIX: Tipo aggiornato
   }) {
     return OutputNode(
       id: id,

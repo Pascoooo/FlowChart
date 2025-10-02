@@ -12,6 +12,7 @@ import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
+import '../../../../config/services/dialog_service/service_dialog.dart';
 
 class TopBar extends StatefulWidget {
   final MyProject selectedProject;
@@ -171,7 +172,7 @@ class _AdvancedTopBar extends StatelessWidget {
   final String selectedProjectName;
   final VoidCallback onEdit;
   final VoidCallback onExport;
-  final VoidCallback onStartDebug; // NUOVO
+  final VoidCallback onStartDebug;
   final Animation<double> animation;
   final bool isReadOnly;
   final VoidCallback? onLeave;
@@ -182,24 +183,31 @@ class _AdvancedTopBar extends StatelessWidget {
     required this.selectedProjectName,
     required this.onEdit,
     required this.onExport,
-    required this.onStartDebug, // NUOVO
+    required this.onStartDebug,
     required this.animation,
     this.isReadOnly = false,
     this.onLeave,
   });
 
+  // ✨ METODO CORRETTO ✨
   Future<void> _resetFlowchart(BuildContext context) async {
-    final bool? confirmed = await AppDialogs.showConfirmationDialog(
-        context,
-        title: 'Conferma reset',
-        message:
-        'Sei sicuro di voler resettare il flowchart? Tutti i nodi tranne "Inizio" verranno eliminati.',
-        confirmText: 'Resetta',
-        cancelText: 'Annulla',
-        isDestructive: true
+    // Mostra il nuovo dialogo con le opzioni
+    final ResetChoice? choice = await AppDialogs.showResetOptionsDialog(
+      context,
+      title: 'Scegli il tipo di reset',
+      message: 'Questa azione cancellerà tutti i nodi e le connessioni dal canvas. Vuoi mantenere le variabili dichiarate?',
     );
-    if (confirmed == true && context.mounted) {
-      context.read<FlowchartBloc>().add(const ResetFlowchart());
+
+    // Questa logica era già corretta
+    if (choice != null && context.mounted) {
+      switch (choice) {
+        case ResetChoice.canvasOnly:
+          context.read<FlowchartBloc>().add(const ResetCanvasPreserveVariables());
+          break;
+        case ResetChoice.canvasAndVariables:
+          context.read<FlowchartBloc>().add(const ResetCanvasAndVariables());
+          break;
+      }
     }
   }
 
@@ -281,13 +289,11 @@ class _AdvancedTopBar extends StatelessWidget {
                       return const SizedBox.shrink();
                     }
 
-                    // ===== NUOVA LOGICA DI CONTROLLO =====
                     final bool hasEndNode = flowchartState.flowchart.nodes
                         .any((node) => node.kind == FlowNodeKind.end);
                     final bool isPlayEnabled =
                         state.activeFileId != null && hasEndNode;
 
-                    // Disabilita reset se c'è solo il nodo Start
                     final nodes = flowchartState.flowchart.nodes;
                     final bool hasOnlyStartNode =
                         nodes.length == 1 && nodes.first.kind == FlowNodeKind.start;
@@ -303,7 +309,7 @@ class _AdvancedTopBar extends StatelessWidget {
 
                     return _AnimatedFlowchartActions(
                       animation: animation,
-                      onReset: _resetFlowchart,
+                      onReset: _resetFlowchart, // La chiamata qui è già corretta
                       selectedNodeId: flowchartState.selectedNodeId,
                       isDeletionEnabled: isDeletionEnabled,
                       onDeleteSelected: _deleteSelected,
@@ -311,7 +317,7 @@ class _AdvancedTopBar extends StatelessWidget {
                       activeFileId: state.activeFileId,
                       isPlayEnabled: isPlayEnabled,
                       isResetEnabled: isResetEnabled,
-                      onStartDebug: onStartDebug, // FIX: Passa la callback
+                      onStartDebug: onStartDebug,
                     );
                   },
                 ),
@@ -322,7 +328,6 @@ class _AdvancedTopBar extends StatelessWidget {
     );
   }
 }
-
 class _AnimatedFlowchartActions extends StatelessWidget {
   final bool isDeletionEnabled;
   final Animation<double> animation;
@@ -368,18 +373,17 @@ class _AnimatedFlowchartActions extends StatelessWidget {
       context: context,
       tooltip: 'Resetta flowchart',
       icon: Icons.delete_sweep_rounded,
-      onPressed: (isResetEnabled ?? true) ? () => onReset(context) : null,
-      interval: const Interval(0.7, 1.0),
+      onPressed: isResetEnabled == true ? () => onReset(context) : null,
+      interval: const Interval(0.3, 0.8),
     ));
 
 
-    // FIX: Pulsante Debug aggiornato
     buttons.add(_buildAnimatedButton(
       context: context,
-      tooltip: 'Debug Flowchart',
-      icon: Icons.bug_report,
+      tooltip: 'Avvia debug',
+      icon: Icons.play_arrow_rounded,
       onPressed: isPlayEnabled ? onStartDebug : null,
-      interval: const Interval(0.9, 1.0),
+      interval: const Interval(0.0, 0.5),
     ));
 
     return Row(

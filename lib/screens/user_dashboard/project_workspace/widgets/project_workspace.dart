@@ -50,7 +50,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   late Animation<double> _workareaScaleAnimation;
   late Animation<double> _fadeAnimation;
 
-  // Variabili di stato
   bool _showGrid = true;
   bool _dontShowGridDialogAgain = false;
   bool? _preDebugShowGrid;
@@ -169,7 +168,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     setState(() => _showGrid = !_showGrid);
   }
 
-  // Handler per avviare il debug
   void _handleStartDebug(BuildContext context) async {
     setState(() {
       _preDebugShowGrid = _showGrid;
@@ -199,35 +197,79 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     }
   }
 
-  // Gestione aggiunta variabile usando il contesto che contiene i Bloc (providerCtx)
-  void _handleAddVariable(BuildContext providerCtx, VariableScope scope) async {
-    final flowchartState = providerCtx.read<FlowchartBloc>().state;
+  Future<void> _handleAddVariable(BuildContext blocContext, VariableScope scope) async {
+    final flowchartState = blocContext.read<FlowchartBloc>().state;
+    if (flowchartState is! FlowchartLoaded) return;
 
-    final existing = flowchartState is FlowchartLoaded
-        ? flowchartState.flowchart.variables
-        : <VariableDeclaration>[];
+    final existingNames = flowchartState.flowchart.variables.map((v) => v.name).toSet();
 
     final newVariable = await AppDialogs.showAddVariableDialog(
-      context: providerCtx,
-      existingDeclarations: existing,
-      defaultScope: scope,
+      context: blocContext,  // Use blocContext here too for the dialog
+      scope: scope,
+      existingVariableNames: existingNames,
     );
 
     if (newVariable != null && mounted) {
-      if (flowchartState is FlowchartLoaded) {
-        providerCtx.read<FlowchartBloc>().add(AddGlobalVariable(newVariable));
-      } else {
-        AppDialogs.showInfoDialog(
-          providerCtx,
-          title: 'Flowchart non pronto',
-          message:
-              'La variabile è stata definita ma il flowchart non è ancora disponibile. Riprova quando il flowchart è caricato.',
-          type: DialogType.warning,
-        );
-      }
+      blocContext.read<FlowchartBloc>().add(AddGlobalVariable(newVariable));
     }
   }
 
+  Future<void> _handleEditVariable(BuildContext blocContext, VariableDeclaration variableToEdit) async {
+    final flowchartState = blocContext.read<FlowchartBloc>().state;
+    if (flowchartState is! FlowchartLoaded) return;
+
+    final existingNames = flowchartState.flowchart.variables
+        .where((v) => v.name != variableToEdit.name)
+        .map((v) => v.name)
+        .toSet();
+
+    final updatedVariable = await AppDialogs.showEditVariableDialog(
+      context: blocContext,  // Use blocContext here too
+      variableToEdit: variableToEdit,
+      existingVariableNames: existingNames,
+    );
+
+    if (updatedVariable != null && mounted) {
+      final newVariablesList = flowchartState.flowchart.variables.map((v) {
+        return v.name == variableToEdit.name ? updatedVariable : v;
+      }).toList();
+      blocContext.read<FlowchartBloc>().add(UpdateGlobalVariables(newVariablesList));
+    }
+  }
+
+  Future<void> _handleDeleteVariable(BuildContext blocContext, VariableDeclaration variableToDelete) async {
+    final flowchartState = blocContext.read<FlowchartBloc>().state;
+    if (flowchartState is! FlowchartLoaded) return;
+
+    final confirmed = await AppDialogs.showConfirmationDialog(
+      blocContext,  // Use blocContext here too
+      title: 'Conferma Eliminazione',
+      message: 'Sei sicuro di voler eliminare la variabile "${variableToDelete.name}"? Verrà rimossa da tutti i nodi che la utilizzano.',
+      isDestructive: true,
+    );
+
+    if (confirmed == true && mounted) {
+      final newVariablesList = flowchartState.flowchart.variables
+          .where((v) => v.name != variableToDelete.name)
+          .toList();
+
+      final newNodes = flowchartState.flowchart.nodes.map((node) {
+        if (node is InputNode) {
+          return node.copyWith(targetVariables: node.targetVariables.where((name) => name != variableToDelete.name).toList());
+        }
+        if (node is OutputNode) {
+          return node.copyWith(variables: node.variables.where((v) => v.name != variableToDelete.name).toList());
+        }
+        if (node is AssignmentNode) {
+          return node.copyWith(assignments: node.assignments.where((a) => a.target != variableToDelete.name).toList());
+        }
+        return node;
+      }).toList();
+
+      final newFlowchart = flowchartState.flowchart.copyWith(variables: newVariablesList, nodes: newNodes);
+      blocContext.read<FlowchartBloc>().add(UpdateFlowchart(newFlowchart));
+    }
+  }
 
   @override
   Widget build(BuildContext outerContext) {
@@ -235,9 +277,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       padding: EdgeInsets.zero,
       content: MultiBlocProvider(
         providers: [
-          BlocProvider<FlowchartBloc>(
-            create: (context) => FlowchartBloc(),
-          ),
+          BlocProvider<FlowchartBloc>(create: (context) => FlowchartBloc()),
           BlocProvider<FileSystemBloc>(
             key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
             create: (context) => FileSystemBloc(
@@ -247,7 +287,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
         ],
         child: MultiBlocListener(
           listeners: [
-            // Listener per la logica di DEBUG (avanzamento step e uscita)
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (prev, curr) {
                 if (prev is FlowchartLoaded && curr is FlowchartLoaded) {
@@ -277,14 +316,19 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
               },
             ),
-            // Listener per l'EXPORT su Google Drive
             BlocListener<AuthenticationBloc, AuthenticationState>(
               listenWhen: (p, c) => p.driveExportStatus != c.driveExportStatus,
               listener: (context, state) {
-                // ... (Logica Invariata)
+                if (state.driveExportStatus == DriveExportStatus.success) {
+                  BannerService.showSuccess(context, "Diagramma esportato con successo su Google Drive!");
+                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
+                } else if (state.driveExportStatus == DriveExportStatus.failure) {
+                  BannerService.showError(context, state.errorMessage ?? "Esportazione fallita.");
+                  context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
+                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
+                }
               },
             ),
-            // Listener per l'AUTOSAVE su RTDB
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (previous, current) {
                 if (previous is FlowchartLoaded && current is FlowchartLoaded) {
@@ -311,7 +355,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
               },
             ),
-            // FIX: Listener per FileSystemBloc UNIFICATO e CORRETTO
             BlocListener<FileSystemBloc, FileSystemState>(
               listener: (context, state) async {
                 if (state is FileSystemError) {
@@ -320,7 +363,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
 
                 if (state is FileSystemLoaded) {
-                  // Gestisce il cambio di file attivo e il caricamento iniziale
                   if (_currentFileId != state.activeFileId) {
                     _currentFileId = state.activeFileId;
                     await _rtdbSubscription?.cancel();
@@ -365,11 +407,10 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
             builder: (ctx, fcState) {
               if (fcState is FlowchartLoaded && fcState.isDebugMode) {
                 return ProgressRing();
-
                   //DebugModeView(
-                  //workareaKey: _workareaKey,
-                 // showGrid: _showGrid,
-                 // onToggleGrid: _toggleGrid,
+                //workareaKey: _workareaKey,
+                //showGrid: _showGrid,
+              //onToggleGrid: _toggleGrid,
                 //);
               }
               return AnimatedBuilder(
@@ -389,6 +430,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                     toggleGrid: _toggleGrid,
                     onStartDebug: () => _handleStartDebug(innerContext),
                     onAddVariable: (scope) => _handleAddVariable(innerContext, scope),
+                    onEditVariable: (variable) => _handleEditVariable(innerContext, variable),
+                    onDeleteVariable: (variable) => _handleDeleteVariable(innerContext, variable),
                     isReadOnly: widget.isReadOnly,
                     onLeave: widget.onLeave,
                   );
@@ -416,7 +459,9 @@ class _WorkspaceLayout extends StatelessWidget {
   final bool showGrid;
   final VoidCallback toggleGrid;
   final VoidCallback onStartDebug;
-  final void Function(VariableScope) onAddVariable; // NUOVO
+  final void Function(VariableScope) onAddVariable;
+  final void Function(VariableDeclaration) onEditVariable;
+  final void Function(VariableDeclaration) onDeleteVariable;
   final bool isReadOnly;
   final VoidCallback? onLeave;
 
@@ -434,6 +479,8 @@ class _WorkspaceLayout extends StatelessWidget {
     required this.toggleGrid,
     required this.onStartDebug,
     required this.onAddVariable,
+    required this.onEditVariable,
+    required this.onDeleteVariable,
     required this.isReadOnly,
     this.onLeave,
   });
@@ -481,10 +528,9 @@ class _WorkspaceLayout extends StatelessWidget {
                           repaintKey: workareaKey,
                           showGrid: showGrid,
                           onToggleGrid: toggleGrid,
-                          onAddInputVariable: () => onAddVariable(VariableScope.input),
-                          onAddOutputVariable: () => onAddVariable(VariableScope.output),
-                          onAddLocalVariable: () => onAddVariable(VariableScope.local),
-                          allowDragInReadOnly: true,
+                          onAddVariable: onAddVariable,
+                          onEditVariable: onEditVariable,
+                          onDeleteVariable: onDeleteVariable,
                           isReadOnly: isReadOnly,
                         ),
                       ),

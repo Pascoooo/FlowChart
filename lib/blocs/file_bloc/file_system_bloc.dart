@@ -20,7 +20,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<OpenFile>(_onOpenFile);
     on<DeleteFile>(_onDeleteFile);
     on<RenameFile>(_onRenameFile);
-
     on<StartDebugSession>(_onStartDebugSession);
     on<ComputeDebugStep>(_onComputeDebugStep);
     on<EndDebugSession>(_onEndDebugSession);
@@ -95,7 +94,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       final files = await projectRepository.getProjectFiles(projectId: event.projectId);
       if (files.isEmpty) {
         final emptyFlowchart = FlowchartLoaded.empty(fileName: 'main').flowchart;
-        final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(120.0, 120.0));
+        final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(1030.0, 50.0), allVariables: []);
         final initialFlowchart = emptyFlowchart.copyWith(nodes: [startNode]);
         final initialContent = jsonEncode(initialFlowchart.toEntity().toDocument());
 
@@ -133,7 +132,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     emit(currentState.copyWith(isLoading: true));
     try {
       final emptyFlowchart = FlowchartLoaded.empty(fileName: fileName).flowchart;
-      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(1030.0, 50.0));
+      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(1030.0, 50.0) ,allVariables: []);
       final initialFlowchart = emptyFlowchart.copyWith(nodes: [startNode]);
       final initialContent = jsonEncode(initialFlowchart.toEntity().toDocument());
 

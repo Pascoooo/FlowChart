@@ -124,3 +124,25 @@ class FlowchartLoaded extends FlowchartState {
   @override
   List<Object?> get props => [flowchart, selectedNodeId, isDebugMode, debugPath, debugIndex];
 }
+
+// In flowchart_state.dart
+
+// Questo stato "comando" non sostituisce FlowchartLoaded,
+// ma viene usato da un BlocListener per triggerare un'azione.
+class ShowNodeCreationDialog extends FlowchartState {
+  final FlowNodeKind kind;
+  final String fromNodeId;
+  final String? fromPort;
+  final List<VariableDeclaration> availableVariables;
+  // Aggiungi altri dati se necessario per altri dialoghi
+
+  const ShowNodeCreationDialog({
+    required this.kind,
+    required this.fromNodeId,
+    this.fromPort,
+    required this.availableVariables,
+  });
+
+  @override
+  List<Object?> get props => [kind, fromNodeId, fromPort, availableVariables];
+}

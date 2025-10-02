@@ -1,5 +1,3 @@
-// Questo file non ha richiesto modifiche.
-
 import 'package:equatable/equatable.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter/material.dart';
@@ -105,16 +103,29 @@ class AddGlobalVariable extends FlowchartEvent {
   List<Object> get props => [variable];
 }
 
+class UpdateGlobalVariables extends FlowchartEvent {
+  final List<VariableDeclaration> variables;
+  const UpdateGlobalVariables(this.variables);
+  @override
+  List<Object> get props => [variables];
+}
+
+// NUOVO: L'evento che mancava.
+class UpdateFlowchart extends FlowchartEvent {
+  final Flowchart flowchart;
+
+  const UpdateFlowchart(this.flowchart);
+
+  @override
+  List<Object> get props => [flowchart];
+}
+
 class Undo extends FlowchartEvent {
   const Undo();
 }
 
 class Redo extends FlowchartEvent {
   const Redo();
-}
-
-class ResetFlowchart extends FlowchartEvent {
-  const ResetFlowchart();
 }
 
 class ClearHistory extends FlowchartEvent {
@@ -135,4 +146,31 @@ class DebugPrevNode extends FlowchartEvent {
 
 class DebugExit extends FlowchartEvent {
   const DebugExit();
+}
+
+// In 'flowchart_event.dart'
+
+// ... (altri eventi)
+
+/// Resetta la canvas al solo nodo Start, CANCELLANDO anche tutte le variabili.
+class ResetCanvasAndVariables extends FlowchartEvent {
+  const ResetCanvasAndVariables();
+}
+
+/// Resetta la canvas al solo nodo Start, ma MANTENENDO le variabili esistenti.
+class ResetCanvasPreserveVariables extends FlowchartEvent {
+  const ResetCanvasPreserveVariables();
+}
+
+
+// In flowchart_event.dart
+
+class AssignmentNodeCreationRequested extends FlowchartEvent {
+  final String fromNodeId;
+  final String? fromPort;
+
+  const AssignmentNodeCreationRequested({required this.fromNodeId, this.fromPort});
+
+  @override
+  List<Object?> get props => [fromNodeId, fromPort];
 }
