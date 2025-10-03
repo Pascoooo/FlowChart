@@ -26,8 +26,13 @@ class FlowchartLoaded extends FlowchartState {
   final Flowchart flowchart;
   final String? selectedNodeId;
   final bool isDebugMode;
-  final List<String> debugPath; // lista di nodeId in ordine di visita
-  final int debugIndex; // indice del nodo corrente dentro debugPath
+  final List<String> debugPath;
+  final int debugIndex;
+
+  // ✨ NUOVE PROPRIETÀ PER LA MODALITÀ CONNETTORE
+  final bool isConnectorModeActive;
+  final String? connectorSourceNodeId; // L'ID del nodo da cui è partita l'azione
+  final Set<String> selectedConnectorNodeIds; // Gli ID dei nodi foglia selezionati
 
   static const _uuid = Uuid();
 
@@ -37,9 +42,15 @@ class FlowchartLoaded extends FlowchartState {
     this.isDebugMode = false,
     this.debugPath = const [],
     this.debugIndex = 0,
+    // ✨ INIZIALIZZA LE NUOVE PROPRIETÀ
+    this.isConnectorModeActive = false,
+    this.connectorSourceNodeId,
+    this.selectedConnectorNodeIds = const {},
   });
 
   factory FlowchartLoaded.empty({String? fileName}) {
+    // Nota: la factory 'empty' non ha bisogno delle nuove proprietà
+    // perché i loro valori di default sono già corretti.
     return FlowchartLoaded(
       flowchart: Flowchart(
         flowchartId: _uuid.v4(),
@@ -63,6 +74,11 @@ class FlowchartLoaded extends FlowchartState {
 
   List<FlowchartEdge> getOutgoingEdges(String nodeId) {
     return flowchart.edges.where((edge) => edge.from == nodeId).toList();
+  }
+
+
+  bool isLeafNode(String nodeId) {
+    return !flowchart.edges.any((edge) => edge.from == nodeId);
   }
 
   bool canAddOutgoingConnection(String nodeId) {
@@ -106,14 +122,26 @@ class FlowchartLoaded extends FlowchartState {
     bool? isDebugMode,
     List<String>? debugPath,
     int? debugIndex,
+    // ✨ GESTISCI LE NUOVE PROPRIETÀ NEL copyWith
+    bool? isConnectorModeActive,
+    String? connectorSourceNodeId,
+    Set<String>? selectedConnectorNodeIds,
+    bool clearConnectorSource = false, // Utility per resettare il sourceId a null
   }) {
     return FlowchartLoaded(
       flowchart: flowchart ?? this.flowchart,
       selectedNodeId:
-          clearSelection ? null : (selectedNodeId ?? this.selectedNodeId),
+      clearSelection ? null : (selectedNodeId ?? this.selectedNodeId),
       isDebugMode: isDebugMode ?? this.isDebugMode,
       debugPath: debugPath ?? this.debugPath,
       debugIndex: debugIndex ?? this.debugIndex,
+      isConnectorModeActive:
+      isConnectorModeActive ?? this.isConnectorModeActive,
+      connectorSourceNodeId: clearConnectorSource
+          ? null
+          : (connectorSourceNodeId ?? this.connectorSourceNodeId),
+      selectedConnectorNodeIds:
+      selectedConnectorNodeIds ?? this.selectedConnectorNodeIds,
     );
   }
 
@@ -121,20 +149,25 @@ class FlowchartLoaded extends FlowchartState {
     return copyWith(clearSelection: true);
   }
 
+  // ✨ AGGIORNA LE PROPS DI EQUATABLE
   @override
-  List<Object?> get props => [flowchart, selectedNodeId, isDebugMode, debugPath, debugIndex];
+  List<Object?> get props => [
+    flowchart,
+    selectedNodeId,
+    isDebugMode,
+    debugPath,
+    debugIndex,
+    isConnectorModeActive,
+    connectorSourceNodeId,
+    selectedConnectorNodeIds,
+  ];
 }
 
-// In flowchart_state.dart
-
-// Questo stato "comando" non sostituisce FlowchartLoaded,
-// ma viene usato da un BlocListener per triggerare un'azione.
 class ShowNodeCreationDialog extends FlowchartState {
   final FlowNodeKind kind;
   final String fromNodeId;
   final String? fromPort;
   final List<VariableDeclaration> availableVariables;
-  // Aggiungi altri dati se necessario per altri dialoghi
 
   const ShowNodeCreationDialog({
     required this.kind,

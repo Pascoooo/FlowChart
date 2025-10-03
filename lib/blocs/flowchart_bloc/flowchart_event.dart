@@ -110,7 +110,6 @@ class UpdateGlobalVariables extends FlowchartEvent {
   List<Object> get props => [variables];
 }
 
-// NUOVO: L'evento che mancava.
 class UpdateFlowchart extends FlowchartEvent {
   final Flowchart flowchart;
 
@@ -148,22 +147,13 @@ class DebugExit extends FlowchartEvent {
   const DebugExit();
 }
 
-// In 'flowchart_event.dart'
-
-// ... (altri eventi)
-
-/// Resetta la canvas al solo nodo Start, CANCELLANDO anche tutte le variabili.
 class ResetCanvasAndVariables extends FlowchartEvent {
   const ResetCanvasAndVariables();
 }
 
-/// Resetta la canvas al solo nodo Start, ma MANTENENDO le variabili esistenti.
 class ResetCanvasPreserveVariables extends FlowchartEvent {
   const ResetCanvasPreserveVariables();
 }
-
-
-// In flowchart_event.dart
 
 class AssignmentNodeCreationRequested extends FlowchartEvent {
   final String fromNodeId;
@@ -173,4 +163,45 @@ class AssignmentNodeCreationRequested extends FlowchartEvent {
 
   @override
   List<Object?> get props => [fromNodeId, fromPort];
+}
+
+// ===============================================
+// ✨ EVENTI PER LA NUOVA FUNZIONALITÀ CONNETTORE ✨
+// ===============================================
+
+/// L'utente ha cliccato "Connettore" e vuole iniziare la selezione dei nodi foglia.
+class StartConnectorMode extends FlowchartEvent {
+  final String fromNodeId;
+  const StartConnectorMode(this.fromNodeId);
+  @override
+  List<Object> get props => [fromNodeId];
+}
+
+/// L'utente, in modalità connettore, clicca su un nodo per selezionarlo/deselezionarlo.
+class ToggleConnectorNodeSelection extends FlowchartEvent {
+  final String nodeId;
+  const ToggleConnectorNodeSelection(this.nodeId);
+  @override
+  List<Object> get props => [nodeId];
+}
+
+/// L'utente ha finito di selezionare e ora vuole creare il nodo di destinazione.
+class ApplyConnectorAndCreateNode extends FlowchartEvent {
+  final FlowNodeKind kind;
+  final BoxConstraints canvasConstraints;
+  final Map<String, dynamic>? initialData;
+
+  const ApplyConnectorAndCreateNode({
+    required this.kind,
+    required this.canvasConstraints,
+    this.initialData,
+  });
+
+  @override
+  List<Object?> get props => [kind, canvasConstraints, initialData];
+}
+
+/// L'utente vuole annullare l'operazione del connettore.
+class CancelConnectorMode extends FlowchartEvent {
+  const CancelConnectorMode();
 }

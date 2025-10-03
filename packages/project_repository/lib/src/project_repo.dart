@@ -79,4 +79,10 @@ abstract class ProjectRepo {
 
   /// Fornisce uno Stream per osservare i cambiamenti delle variabili in tempo reale.
   Stream<Map<String, dynamic>> watchDebugVariables({required String projectId});
+
+  /// Aggiorna le variabili di debug con nuovi valori.
+  Future<void> updateDebugVariables({required String projectId, required Map<String, dynamic> variables});
+
+  /// Pulisce le variabili di debug dalla sessione.
+  Future<void> clearDebugVariables({required String projectId});
 }

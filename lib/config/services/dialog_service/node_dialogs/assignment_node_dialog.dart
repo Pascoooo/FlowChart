@@ -32,14 +32,6 @@ class Token {
   bool get isNumber => type == TokenType.number;
 }
 
-class ExpressionValidator {
-  // ... (codice invariato, non più usato qui)
-}
-
-class ValidationResult {
-  // ... (codice invariato, non più usato qui)
-}
-
 
 // ============================================================================
 // DIALOG
@@ -76,7 +68,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
     if (_attemptedSubmit) _validateForm();
   }
 
-  // MODIFICATO: Validazione molto più semplice
+
   bool _validateForm() {
     bool isFormValid = true;
     for (final assignment in _assignments) {
@@ -115,7 +107,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
         // Il motore di debug interpreterà "?" come "fermati e chiedi un input".
         return Assignment(
           target: a.target!,
-          expression: '?', // Segnaposto per l'input a runtime
+          expression: '?',
         ).toMap();
       }).toList(),
     });

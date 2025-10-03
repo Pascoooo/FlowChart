@@ -31,9 +31,6 @@ class FirestoreStorageService {
   Future<MyProject> createProject({required String name}) async {
     final projectId = const Uuid().v4();
     final now = DateTime.now();
-
-    // Ora possiamo creare l'entità senza specificare `lastVisibilityChange`.
-    // Il campo sarà nullo e `toDocument` non lo salverà nel database.
     final newProjectEntity = MyProjectEntity(
       projectId: projectId,
       name: name,
@@ -231,32 +228,22 @@ class FirestoreStorageService {
   Future<Map<String, dynamic>?> getPublicProjectWithFiles(String projectId) async {
     final cleanId = projectId.trim();
     if (cleanId.isEmpty) return null;
-
     try {
       final publicProjectRef = FirebaseFirestore.instance.collection('publicProjects').doc(cleanId);
-
-      // 1. Leggi il documento del progetto principale
       final projectDoc = await publicProjectRef.get();
       if (!projectDoc.exists || projectDoc.data()?['isPublic'] != true) {
-        // Se il progetto non esiste o non è esplicitamente pubblico, non restituire nulla
         return null;
       }
-
-      // 2. Leggi tutti i documenti nella sottocollezione 'files'
       final filesSnapshot = await publicProjectRef.collection('files').get();
-
-      // 3. Converti i documenti Firestore nei nostri modelli Dart
       final project = MyProject.fromEntity(MyProjectEntity.fromDocument(projectDoc.data()!));
       final files = filesSnapshot.docs
           .map((doc) => MyFile.fromEntity(MyFileEntity.fromDocument(doc.data())))
           .toList();
-
-      // 4. Restituisci una mappa contenente sia il progetto che i file
       return {'project': project, 'files': files};
 
     } catch (e) {
       print('Errore in getPublicProjectWithFiles: $e');
-      rethrow; // Rilancia l'errore per essere gestito dal BLoC
+      rethrow;
     }
   }
 }

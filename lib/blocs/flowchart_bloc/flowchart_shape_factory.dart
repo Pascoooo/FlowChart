@@ -1,3 +1,5 @@
+// flow_node_factory.dart
+
 import 'dart:ui';
 import 'package:uuid/uuid.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
@@ -39,7 +41,8 @@ class FlowNodeFactory {
         height: 60.0,
         text: text,
         flowchartToCall: initialData?['flowchartToCall'] as String? ?? '',
-        arguments: (initialData?['arguments'] as List?)?.cast<String>() ?? [],
+        arguments:
+        (initialData?['arguments'] as List?)?.cast<String>() ?? [],
         resultTarget: initialData?['resultTarget'] as String?,
       ),
       FlowNodeKind.decision => DecisionNode(
@@ -52,27 +55,21 @@ class FlowNodeFactory {
         condition: initialData?['condition'] as String? ?? '',
       ),
 
-    // FIX: Logica aggiornata per creare il nuovo tipo di InputNode.
-      FlowNodeKind.input => () {
-        // 1. Legge la lista di dati grezzi (List<Map>) dal dialogo.
-        final declarationsData = (initialData?['declarations'] as List?) ?? [];
+    // CORRETTO: La logica ora si aspetta una semplice List<String> dal dialogo,
+    // rendendo il codice più semplice e robusto.
+      FlowNodeKind.input => InputNode(
+        id: _uuid.v4(),
+        x: position.dx,
+        y: position.dy,
+        width: 150.0,
+        height: 60.0,
+        text: text,
+        targetVariables:
+        (initialData?['targetVariables'] as List?)?.cast<String>() ?? [],
+      ),
 
-        // 2. Estrae solo i nomi per creare la List<String> richiesta dal modello.
-        final targetNames = declarationsData
-            .map((d) => (d as Map<String, dynamic>)['name'] as String)
-            .toList();
-
-        return InputNode(
-          id: _uuid.v4(),
-          x: position.dx,
-          y: position.dy,
-          width: 150.0,
-          height: 60.0,
-          text: text,
-          targetVariables: targetNames,
-        );
-      }(),
-
+    // CORRETTO: La logica qui era già giusta. Legge i nomi delle variabili
+    // e li "risolve" cercando l'oggetto completo nella lista globale.
       FlowNodeKind.output => () {
         final variableNames =
             (initialData?['variables'] as List?)?.cast<String>() ?? [];

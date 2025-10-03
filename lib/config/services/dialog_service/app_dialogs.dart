@@ -17,7 +17,6 @@ import 'node_dialogs/info_node_dialog.dart' as node_info;
 import 'node_dialogs/input_node_dialog.dart';
 import 'node_dialogs/output_node_dialog.dart';
 import 'node_dialogs/process_node_dialog.dart';
-import 'docker_dialog.dart';
 import 'node_dialogs/assignment_node_dialog.dart';
 
 class AppDialogs {
@@ -97,18 +96,6 @@ class AppDialogs {
     );
   }
 
-
-
-  // --- Dialoghi per Setup Docker ---
-  static  Future<void> showDockerInfoDialog(
-      BuildContext context, {
-        DialogType type = DialogType.info,
-        String closeText = 'Ho capito',
-      }) {
-    return showDockerSetupDialog(context);
-  }
-
-  // --- NUOVA SEZIONE: Dialoghi per la Gestione delle Variabili ---
 
   /// Mostra un dialogo per creare una nuova variabile globale.
   static Future<VariableDeclaration?> showAddVariableDialog({

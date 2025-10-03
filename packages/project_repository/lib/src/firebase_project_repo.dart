@@ -231,7 +231,9 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<void> startDebugSession({required String projectId, required Flowchart flowchart}) async {
-    await _session.initializeDebugSession(projectId, {});
+    // Inizializza con una mappa VUOTA - le variabili verranno aggiunte solo quando incontrate
+    final Map<String, dynamic> initialVariables = {};
+    await _session.initializeDebugSession(projectId, initialVariables);
   }
 
   @override
@@ -245,7 +247,66 @@ class FirebaseProjectRepo implements ProjectRepo {
   }
 
   @override
-  Future<void> advanceDebugStep({required String projectId, required FlowNode? currentNode}) async {
+  Future<void> updateDebugVariables({required String projectId, required Map<String, dynamic> variables}) async {
+    await _session.updateDebugVariables(projectId, variables);
+  }
 
+  @override
+  Future<void> clearDebugVariables({required String projectId}) async {
+    await _session.clearDebugSession(projectId);
+  }
+
+  @override
+  Future<void> advanceDebugStep({required String projectId, required FlowNode? currentNode}) async {
+    if (currentNode == null) return;
+
+    // Ottieni le variabili correnti
+    final currentVariables = await _session.getCurrentDebugVariables(projectId);
+    final updatedVariables = Map<String, dynamic>.from(currentVariables);
+
+    // Esegui la logica del nodo e aggiorna le variabili
+    if (currentNode is InputNode) {
+      // Per i nodi di input, non facciamo nulla automaticamente
+      // L'utente deve fornire i valori manualmente
+    } else if (currentNode is OutputNode) {
+      // Per i nodi di output, non modifichiamo le variabili
+    } else if (currentNode is AssignmentNode) {
+      // Esegui tutte le assegnazioni
+      for (final assignment in currentNode.assignments) {
+        try {
+          final value = _evaluateExpression(assignment.expression, updatedVariables);
+          updatedVariables[assignment.target] = value;
+        } catch (e) {
+          // Se l'espressione non può essere valutata, mantieni il valore corrente
+          print('Errore valutazione espressione: $e');
+        }
+      }
+    } else if (currentNode is DecisionNode) {
+      // Per i nodi di decisione, valutiamo la condizione ma non modifichiamo variabili
+    }
+
+    // Aggiorna le variabili nel database
+    await _session.updateDebugVariables(projectId, updatedVariables);
+  }
+
+  /// Valuta un'espressione matematica/logica usando le variabili correnti
+  dynamic _evaluateExpression(String expression, Map<String, dynamic> variables) {
+    try {
+      // Sostituisci le variabili nell'espressione
+      String processedExpression = expression;
+      variables.forEach((key, value) {
+        // Sostituisci il nome della variabile con il suo valore
+        processedExpression = processedExpression.replaceAll(key, value.toString());
+      });
+
+      // Usa math_expressions per valutare l'espressione con le nuove API
+      final parser = GrammarParser();
+      final exp = parser.parse(processedExpression);
+      final evaluator = RealEvaluator();
+      return evaluator.evaluate(exp);
+    } catch (e) {
+      // Se la valutazione fallisce, ritorna l'espressione originale
+      return expression;
+    }
   }
 }

@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:flutter/widgets.dart' show BoxConstraints; // aggiunto per BoxConstraints
 import '../../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../../blocs/auth_bloc/authentication_state.dart';
@@ -22,6 +23,7 @@ import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/export_service.dart';
 import '../../../settings/widgets/settings_provider.dart';
+import '../views/debug_mode_view.dart';
 import '../views/workarea.dart';
 import '../../../../config/services/dialog_service/service_dialog.dart';
 
@@ -290,17 +292,25 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (prev, curr) {
                 if (prev is FlowchartLoaded && curr is FlowchartLoaded) {
-                  return prev.isDebugMode != curr.isDebugMode || prev.debugIndex != curr.debugIndex;
+                  return prev.isDebugMode != curr.isDebugMode ||
+                         prev.debugIndex != curr.debugIndex ||
+                         prev.selectedNodeId != curr.selectedNodeId;
                 }
                 return false;
               },
               listener: (context, state) {
                 if (state is! FlowchartLoaded) return;
                 final fileSystemBloc = context.read<FileSystemBloc>();
+                final projectRepo = context.read<ProjectBloc>().projectRepository;
                 final flowchart = state.flowchart;
 
                 if (!state.isDebugMode) {
+                  // Uscita dalla modalità debug: ripristina griglia e pulisci variabili
                   fileSystemBloc.add(EndDebugSession(projectId: flowchart.flowchartId));
+
+                  // Pulisci le variabili di debug dal repository
+                  projectRepo.clearDebugVariables(projectId: flowchart.flowchartId);
+
                   if (_preDebugShowGrid != null) {
                     setState(() {
                       _showGrid = _preDebugShowGrid!;
@@ -308,6 +318,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                     });
                   }
                 } else {
+                  // Durante la modalità debug: aggiorna lo step corrente
                   fileSystemBloc.add(ComputeDebugStep(
                     index: state.debugIndex,
                     debugPath: state.debugPath,
@@ -402,16 +413,58 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
               },
             ),
+            BlocListener<FlowchartBloc, FlowchartState>(
+              listenWhen: (prev, curr) => curr is ShowNodeCreationDialog,
+              listener: (context, state) async {
+                if (state is ShowNodeCreationDialog) {
+                  // 1) Apri dialogo specifico per il tipo di nodo
+                  final data = await AppDialogs.showNodeCreationDialog(
+                    context: context,
+                    kind: state.kind,
+                    variables: state.availableVariables,
+                  );
+                  if (data == null || !mounted) return;
+
+                  // 2) Recupera dimensioni della WorkArea per costruire i BoxConstraints
+                  final ctx = _workareaKey.currentContext;
+                  BoxConstraints canvasConstraints;
+                  if (ctx != null) {
+                    final renderObject = ctx.findRenderObject();
+                    if (renderObject is RenderBox && renderObject.hasSize) {
+                      final size = renderObject.size;
+                      canvasConstraints = BoxConstraints.tightFor(
+                        width: size.width,
+                        height: size.height,
+                      );
+                    } else {
+                      final size = MediaQuery.sizeOf(context);
+                      canvasConstraints = BoxConstraints.loose(size);
+                    }
+                  } else {
+                    final size = MediaQuery.sizeOf(context);
+                    canvasConstraints = BoxConstraints.loose(size);
+                  }
+
+                  // 3) Invia AddNode con i constraints per calcolo posizione
+                  context.read<FlowchartBloc>().add(AddNode(
+                        kind: state.kind,
+                        fromNodeId: state.fromNodeId,
+                        fromPort: state.fromPort,
+                        canvasConstraints: canvasConstraints,
+                        initialData: data,
+                      ));
+                }
+              },
+            ),
           ],
           child: BlocBuilder<FlowchartBloc, FlowchartState>(
             builder: (ctx, fcState) {
               if (fcState is FlowchartLoaded && fcState.isDebugMode) {
-                return ProgressRing();
-                  //DebugModeView(
-                //workareaKey: _workareaKey,
-                //showGrid: _showGrid,
-              //onToggleGrid: _toggleGrid,
-                //);
+                return DebugModeView(
+                  workareaKey: _workareaKey,
+                  showGrid: _showGrid,
+                  onToggleGrid: _toggleGrid,
+                );
               }
               return AnimatedBuilder(
                 animation: _slideInController,

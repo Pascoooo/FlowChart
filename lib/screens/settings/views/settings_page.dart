@@ -451,14 +451,12 @@ class IntegrationSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final settingsProvider = context.watch<SettingsProvider>();
     final isDriveConnected = context.select<AuthenticationBloc, bool>((bloc) => bloc.state.user.driveConnected);
     final isLoading = context.select<AuthenticationBloc, bool>((bloc) => bloc.state.isLoading);
 
-    final executorController = TextEditingController(text: settingsProvider.localExecutorPort);
 
     return SettingsSection(
-      title: 'Integrazioni & Esecuzione',
+      title: 'Integrazioni',
       status: _StatusLabel(isConnected: isDriveConnected),
       children: [
         // Tile di Google Drive (invariata)
@@ -475,88 +473,11 @@ class IntegrationSettings extends StatelessWidget {
             ),
           ),
         ),
-
-        // MODIFICA: Logica di visualizzazione progressiva per Docker
-        if (!settingsProvider.hasClickedDockerInfo)
-        // Stato Iniziale: Mostra solo la guida
-          SettingsTile(
-            title: 'Esecutore Docker Locale',
-            subtitle: 'Esegui il codice C direttamente sul tuo PC',
-            icon: FontAwesomeIcons.docker,
-            onTap: () => AppDialogs.showDockerInfoDialog(context),
-            trailing: HyperlinkButton(
-              onPressed: () => AppDialogs.showDockerInfoDialog(context),
-              child: const Text('Scopri come'),
-            ),
-          )
-        else ...[
-          // Stato Avanzato: Mostra i controlli
-          // TILE 1: Attivazione
-          SettingsTile(
-            title: 'Abilita Esecutore Locale',
-            subtitle: settingsProvider.useLocalExecutor ? 'Attivo' : 'Disabilitato',
-            icon: FontAwesomeIcons.docker,
-            onTap: () => settingsProvider.updateUseLocalExecutor(!settingsProvider.useLocalExecutor),
-            trailing: ToggleSwitch(
-              checked: settingsProvider.useLocalExecutor,
-              onChanged: (value) => settingsProvider.updateUseLocalExecutor(value),
-            ),
-          ),
-
-          // TILE 2: Configurazione (visibile solo se la levetta è ON)
-          if (settingsProvider.useLocalExecutor)
-            SettingsTile(
-              title: 'Configurazione Esecutore',
-              subtitle: 'Indirizzo: ${settingsProvider.localExecutorUrl}',
-              icon: FontAwesomeIcons.networkWired,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Porta:', style: theme.typography.caption),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 70,
-                    child: TextBox(
-                      controller: executorController,
-                      placeholder: '8080',
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      onSubmitted: (value) {
-                        settingsProvider.updateLocalExecutorPort(value);
-                        BannerService.showSuccess(context, "Porta salvata!");
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Hint su una sola riga (nessun a capo)
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 260),
-                    child: Text(
-                      'Premi Invio per aggiornare la porta',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.typography.caption,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Tasto Guida più piccolo
-                  Tooltip(
-                    message: 'Mostra guida di configurazione',
-                    child: IconButton(
-                      icon: const FaIcon(FontAwesomeIcons.circleQuestion, size: 16),
-                      onPressed: () => AppDialogs.showDockerInfoDialog(context),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
       ],
     );
   }
 }
-// ... (tutto il codice successivo del file rimane invariato)
 
-// ... (widget ExportPreferencesSettings, SystemAndInfoSettings, AccountManagementSettings e _StatusLabel invariati) ...
 class ExportPreferencesSettings extends StatelessWidget {
   const ExportPreferencesSettings({super.key});
 

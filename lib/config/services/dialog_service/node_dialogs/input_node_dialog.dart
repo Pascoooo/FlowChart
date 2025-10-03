@@ -42,22 +42,24 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
 // Dentro la classe _InputNodeDialogState
 
   void _confirm() {
-    // Filtra per ottenere solo le dichiarazioni complete delle variabili selezionate
-    final selectedDeclarations = widget.availableInputVariables
+    // Filtra per ottenere solo i NOMI delle variabili selezionate
+    final selectedNames = widget.availableInputVariables
         .where((v) => _selectedVariables[v.name] == true)
+        .map((v) => v.name)
         .toList();
 
-    if (selectedDeclarations.isEmpty) {
+    if (selectedNames.isEmpty) {
       Navigator.of(context).pop();
       return;
     }
 
-    final names = selectedDeclarations.map((d) => d.name).join(', ');
+    final names = selectedNames.join(', ');
     final nodeText = 'Prendi in input $names';
 
+    // FIX: Restituisci 'targetVariables' come lista di stringhe (nomi), NON 'declarations'
     Navigator.of(context).pop({
       'text': nodeText,
-      'declarations': selectedDeclarations.map((d) => d.toMap()).toList(),
+      'targetVariables': selectedNames,  // Lista di nomi (String)
     });
   }
   @override
