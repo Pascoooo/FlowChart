@@ -90,7 +90,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
         .toList();
 
     if (targets.isEmpty) return 'Input a Runtime';
-    return 'Input per: ${targets.join(', ')}';
+    return 'Assegnazione per: ${targets.join(', ')}';
   }
 
   void _confirm() {

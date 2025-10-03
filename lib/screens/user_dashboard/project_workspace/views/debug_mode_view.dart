@@ -327,54 +327,45 @@ class _DebugNavigationControls extends StatelessWidget {
         return _ValidationResult(true, 'Variabili di input dichiarate');
 
       case FlowNodeKind.output:
-        // Verifica che tutte le variabili di OUTPUT abbiano un valore valido a runtime
+        // Ora si comporta come input: richiede solo che le variabili siano dichiarate (non per forza valorizzate)
         final outputNode = node as OutputNode;
         for (final variable in outputNode.variables) {
           if (!currentVariables.containsKey(variable.name)) {
             return _ValidationResult(false, 'La variabile "${variable.name}" non è stata dichiarata');
           }
-          final value = currentVariables[variable.name];
-          // Controlla se ha un valore valido (non null e non stringa vuota)
-          if (value == null) {
-            return _ValidationResult(false, 'Assegna un valore runtime a "${variable.name}" prima di stampare');
-          }
-          if (value is String && value.isEmpty) {
-            return _ValidationResult(false, 'La variabile "${variable.name}" ha una stringa vuota');
-          }
         }
-        return _ValidationResult(true, 'Tutte le variabili di output hanno un valore');
+        return _ValidationResult(true, 'Variabili di output dichiarate');
 
       case FlowNodeKind.assignment:
-        // Verifica che tutte le assegnazioni siano state eseguite
+        // Aggiornato: richiede che ogni variabile assegnata abbia un valore VALIDO (non vuoto)
         final assignmentNode = node as AssignmentNode;
         for (final assignment in assignmentNode.assignments) {
           if (!currentVariables.containsKey(assignment.target)) {
-            return _ValidationResult(false, 'Esegui l\'assegnazione per "${assignment.target}"');
+            return _ValidationResult(false, 'Assegna un valore a "${assignment.target}"');
+          }
+          final value = currentVariables[assignment.target];
+          if (value == null || (value is String && value.isEmpty)) {
+            return _ValidationResult(false, 'Valore non valido per "${assignment.target}"');
           }
         }
-        return _ValidationResult(true, 'Tutte le assegnazioni sono state eseguite');
+        return _ValidationResult(true, 'Tutte le assegnazioni sono state effettuate');
 
       case FlowNodeKind.decision:
         // Verifica che tutte le variabili di LAVORO nella condizione abbiano un valore a runtime
         final decisionNode = node as DecisionNode;
         final varsInCondition = _extractVariablesFromCondition(decisionNode.condition, allVariables);
-
         for (final varName in varsInCondition) {
           if (!currentVariables.containsKey(varName)) {
             return _ValidationResult(false, 'La variabile "$varName" non è stata dichiarata');
           }
           final value = currentVariables[varName];
-          if (value == null) {
+          if (value == null || (value is String && value.isEmpty)) {
             return _ValidationResult(false, 'Assegna un valore runtime a "$varName" prima di valutare la condizione');
-          }
-          if (value is String && value.isEmpty) {
-            return _ValidationResult(false, 'La variabile "$varName" ha una stringa vuota');
           }
         }
         return _ValidationResult(true, 'Tutte le variabili della condizione hanno un valore');
 
       default:
-        // Per start, end, process possiamo avanzare liberamente
         return _ValidationResult(true, 'Nodo completato');
     }
   }
@@ -592,12 +583,24 @@ class _DebugDetailsPanelState extends State<DebugDetailsPanel> {
 
                 final variables = snapshot.data ?? {};
 
-                if (variables.isEmpty) {
+                // Filtra le variabili di scope output se NON siamo su un nodo output
+                final currentNodeKind = currentNode.kind;
+                final outputHidden = currentNodeKind != FlowNodeKind.output;
+                final filteredEntries = variables.entries.where((entry) {
+                  final decl = state.flowchart.variables.firstWhere(
+                      (v) => v.name == entry.key,
+                      orElse: () => const VariableDeclaration(name: '_', dataType: 'string'));
+                  if (decl.name == '_') return true; // non dichiarata, mostra per debug
+                  if (decl.scope == VariableScope.output && outputHidden) return false;
+                  return true;
+                }).toList();
+
+                if (filteredEntries.isEmpty) {
                   return _buildEmptyVariablesState(context);
                 }
 
                 return Column(
-                  children: variables.entries.map((entry) {
+                  children: filteredEntries.map((entry) {
                     return _VariableRow(
                       name: entry.key,
                       value: entry.value.toString(),
@@ -799,12 +802,13 @@ class _DebugDetailsPanelState extends State<DebugDetailsPanel> {
 
   /// 🎨 Helper: Check if node requires runtime input
   bool _requiresRuntimeInput(FlowNode node) {
-    // INPUT ora dichiara solo le variabili, non richiede input
-    // ASSIGNMENT e DECISION richiedono interazione
-    // OUTPUT richiede valori a runtime per le variabili di output
-    return node.kind == FlowNodeKind.assignment ||
-        node.kind == FlowNodeKind.decision ||
-        node.kind == FlowNodeKind.output;
+    // OUTPUT ora richiede l'inserimento dei valori (come assignment) se ha variabili
+    if (node.kind == FlowNodeKind.output) {
+      final out = node as OutputNode;
+      return out.variables.isNotEmpty;
+    }
+    if (node.kind == FlowNodeKind.input) return false;
+    return node.kind == FlowNodeKind.assignment || node.kind == FlowNodeKind.decision;
   }
 
   /// 🎨 Empty Variables State
@@ -901,6 +905,9 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, String?> _errors = {};
   bool _isExecuting = false;
+  bool _assignmentCompleted = false; // per assignment
+  bool _outputCompleted = false;     // per output
+  String? _renderedOutput;           // anteprima output
 
   @override
   void initState() {
@@ -909,7 +916,6 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
   }
 
   void _initializeControllers() {
-    // Per OUTPUT: crea controllers per le variabili che non hanno ancora un valore
     if (widget.node is OutputNode) {
       final outputNode = widget.node as OutputNode;
       for (final variable in outputNode.variables) {
@@ -917,18 +923,28 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
       }
     } else if (widget.node is AssignmentNode) {
       final assignmentNode = widget.node as AssignmentNode;
-      // Per ASSIGNMENT: crea controllers per permettere override manuale se necessario
       for (final assignment in assignmentNode.assignments) {
         _controllers[assignment.target] = TextEditingController();
       }
     } else if (widget.node is DecisionNode) {
-      // Per DECISION: crea controllers per le variabili di lavoro nella condizione
       final decisionNode = widget.node as DecisionNode;
       final varsInCondition = _extractVariablesFromCondition(decisionNode.condition);
       for (final varName in varsInCondition) {
         _controllers[varName] = TextEditingController();
       }
     }
+  }
+
+  void _disposeControllers() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeControllers();
+    super.dispose();
   }
 
   /// Estrae le variabili da una condizione
@@ -941,14 +957,6 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
       }
     }
     return foundVariables;
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _controllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
   }
 
   /// Valida il valore in base al tipo di dato
@@ -995,11 +1003,7 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
 
   /// Esegue il nodo corrente
   Future<void> _executeNode() async {
-    setState(() {
-      _errors.clear();
-      _isExecuting = true;
-    });
-
+    setState(() { _errors.clear(); _isExecuting = true; });
     try {
       if (widget.node is OutputNode) {
         await _executeOutputNode();
@@ -1009,48 +1013,52 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
         await _executeDecisionNode();
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errors['general'] = e.toString();
-        });
-      }
+      if (mounted) setState(() { _errors['general'] = e.toString(); });
     } finally {
-      if (mounted) {
-        setState(() {
-          _isExecuting = false;
-        });
-      }
+      if (mounted) setState(() { _isExecuting = false; });
     }
   }
 
-  /// Esegue un nodo Output - richiede valori a runtime per le variabili
+  /// Esegue un nodo Output
   Future<void> _executeOutputNode() async {
     final outputNode = widget.node as OutputNode;
-    bool hasErrors = false;
+    setState(() { _outputCompleted = false; _renderedOutput = null; });
 
-    // Valida tutti i valori inseriti per le variabili di output
+    // Stato attuale delle variabili per eventuale prefill
+    final currentVars = await widget.projectRepo.getDebugVariables(projectId: widget.flowchartId);
+
+    bool hasErrors = false;
     final Map<String, dynamic> newValues = {};
+
     for (final variable in outputNode.variables) {
-      final controller = _controllers[variable.name];
-      if (controller != null && controller.text.isNotEmpty) {
-        final value = controller.text;
-        final error = _validateValue(variable.name, value);
-        if (error != null) {
-          setState(() {
-            _errors[variable.name] = error;
-          });
-          hasErrors = true;
-        } else {
-          // Converti e aggiungi il valore
-          final varDecl = widget.allVariables.firstWhere((v) => v.name == variable.name);
-          newValues[variable.name] = _convertValue(value, varDecl.dataType);
+      final name = variable.name;
+      final controller = _controllers[name];
+
+      // Se controller vuoto ma esiste già un valore non vuoto in sessione, non forzo inserimento
+      final existing = currentVars[name];
+      final raw = controller?.text.trim() ?? '';
+
+      if ((existing == null || (existing is String && existing.isEmpty)) && raw.isEmpty) {
+        setState(() { _errors[name] = 'Valore obbligatorio'; });
+        hasErrors = true; continue;
+      }
+
+      if (raw.isNotEmpty) {
+        final varDecl = widget.allVariables.firstWhere(
+          (v) => v.name == name,
+          orElse: () => VariableDeclaration(name: name, dataType: 'string'),
+        );
+        final typeError = _validateValue(name, raw);
+        if (typeError != null) {
+          setState(() { _errors[name] = typeError; });
+          hasErrors = true; continue;
         }
+        newValues[name] = _convertValue(raw, varDecl.dataType);
       }
     }
 
     if (hasErrors) return;
 
-    // Aggiorna le variabili se ci sono nuovi valori
     if (newValues.isNotEmpty) {
       await widget.projectRepo.updateDebugVariables(
         projectId: widget.flowchartId,
@@ -1058,45 +1066,56 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
       );
     }
 
-    // Avanza al prossimo nodo
-    if (mounted) {
-      context.read<FlowchartBloc>().add(const DebugNextNode());
-    }
+    final merged = await widget.projectRepo.getDebugVariables(projectId: widget.flowchartId);
+    final outputNode2 = widget.node as OutputNode;
+    _renderedOutput = _renderTemplate(outputNode2.template, merged);
+
+    if (mounted) setState(() { _outputCompleted = true; });
   }
 
   /// Esegue un nodo Assignment
   Future<void> _executeAssignmentNode() async {
     final assignmentNode = widget.node as AssignmentNode;
 
-    // Ottieni le variabili correnti
-    final currentVars = await widget.projectRepo
-        .getDebugVariables(projectId: widget.flowchartId);
+    // Reset stato precedente
+    setState(() { _assignmentCompleted = false; });
 
+    bool hasErrors = false;
     final Map<String, dynamic> newValues = {};
 
-    // Valuta ogni assegnazione
     for (final assignment in assignmentNode.assignments) {
-      try {
-        final result =
-            _evaluateExpression(assignment.expression, currentVars);
-        newValues[assignment.target] = result;
-      } catch (e) {
-        setState(() {
-          _errors[assignment.target] =
-              'Errore nella valutazione: ${e.toString()}';
-        });
-        return;
+      final target = assignment.target;
+      final controller = _controllers[target];
+      final raw = controller?.text.trim() ?? '';
+
+      if (raw.isEmpty) {
+        setState(() { _errors[target] = 'Il valore è obbligatorio'; });
+        hasErrors = true; continue;
       }
+
+      final typeError = _validateValue(target, raw);
+      if (typeError != null) {
+        setState(() { _errors[target] = typeError; });
+        hasErrors = true; continue;
+      }
+
+      final varDecl = widget.allVariables.firstWhere(
+        (v) => v.name == target,
+        orElse: () => VariableDeclaration(name: target, dataType: 'string'),
+      );
+      newValues[target] = _convertValue(raw, varDecl.dataType);
     }
 
-    // Aggiorna le variabili
+    if (hasErrors) return;
+
     await widget.projectRepo.updateDebugVariables(
       projectId: widget.flowchartId,
       variables: newValues,
     );
 
     if (mounted) {
-      context.read<FlowchartBloc>().add(const DebugNextNode());
+      setState(() { _assignmentCompleted = true; });
+      // NON avanziamo: il tasto Avanti in alto diventerà attivo grazie alla validazione globale
     }
   }
 
@@ -1108,12 +1127,50 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
     final currentVars = await widget.projectRepo
         .getDebugVariables(projectId: widget.flowchartId);
 
-    try {
-      // Valuta la condizione per verificare che sia valida
-      _evaluateCondition(decisionNode.condition, currentVars);
+    // Prepara eventuali nuovi valori runtime per le variabili mancanti/invalid
+    final Map<String, dynamic> newValues = {};
+    final varsInCondition = _extractVariablesFromCondition(decisionNode.condition);
 
-      // TODO: In futuro, implementare la navigazione condizionale basata sul risultato
-      // Per ora, procediamo semplicemente al passo successivo
+    for (final varName in varsInCondition) {
+      final controller = _controllers[varName];
+      final currentValue = currentVars[varName];
+      final needsInput = currentValue == null || (currentValue is String && currentValue.isEmpty);
+      if (needsInput) {
+        if (controller == null || controller.text.trim().isEmpty) {
+          setState(() {
+            _errors[varName] = 'Valore richiesto';
+          });
+          return; // interrompe esecuzione se manca un valore
+        } else {
+          final validationError = _validateValue(varName, controller.text.trim());
+          if (validationError != null) {
+            setState(() {
+              _errors[varName] = validationError;
+            });
+            return;
+          }
+          final varDecl = widget.allVariables.firstWhere(
+              (v) => v.name == varName,
+              orElse: () => VariableDeclaration(name: varName, dataType: 'string'));
+          newValues[varName] = _convertValue(controller.text.trim(), varDecl.dataType);
+        }
+      }
+    }
+
+    // Se ci sono nuovi valori validi aggiorniamo
+    if (newValues.isNotEmpty) {
+      await widget.projectRepo.updateDebugVariables(
+        projectId: widget.flowchartId,
+        variables: newValues,
+      );
+    }
+
+    // Rileggi le variabili aggiornate per la valutazione
+    final mergedVars = await widget.projectRepo
+        .getDebugVariables(projectId: widget.flowchartId);
+
+    try {
+      _evaluateCondition(decisionNode.condition, mergedVars);
       if (mounted) {
         context.read<FlowchartBloc>().add(const DebugNextNode());
       }
@@ -1192,7 +1249,6 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-
     if (widget.node is OutputNode) {
       return _buildOutputForm(theme);
     } else if (widget.node is AssignmentNode) {
@@ -1200,76 +1256,136 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
     } else if (widget.node is DecisionNode) {
       return _buildDecisionForm(theme);
     }
-
     return const SizedBox.shrink();
   }
 
   Widget _buildOutputForm(FluentThemeData theme) {
     final outputNode = widget.node as OutputNode;
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: widget.projectRepo.watchDebugVariables(projectId: widget.flowchartId),
+      builder: (context, snapshot) {
+        final runtimeVars = snapshot.data ?? {};
 
-    return Column(
-      children: [
-        Text(
-          'Inserisci i valori per le variabili di output:',
-          style: theme.typography.bodyStrong?.copyWith(fontSize: 12),
-        ),
-        const SizedBox(height: 12),
-        ...outputNode.variables.map((variable) {
-          final varDecl = widget.allVariables.firstWhere((v) => v.name == variable.name);
-          final controller = _controllers[variable.name]!;
-          final error = _errors[variable.name];
+        // Prefill controllers se il valore esiste e controller è vuoto (solo prima volta)
+        for (final variable in outputNode.variables) {
+          final c = _controllers[variable.name];
+            if (c != null && c.text.isEmpty) {
+              final existing = runtimeVars[variable.name];
+              if (existing != null && (existing is! String || existing.isNotEmpty)) {
+                c.text = existing.toString();
+              }
+            }
+        }
 
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InfoLabel(
-                  label: '${variable.name} (${varDecl.dataType})',
-                  child: TextBox(
-                    controller: controller,
-                    placeholder: 'Inserisci valore per output...',
-                    expands: false,
-                  ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Inserisci i valori da stampare (o lascia quelli già assegnati):',
+              style: theme.typography.bodyStrong?.copyWith(fontSize: 12)),
+            const SizedBox(height: 12),
+            ...outputNode.variables.map((variable) {
+              final controller = _controllers[variable.name]!;
+              final varDecl = widget.allVariables.firstWhere(
+                (v) => v.name == variable.name,
+                orElse: () => VariableDeclaration(name: variable.name, dataType: 'string'),
+              );
+              final error = _errors[variable.name];
+              final existing = runtimeVars[variable.name];
+              final hasExisting = existing != null && (!(existing is String) || existing.isNotEmpty);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${variable.name} (${varDecl.dataType})',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        if (hasExisting && controller.text == existing.toString())
+                           Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(FluentIcons.check_mark, size: 14, color: Colors.green),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    InfoLabel(
+                      label: hasExisting ? 'Valore (puoi sovrascrivere)' : 'Valore',
+                      child: TextBox(
+                        controller: controller,
+                        placeholder: hasExisting ? existing.toString() : 'Inserisci valore...',
+                        onChanged: (_) { if (_errors[variable.name] != null) setState(() { _errors.remove(variable.name); }); },
+                      ),
+                    ),
+                    if (error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          error,
+                          style: TextStyle(color: theme.resources.systemFillColorCritical, fontSize: 11),
+                        ),
+                      ),
+                  ],
                 ),
-                if (error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      error,
-                      style: TextStyle(
-                        color: theme.resources.systemFillColorCritical,
-                        fontSize: 11,
+              );
+            }),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                FilledButton(
+                  onPressed: _isExecuting ? null : _executeOutputNode,
+                  child: _isExecuting
+                      ? const SizedBox(width: 16, height: 16, child: ProgressRing())
+                      : Text(_outputCompleted ? 'Ristampa' : 'Stampa'),
+                ),
+                const SizedBox(width: 12),
+                if (_outputCompleted && _renderedOutput != null)
+                  Expanded(
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: 1,
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: theme.resources.subtleFillColorSecondary,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: theme.resources.cardStrokeColorDefault.withValues(alpha: .4)),
+                        ),
+                        child: SelectableText(
+                          _renderedOutput!,
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                        ),
                       ),
                     ),
                   ),
               ],
             ),
-          );
-        }).toList(),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _isExecuting ? null : _executeNode,
-          child: _isExecuting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: ProgressRing(),
-                )
-              : const Text('Stampa e Avanti'),
-        ),
-        if (_errors['general'] != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              _errors['general']!,
-              style: TextStyle(
-                color: theme.resources.systemFillColorCritical,
-                fontSize: 11,
+            if (_outputCompleted && _renderedOutput != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Output generato. Usa Avanti per proseguire.',
+                  style: TextStyle(color: theme.resources.textFillColorSecondary, fontSize: 11, fontStyle: FontStyle.italic),
+                ),
               ),
-            ),
-          ),
-      ],
+            if (_errors['general'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _errors['general']!,
+                  style: TextStyle(
+                    color: theme.resources.systemFillColorCritical,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -1277,20 +1393,38 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
     final assignmentNode = widget.node as AssignmentNode;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'Inserisci i valori per le variabili assegnate (poi usa Avanti in alto):',
+          style: theme.typography.bodyStrong?.copyWith(fontSize: 12),
+        ),
+        const SizedBox(height: 12),
         ...assignmentNode.assignments.map((assignment) {
-          final error = _errors[assignment.target];
-
+          final target = assignment.target;
+          final controller = _controllers[target]!;
+          final error = _errors[target];
+          final varDecl = widget.allVariables.firstWhere(
+            (v) => v.name == target,
+            orElse: () => VariableDeclaration(name: target, dataType: 'string'),
+          );
           return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${assignment.target} = ${assignment.expression}',
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 13,
+                InfoLabel(
+                  label: '$target (${varDecl.dataType})',
+                  child: TextBox(
+                    controller: controller,
+                    placeholder: 'Valore per $target',
+                    expands: false,
+                    onChanged: (_) {
+                      // Pulizia errore dinamica mentre l'utente digita
+                      if (_errors[target] != null) {
+                        setState(() { _errors.remove(target); });
+                      }
+                    },
                   ),
                 ),
                 if (error != null)
@@ -1309,15 +1443,35 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
           );
         }).toList(),
         const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _isExecuting ? null : _executeNode,
-          child: _isExecuting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: ProgressRing(),
-                )
-              : const Text('Valuta e Avanti'),
+        Row(
+          children: [
+            FilledButton(
+              onPressed: _isExecuting ? null : _executeAssignmentNode,
+              child: _isExecuting
+                  ? const SizedBox(width: 16, height: 16, child: ProgressRing())
+                  : Text(_assignmentCompleted ? 'Riassegna' : 'Assegna'),
+            ),
+            const SizedBox(width: 12),
+            if (_assignmentCompleted)
+              AnimatedOpacity(
+                opacity: _assignmentCompleted ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Row(
+                  children: [
+                     Icon(FluentIcons.check_mark, size: 16, color: Colors.green),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Valori assegnati. Ora puoi usare Avanti.',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
         if (_errors['general'] != null)
           Padding(
@@ -1337,63 +1491,138 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
   Widget _buildDecisionForm(FluentThemeData theme) {
     final decisionNode = widget.node as DecisionNode;
     final error = _errors['condition'];
+    final varsInCondition = _extractVariablesFromCondition(decisionNode.condition);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Condizione:',
-          style: theme.typography.bodyStrong?.copyWith(fontSize: 12),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: theme.resources.subtleFillColorSecondary,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: SelectableText(
-            decisionNode.condition,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 13,
+    return FutureBuilder<Map<String, dynamic>>(
+      future: widget.projectRepo.getDebugVariables(projectId: widget.flowchartId),
+      builder: (context, snapshot) {
+        final currentVars = snapshot.data ?? {};
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Condizione:',
+              style: theme.typography.bodyStrong?.copyWith(fontSize: 12),
             ),
-          ),
-        ),
-        if (error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              error,
-              style: TextStyle(
-                color: theme.resources.systemFillColorCritical,
-                fontSize: 11,
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.resources.subtleFillColorSecondary,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: SelectableText(
+                decisionNode.condition,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                ),
               ),
             ),
-          ),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _isExecuting ? null : _executeNode,
-          child: _isExecuting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: ProgressRing(),
-                )
-              : const Text('Valuta e Avanti'),
-        ),
-        if (_errors['general'] != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              _errors['general']!,
-              style: TextStyle(
-                color: theme.resources.systemFillColorCritical,
-                fontSize: 11,
+            const SizedBox(height: 16),
+            if (varsInCondition.isNotEmpty)
+              Text(
+                'Variabili utilizzate nella condizione:',
+                style: theme.typography.bodyStrong?.copyWith(fontSize: 12),
               ),
+            if (varsInCondition.isNotEmpty) const SizedBox(height: 8),
+            ...varsInCondition.map((varName) {
+              final controller = _controllers[varName]!;
+              final varDecl = widget.allVariables.firstWhere(
+                (v) => v.name == varName,
+                orElse: () => VariableDeclaration(name: varName, dataType: 'string'),
+              );
+              final currentValue = currentVars[varName];
+              final bool needsInput = currentValue == null || (currentValue is String && currentValue.isEmpty);
+              final fieldError = _errors[varName];
+              if (!needsInput) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InfoLabel(
+                    label: '$varName (${varDecl.dataType})',
+                    child: Text(
+                      currentValue.toString(),
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                    ),
+                  ),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InfoLabel(
+                      label: '$varName (${varDecl.dataType})',
+                      child: TextBox(
+                        controller: controller,
+                        placeholder: 'Inserisci valore...',
+                        expands: false,
+                      ),
+                    ),
+                    if (fieldError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          fieldError,
+                          style: TextStyle(
+                            color: theme.resources.systemFillColorCritical,
+                            fontSize: 11,
+                          ),
+                        ),
+                      )
+                  ],
+                ),
+              );
+            }),
+            if (error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  error,
+                  style: TextStyle(
+                    color: theme.resources.systemFillColorCritical,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _isExecuting ? null : _executeNode,
+              child: _isExecuting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: ProgressRing(),
+                    )
+                  : const Text('Valuta e Avanti'),
             ),
-          ),
-      ],
+            if (_errors['general'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _errors['general']!,
+                  style: TextStyle(
+                    color: theme.resources.systemFillColorCritical,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+  /// Renderizza un template con le variabili correnti
+  String _renderTemplate(String template, Map<String, dynamic> vars) {
+    return template.replaceAllMapped(
+      RegExp(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}'),
+      (m) {
+        final key = m.group(1)!;
+        final v = vars[key];
+        if (v == null || (v is String && v.isEmpty)) return '{'+key+'}';
+        return v.toString();
+      },
     );
   }
 }

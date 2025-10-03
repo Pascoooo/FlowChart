@@ -83,7 +83,16 @@ class _NodeWidgetState extends State<NodeWidget> {
 
         final bool isDimmed = isConnectorMode && !isThisNodeAValidTarget && !isThisNodeTheSource;
 
+        // ⚠️ MODIFICA: Controlla se siamo in modalità debug
+        final bool isDebugMode = state.isDebugMode;
+
         void handleTap() {
+          // ⚠️ MODIFICA: Disabilita la selezione manuale in modalità debug
+          if (isDebugMode) {
+            // In debug mode, NON permettere la selezione diretta dei nodi
+            return;
+          }
+
           if (isConnectorMode) {
             if (isThisNodeAValidTarget) {
               context
@@ -117,7 +126,8 @@ class _NodeWidgetState extends State<NodeWidget> {
                     clipBehavior: Clip.none,
                     alignment: Alignment.topCenter,
                     children: [
-                      if (widget.isSelected && !isConnectorMode)
+                      // ⚠️ MODIFICA: NON mostrare l'icona dell'occhio in modalità debug
+                      if (widget.isSelected && !isConnectorMode && !isDebugMode)
                         Positioned(
                           top: 0,
                           child: _EyeButton(
@@ -491,22 +501,22 @@ class NodeRenderer extends StatelessWidget {
   final bool isSelected;
   final bool isConnectorSelected;
 
-  const NodeRenderer(
-      {super.key,
-        required this.node,
-        required this.isSelected,
-        this.isConnectorSelected = false});
+  const NodeRenderer({super.key, required this.node, required this.isSelected, this.isConnectorSelected = false});
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    // Grassetto solo per selezione normale, NON per selezione connettore
     final textStyle = TextStyle(
       fontSize: 13,
-      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+      fontWeight: isSelected && !isConnectorSelected ? FontWeight.bold : FontWeight.w500,
       color: Colors.black,
     );
-    final borderColor = isSelected ? theme.accentColor : Colors.blue;
-    final borderWidth = isSelected ? 2.5 : 1.5;
+
+    final borderColor = isConnectorSelected
+        ? Colors.transparent
+        : (isSelected ? theme.accentColor : Colors.blue);
+    final borderWidth = (isSelected && !isConnectorSelected) ? 2.5 : 1.5;
     const fillColor = Colors.white;
 
     Widget nodeContent;
@@ -514,82 +524,93 @@ class NodeRenderer extends StatelessWidget {
       case FlowNodeKind.decision:
         nodeContent = CustomPaint(
           painter: DiamondPainter(
-              color: fillColor, borderColor: borderColor, strokeWidth: borderWidth),
+            color: fillColor,
+            borderColor: borderColor,
+            strokeWidth: borderWidth,
+          ),
           child: SizedBox(
-              width: node.width,
-              height: node.height,
-              child: Center(
-                  child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Text(node.text,
-                          textAlign: TextAlign.center, style: textStyle)))),
+            width: node.width,
+            height: node.height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  node.text,
+                  textAlign: TextAlign.center,
+                  style: textStyle,
+                ),
+              ),
+            ),
+          ),
         );
         break;
       case FlowNodeKind.input:
       case FlowNodeKind.output:
         nodeContent = CustomPaint(
           painter: ParallelogramPainter(
-              fillColor: fillColor,
-              borderColor: borderColor,
-              strokeWidth: borderWidth,
-              reversed: node.kind == FlowNodeKind.output),
+            fillColor: fillColor,
+            borderColor: borderColor,
+            strokeWidth: borderWidth,
+            reversed: node.kind == FlowNodeKind.output,
+          ),
           child: SizedBox(
-              width: node.width,
-              height: node.height,
-              child: Center(
-                  child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      child: Text(node.text,
-                          textAlign: TextAlign.center,
-                          style: textStyle,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis)))),
+            width: node.width,
+            height: node.height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Text(
+                  node.text,
+                  textAlign: TextAlign.center,
+                  style: textStyle,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
         );
         break;
       default:
         nodeContent = Container(
           width: node.width,
-          height: node.height,
-          decoration: BoxDecoration(
-            color: fillColor,
-            borderRadius: BorderRadius.circular(
-                (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end)
-                    ? 999
-                    : 8),
-            border: Border.all(color: borderColor, width: borderWidth),
-            boxShadow: [
-              if (isSelected)
-                BoxShadow(
-                    color: theme.accentColor.withOpacity(0.25), blurRadius: 8)
-            ],
-          ),
-          child: Center(
+            height: node.height,
+            decoration: BoxDecoration(
+              color: fillColor,
+              borderRadius: BorderRadius.circular(
+                (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 8,
+              ),
+              border: Border.all(color: borderColor, width: borderWidth),
+              boxShadow: [
+                if (isSelected && !isConnectorSelected)
+                  BoxShadow(
+                    color: theme.accentColor.withOpacity(0.25),
+                    blurRadius: 8,
+                  ),
+              ],
+            ),
+            child: Center(
               child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Text(node.text,
-                      textAlign: TextAlign.center,
-                      style: textStyle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis))),
-        );
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text(
+                  node.text,
+                  textAlign: TextAlign.center,
+                  style: textStyle,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          );
         break;
     }
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(
-            (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end)
-                ? 999
-                : 10),
-        boxShadow: [
-          if (isConnectorSelected)
-            BoxShadow(
-              color: Colors.blue.withOpacity(0.7),
-              blurRadius: 10,
-              spreadRadius: 2,
-            ),
-        ],
+          (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 10,
+        ),
+        boxShadow: const [],
       ),
       child: nodeContent,
     );

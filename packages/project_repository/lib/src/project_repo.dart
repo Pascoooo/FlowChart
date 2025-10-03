@@ -83,6 +83,9 @@ abstract class ProjectRepo {
   /// Aggiorna le variabili di debug con nuovi valori.
   Future<void> updateDebugVariables({required String projectId, required Map<String, dynamic> variables});
 
+  /// Legge una sola volta le variabili di debug correnti.
+  Future<Map<String, dynamic>> getDebugVariables({required String projectId});
+
   /// Pulisce le variabili di debug dalla sessione.
   Future<void> clearDebugVariables({required String projectId});
 }

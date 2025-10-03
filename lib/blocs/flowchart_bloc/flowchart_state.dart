@@ -29,6 +29,9 @@ class FlowchartLoaded extends FlowchartState {
   final List<String> debugPath;
   final int debugIndex;
 
+  // ⚠️ NUOVO: Traccia se è la prima volta che entriamo in debug (per lo zoom)
+  final bool isDebugJustStarted;
+
   // ✨ NUOVE PROPRIETÀ PER LA MODALITÀ CONNETTORE
   final bool isConnectorModeActive;
   final String? connectorSourceNodeId; // L'ID del nodo da cui è partita l'azione
@@ -42,6 +45,7 @@ class FlowchartLoaded extends FlowchartState {
     this.isDebugMode = false,
     this.debugPath = const [],
     this.debugIndex = 0,
+    this.isDebugJustStarted = false, // ⚠️ NUOVO
     // ✨ INIZIALIZZA LE NUOVE PROPRIETÀ
     this.isConnectorModeActive = false,
     this.connectorSourceNodeId,
@@ -122,6 +126,7 @@ class FlowchartLoaded extends FlowchartState {
     bool? isDebugMode,
     List<String>? debugPath,
     int? debugIndex,
+    bool? isDebugJustStarted, // ⚠️ NUOVO
     // ✨ GESTISCI LE NUOVE PROPRIETÀ NEL copyWith
     bool? isConnectorModeActive,
     String? connectorSourceNodeId,
@@ -135,6 +140,7 @@ class FlowchartLoaded extends FlowchartState {
       isDebugMode: isDebugMode ?? this.isDebugMode,
       debugPath: debugPath ?? this.debugPath,
       debugIndex: debugIndex ?? this.debugIndex,
+      isDebugJustStarted: isDebugJustStarted ?? this.isDebugJustStarted, // ⚠️ NUOVO
       isConnectorModeActive:
       isConnectorModeActive ?? this.isConnectorModeActive,
       connectorSourceNodeId: clearConnectorSource
@@ -157,6 +163,7 @@ class FlowchartLoaded extends FlowchartState {
     isDebugMode,
     debugPath,
     debugIndex,
+    isDebugJustStarted,
     isConnectorModeActive,
     connectorSourceNodeId,
     selectedConnectorNodeIds,

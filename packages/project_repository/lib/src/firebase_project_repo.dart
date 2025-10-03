@@ -231,8 +231,13 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<void> startDebugSession({required String projectId, required Flowchart flowchart}) async {
-    // Inizializza con una mappa VUOTA - le variabili verranno aggiunte solo quando incontrate
+    // Inizializza con una mappa contenente variabili di lavoro (local) e di output come placeholder
     final Map<String, dynamic> initialVariables = {};
+    for (final v in flowchart.variables) {
+      if (v.scope == VariableScope.local || v.scope == VariableScope.output) {
+        initialVariables[v.name] = '';
+      }
+    }
     await _session.initializeDebugSession(projectId, initialVariables);
   }
 
@@ -264,29 +269,37 @@ class FirebaseProjectRepo implements ProjectRepo {
     final currentVariables = await _session.getCurrentDebugVariables(projectId);
     final updatedVariables = Map<String, dynamic>.from(currentVariables);
 
-    // Esegui la logica del nodo e aggiorna le variabili
+    // Logica di aggiornamento minima per rispettare i requisiti:
     if (currentNode is InputNode) {
-      // Per i nodi di input, non facciamo nulla automaticamente
-      // L'utente deve fornire i valori manualmente
-    } else if (currentNode is OutputNode) {
-      // Per i nodi di output, non modifichiamo le variabili
-    } else if (currentNode is AssignmentNode) {
-      // Esegui tutte le assegnazioni
-      for (final assignment in currentNode.assignments) {
-        try {
-          final value = _evaluateExpression(assignment.expression, updatedVariables);
-          updatedVariables[assignment.target] = value;
-        } catch (e) {
-          // Se l'espressione non può essere valutata, mantieni il valore corrente
-          print('Errore valutazione espressione: $e');
+      // Dichiara solo le variabili (placeholder stringa vuota) se non presenti.
+      for (final varName in currentNode.targetVariables) {
+        if (!updatedVariables.containsKey(varName)) {
+          updatedVariables[varName] = '';
         }
       }
+    } else if (currentNode is OutputNode) {
+      // Nessuna azione automatica
+    } else if (currentNode is AssignmentNode) {
+      // NON eseguire automaticamente: sarà il form runtime a farlo
     } else if (currentNode is DecisionNode) {
-      // Per i nodi di decisione, valutiamo la condizione ma non modifichiamo variabili
+      // Nessuna modifica automatica
     }
 
-    // Aggiorna le variabili nel database
-    await _session.updateDebugVariables(projectId, updatedVariables);
+    // Aggiorna solo se qualcosa è cambiato
+    bool changed = false;
+    if (updatedVariables.length != currentVariables.length) {
+      changed = true;
+    } else {
+      for (final entry in updatedVariables.entries) {
+        if (!currentVariables.containsKey(entry.key) || currentVariables[entry.key] != entry.value) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed) {
+      await _session.updateDebugVariables(projectId, updatedVariables);
+    }
   }
 
   /// Valuta un'espressione matematica/logica usando le variabili correnti
@@ -308,5 +321,10 @@ class FirebaseProjectRepo implements ProjectRepo {
       // Se la valutazione fallisce, ritorna l'espressione originale
       return expression;
     }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getDebugVariables({required String projectId}) {
+    return _session.getCurrentDebugVariables(projectId);
   }
 }

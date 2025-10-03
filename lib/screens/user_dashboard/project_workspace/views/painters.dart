@@ -319,3 +319,85 @@ class ParallelogramPainter extends CustomPainter {
           old.strokeWidth != strokeWidth ||
           old.reversed != reversed;
 }
+
+// ⚠️ NUOVO: Painter per il bordo di selezione che segue la forma esatta del nodo
+class NodeSelectionBorderPainter extends CustomPainter {
+  final FlowNodeKind nodeKind;
+  final Color borderColor;
+  final double strokeWidth;
+
+  NodeSelectionBorderPainter({
+    required this.nodeKind,
+    required this.borderColor,
+    this.strokeWidth = 4.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Paint per il bordo (SOLO BORDO, niente riempimento)
+    final strokePaint = Paint()
+      ..color = borderColor
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    switch (nodeKind) {
+      case FlowNodeKind.start:
+      case FlowNodeKind.end:
+        // Cerchio
+        final center = Offset(size.width / 2, size.height / 2);
+        final radius = size.width / 2;
+        canvas.drawCircle(center, radius, strokePaint);
+        break;
+
+      case FlowNodeKind.decision:
+        // Rombo
+        final path = Path()
+          ..moveTo(size.width / 2, 0)
+          ..lineTo(size.width, size.height / 2)
+          ..lineTo(size.width / 2, size.height)
+          ..lineTo(0, size.height / 2)
+          ..close();
+        canvas.drawPath(path, strokePaint);
+        break;
+
+      case FlowNodeKind.input:
+        // Parallelogramma (non invertito)
+        final slant = size.width * 0.2;
+        final path = Path()
+          ..moveTo(slant, 0)
+          ..lineTo(size.width, 0)
+          ..lineTo(size.width - slant, size.height)
+          ..lineTo(0, size.height)
+          ..close();
+        canvas.drawPath(path, strokePaint);
+        break;
+
+      case FlowNodeKind.output:
+        // Parallelogramma (invertito)
+        final slant = size.width * 0.2;
+        final path = Path()
+          ..moveTo(0, 0)
+          ..lineTo(size.width - slant, 0)
+          ..lineTo(size.width, size.height)
+          ..lineTo(slant, size.height)
+          ..close();
+        canvas.drawPath(path, strokePaint);
+        break;
+
+      default:
+        // Rettangolo arrotondato per process, assignment, ecc.
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, size.width, size.height),
+          const Radius.circular(8),
+        );
+        canvas.drawRRect(rect, strokePaint);
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant NodeSelectionBorderPainter old) =>
+      old.nodeKind != nodeKind ||
+      old.borderColor != borderColor ||
+      old.strokeWidth != strokeWidth;
+}

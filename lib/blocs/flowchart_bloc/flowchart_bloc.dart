@@ -513,11 +513,13 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
     if (path.isEmpty) return;
 
+    // ⚠️ MODIFICA: Imposta isDebugJustStarted = true quando inizia la debug mode
     emit(s.copyWith(
       isDebugMode: true,
       debugPath: path,
       debugIndex: 0,
       selectedNodeId: path.first,
+      isDebugJustStarted: true, // ⚠️ NUOVO: Zoom SOLO all'inizio
     ));
   }
 
@@ -530,7 +532,12 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     if (nextIndex == s.debugIndex) return;
 
     final newNodeId = s.debugPath[nextIndex];
-    emit(s.copyWith(debugIndex: nextIndex, selectedNodeId: newNodeId));
+    // ⚠️ MODIFICA: Imposta isDebugJustStarted = false quando si naviga
+    emit(s.copyWith(
+      debugIndex: nextIndex,
+      selectedNodeId: newNodeId,
+      isDebugJustStarted: false, // ⚠️ NUOVO: Disabilita lo zoom durante la navigazione
+    ));
   }
 
   void _onDebugPrev(DebugPrevNode event, Emitter<FlowchartState> emit) {
@@ -542,13 +549,23 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     if (prevIndex == s.debugIndex) return;
 
     final newNodeId = s.debugPath[prevIndex];
-    emit(s.copyWith(debugIndex: prevIndex, selectedNodeId: newNodeId));
+    // ⚠️ MODIFICA: Imposta isDebugJustStarted = false quando si naviga
+    emit(s.copyWith(
+      debugIndex: prevIndex,
+      selectedNodeId: newNodeId,
+      isDebugJustStarted: false, // ⚠️ NUOVO: Disabilita lo zoom durante la navigazione
+    ));
   }
 
   void _onDebugExit(DebugExit event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final s = state as FlowchartLoaded;
-    emit(s.copyWith(isDebugMode: false, debugPath: const [], debugIndex: 0));
+    emit(s.copyWith(
+      isDebugMode: false,
+      debugPath: const [],
+      debugIndex: 0,
+      isDebugJustStarted: false, // ⚠️ NUOVO: Reset quando si esce dalla debug mode
+    ));
   }
 
   // =============================================================
