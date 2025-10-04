@@ -205,3 +205,8 @@ class ApplyConnectorAndCreateNode extends FlowchartEvent {
 class CancelConnectorMode extends FlowchartEvent {
   const CancelConnectorMode();
 }
+
+class DebugBranchSelected extends FlowchartEvent {
+  final bool result; // true -> ramo 'true', false -> ramo 'false'
+  const DebugBranchSelected(this.result);
+}

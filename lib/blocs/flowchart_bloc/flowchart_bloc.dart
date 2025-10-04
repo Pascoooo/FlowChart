@@ -30,6 +30,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<DebugNextNode>(_onDebugNext);
     on<DebugPrevNode>(_onDebugPrev);
     on<DebugExit>(_onDebugExit);
+    // 🆕 Gestione selezione ramo decisionale
+    on<DebugBranchSelected>(_onDebugBranchSelected);
     on<AddGlobalVariable>(_onAddGlobalVariable);
     on<UpdateGlobalVariables>(_onUpdateGlobalVariables);
     on<AssignmentNodeCreationRequested>(_onAssignmentNodeCreationRequested);
@@ -565,6 +567,90 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       debugPath: const [],
       debugIndex: 0,
       isDebugJustStarted: false, // ⚠️ NUOVO: Reset quando si esce dalla debug mode
+    ));
+  }
+
+  void _onDebugBranchSelected(DebugBranchSelected event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final s = state as FlowchartLoaded;
+    if (!s.isDebugMode || s.debugPath.isEmpty) return;
+
+    final currentId = s.debugPath[s.debugIndex];
+
+    // Trova l'edge in base al risultato
+    final outgoing = s.flowchart.edges.where((e) => e.from == currentId).toList();
+    FlowchartEdge? chosen;
+
+    // Preferisci il ramo esplicito 'true'/'false'
+    final wantedPort = event.result ? 'true' : 'false';
+    chosen = outgoing.firstWhere(
+      (e) => e.port == wantedPort,
+      orElse: () => const FlowchartEdge(from: '', to: ''),
+    );
+
+    // In assenza, usa un edge senza porta (se presente)
+    if (chosen.from.isEmpty) {
+      chosen = outgoing.firstWhere(
+        (e) => e.port == null,
+        orElse: () => const FlowchartEdge(from: '', to: ''),
+      );
+    }
+
+    if (chosen.from.isEmpty) {
+      // Nessun edge adatto: non possiamo avanzare
+      return;
+    }
+
+    // Ricostruisci il tail path a partire dal nodo scelto
+    final tail = <String>[];
+    final visited = <String>{};
+    String? nid = chosen.to;
+    while (nid != null && nid.isNotEmpty && !visited.contains(nid)) {
+      tail.add(nid);
+      visited.add(nid);
+
+      final outs = s.flowchart.edges.where((e) => e.from == nid).toList();
+      if (outs.isEmpty) break;
+
+      FlowchartEdge? next;
+      // priorità: senza porta -> 'true' -> 'false'
+      next = outs.firstWhere((e) => e.port == null,
+          orElse: () => const FlowchartEdge(from: '', to: ''));
+      if (next.from.isEmpty) {
+        next = outs.firstWhere((e) => e.port == 'true',
+            orElse: () => const FlowchartEdge(from: '', to: ''));
+        if (next.from.isEmpty) {
+          next = outs.firstWhere((e) => e.port == 'false',
+              orElse: () => const FlowchartEdge(from: '', to: ''));
+        }
+      }
+      if (next.from.isEmpty) break;
+      nid = next.to;
+    }
+
+    // Nuovo path = prefisso fino al nodo corrente + tail
+    final newPath = <String>[];
+    newPath.addAll(s.debugPath.take(s.debugIndex + 1));
+    newPath.addAll(tail);
+
+    if (newPath.length <= s.debugIndex + 1) {
+      // Nessun avanzamento possibile
+      emit(s.copyWith(
+        debugPath: newPath,
+        selectedNodeId: s.selectedNodeId,
+        isDebugJustStarted: false,
+      ));
+      return;
+    }
+
+    final nextIndex = s.debugIndex + 1;
+    final newSelectedId = newPath[nextIndex];
+
+    emit(s.copyWith(
+      debugPath: newPath,
+      debugIndex: nextIndex,
+      selectedNodeId: newSelectedId,
+      isDebugJustStarted: false,
     ));
   }
 

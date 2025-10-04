@@ -171,6 +171,135 @@ class _DebugStepInfoCard extends StatelessWidget {
 
 /// 🎮 Debug Navigation Controls (Top Right) - CON VALIDAZIONE RUNTIME
 class _DebugNavigationControls extends StatelessWidget {
+  const _DebugNavigationControls();
+
+  // Helper: sostituisce variabili e valuta la condizione (supporta =, ==, !=, >=, <=, >, <, &&, ||, !, parentesi)
+  bool _evaluateDecision(String condition, Map<String, dynamic> variables) {
+    String evaluable = condition;
+    for (final entry in variables.entries) {
+      final key = entry.key;
+      final value = entry.value;
+      final valueStr = (value is bool) ? (value ? 'true' : 'false') : value.toString();
+      evaluable = evaluable.replaceAll('{$key}', valueStr);
+      evaluable = evaluable.replaceAllMapped(
+        RegExp(r'\b' + RegExp.escape(key) + r'\b'),
+        (m) => valueStr,
+      );
+    }
+    evaluable = _sanitize(evaluable);
+    final res = _evalExpr(evaluable);
+    return (res is bool) ? res : (res is num ? res != 0 : false);
+  }
+
+  String _sanitize(String s) {
+    var out = s.trim();
+    if (out.endsWith(';')) out = out.substring(0, out.length - 1).trim();
+    out = out.replaceAll(RegExp(r'\bAND\b', caseSensitive: false), '&&');
+    out = out.replaceAll(RegExp(r'\bOR\b', caseSensitive: false), '||');
+    out = out.replaceAll(RegExp(r'\bNOT\b', caseSensitive: false), '!');
+
+    out = out
+        .replaceAll('>=', '__GE__')
+        .replaceAll('<=', '__LE__')
+        .replaceAll('!=', '__NE__')
+        .replaceAll('==', '__EQ__');
+    out = out.replaceAll('=', '==');
+    out = out
+        .replaceAll('__GE__', '>=')
+        .replaceAll('__LE__', '<=')
+        .replaceAll('__NE__', '!=')
+        .replaceAll('__EQ__', '==');
+
+    out = out.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return out;
+  }
+
+  dynamic _evalExpr(String expression) {
+    var expr = expression.trim();
+    if (expr.toLowerCase() == 'true') return true;
+    if (expr.toLowerCase() == 'false') return false;
+    final n = num.tryParse(expr);
+    if (n != null) return n;
+
+    expr = _stripOuter(expr);
+
+    final orSplit = _splitTop(expr, '||');
+    if (orSplit != null) {
+      final l = _evalExpr(orSplit[0]);
+      final r = _evalExpr(orSplit[1]);
+      return ((l is bool) ? l : (l != 0)) || ((r is bool) ? r : (r != 0));
+    }
+    final andSplit = _splitTop(expr, '&&');
+    if (andSplit != null) {
+      final l = _evalExpr(andSplit[0]);
+      final r = _evalExpr(andSplit[1]);
+      return ((l is bool) ? l : (l != 0)) && ((r is bool) ? r : (r != 0));
+    }
+    if (expr.startsWith('!')) {
+      final v = _evalExpr(expr.substring(1).trim());
+      return !((v is bool) ? v : (v != 0));
+    }
+
+    for (final op in const ['>=', '<=', '==', '!=']) {
+      final parts = _splitTop(expr, op);
+      if (parts != null) {
+        final l = _evalExpr(parts[0]);
+        final r = _evalExpr(parts[1]);
+        switch (op) {
+          case '>=':
+            return (l is num && r is num && l >= r) ? 1 : 0;
+          case '<=':
+            return (l is num && r is num && l <= r) ? 1 : 0;
+          case '==':
+            return (l == r) ? 1 : 0;
+          case '!=':
+            return (l != r) ? 1 : 0;
+        }
+      }
+    }
+    for (final op in const ['>', '<']) {
+      final parts = _splitTop(expr, op);
+      if (parts != null) {
+        final l = _evalExpr(parts[0]);
+        final r = _evalExpr(parts[1]);
+        switch (op) {
+          case '>':
+            return (l is num && r is num && l > r) ? 1 : 0;
+          case '<':
+            return (l is num && r is num && l < r) ? 1 : 0;
+        }
+      }
+    }
+    return 0;
+  }
+
+  String _stripOuter(String s) {
+    while (s.length >= 2 && s.startsWith('(') && s.endsWith(')')) {
+      var depth = 0; var all = true;
+      for (int i = 0; i < s.length; i++) {
+        final c = s[i];
+        if (c == '(') depth++;
+        if (c == ')') { depth--; if (depth == 0 && i != s.length - 1) { all = false; break; } }
+      }
+      if (all) { s = s.substring(1, s.length - 1).trim(); } else { break; }
+    }
+    return s;
+  }
+
+  List<String>? _splitTop(String s, String op) {
+    int depth = 0;
+    for (int i = 0; i <= s.length - op.length; i++) {
+      final c = s[i];
+      if (c == '(') depth++; else if (c == ')') { depth--; if (depth < 0) depth = 0; }
+      if (depth == 0 && s.substring(i, i + op.length) == op) {
+        final left = s.substring(0, i).trim();
+        final right = s.substring(i + op.length).trim();
+        return [left, right];
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
@@ -238,12 +367,19 @@ class _DebugNavigationControls extends StatelessWidget {
 
                   const SizedBox(width: 8),
 
-                  // Next Step con validazione
+                  // Next Step con validazione e branching
                   Tooltip(
                     message: canNext ? 'Passo successivo (→)' : disabledReason,
                     child: FilledButton(
                       onPressed: canNext
-                          ? () => context.read<FlowchartBloc>().add(const DebugNextNode())
+                          ? () {
+                              if (currentNode is DecisionNode) {
+                                final res = _evaluateDecision((currentNode as DecisionNode).condition, variables);
+                                context.read<FlowchartBloc>().add(DebugBranchSelected(res));
+                              } else {
+                                context.read<FlowchartBloc>().add(const DebugNextNode());
+                              }
+                            }
                           : null,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -478,20 +614,19 @@ class _DebugDetailsPanelState extends State<DebugDetailsPanel> {
             ),
 
             // 🆕 CONSOLE INTERATTIVA - Sempre visibile sotto
-            if (_requiresRuntimeInput(currentNode))
-              SizedBox(
-                height: 300,
-                child: DebugConsole(
-                  currentNode: currentNode,
-                  flowchartId: state.flowchart.flowchartId,
-                  projectRepo: context.read<ProjectBloc>().projectRepository,
-                  allVariables: state.flowchart.variables,
-                  onCommandExecuted: () {
-                    // Callback quando l'esecuzione è completata
-                    setState(() {});
-                  },
-                ),
+            SizedBox(
+              height: 300,
+              child: DebugConsole(
+                currentNode: currentNode,
+                flowchartId: state.flowchart.flowchartId,
+                projectRepo: context.read<ProjectBloc>().projectRepository,
+                allVariables: state.flowchart.variables,
+                onCommandExecuted: () {
+                  // Callback quando l'esecuzione è completata
+                  setState(() {});
+                },
               ),
+            ),
           ],
         );
       },
@@ -613,16 +748,51 @@ class _DebugDetailsPanelState extends State<DebugDetailsPanel> {
 
                 final variables = snapshot.data ?? {};
 
-                // Filtra le variabili di scope output se NON siamo su un nodo output
+                // 🆕 Filtra le variabili in base allo stato corrente
                 final currentNodeKind = currentNode.kind;
-                final outputHidden = currentNodeKind != FlowNodeKind.output;
+                final debugIndex = state.debugIndex;
+
                 final filteredEntries = variables.entries.where((entry) {
                   final decl = state.flowchart.variables.firstWhere(
                       (v) => v.name == entry.key,
                       orElse: () => const VariableDeclaration(name: '_', dataType: 'string'));
+
                   if (decl.name == '_') return true; // non dichiarata, mostra per debug
-                  if (decl.scope == VariableScope.output && outputHidden) return false;
-                  return true;
+
+                  // Le variabili OUTPUT sono visibili SOLO nel nodo output o dopo
+                  if (decl.scope == VariableScope.output) {
+                    // Cerca se abbiamo già passato un nodo OUTPUT che usa questa variabile
+                    bool hasPassedOutputNode = false;
+                    for (int i = 0; i <= debugIndex; i++) {
+                      final nodeId = state.debugPath[i];
+                      final node = state.getNodeById(nodeId);
+                      if (node is OutputNode && node.variables.any((v) => v.name == entry.key)) {
+                        hasPassedOutputNode = true;
+                        break;
+                      }
+                    }
+                    return hasPassedOutputNode || currentNodeKind == FlowNodeKind.output;
+                  }
+
+                  // 🆕 Le variabili di LAVORO sono visibili SOLO dopo aver passato un nodo DECISION che le usa
+                  if (decl.scope == VariableScope.local) {
+                    // Cerca se abbiamo già passato un nodo DECISION che usa questa variabile
+                    bool hasPassedDecisionNode = false;
+                    for (int i = 0; i <= debugIndex; i++) {
+                      final nodeId = state.debugPath[i];
+                      final node = state.getNodeById(nodeId);
+                      if (node is DecisionNode) {
+                        final pattern = RegExp(r'\b' + RegExp.escape(entry.key) + r'\b');
+                        if (pattern.hasMatch(node.condition)) {
+                          hasPassedDecisionNode = true;
+                          break;
+                        }
+                      }
+                    }
+                    return hasPassedDecisionNode || currentNodeKind == FlowNodeKind.decision;
+                  }
+
+                  return true; // Variabili input sempre visibili
                 }).toList();
 
                 if (filteredEntries.isEmpty) {
@@ -1395,9 +1565,10 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
         .getDebugVariables(projectId: widget.flowchartId);
 
     try {
-      _evaluateCondition(decisionNode.condition, mergedVars);
+      final result = _evaluateCondition(decisionNode.condition, mergedVars);
       if (mounted) {
-        context.read<FlowchartBloc>().add(const DebugNextNode());
+        // manda evento con il ramo da seguire
+        context.read<FlowchartBloc>().add(DebugBranchSelected(result));
       }
     } catch (e) {
       setState(() {
@@ -1450,474 +1621,159 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
 
   /// Valuta una condizione booleana
   bool _evaluateCondition(String condition, Map<String, dynamic> variables) {
-    // Sostituisci le variabili con i loro valori
-    String evaluableCondition = condition;
+    // Sostituisci le variabili con i loro valori (supporta {var} e boundary di parola)
+    String evaluable = condition;
     for (final entry in variables.entries) {
-      evaluableCondition = evaluableCondition.replaceAll(
-        entry.key,
-        entry.value.toString(),
+      final key = entry.key;
+      final value = entry.value;
+      final valueStr = (value is bool) ? (value ? 'true' : 'false') : value.toString();
+      evaluable = evaluable.replaceAll('{$key}', valueStr);
+      evaluable = evaluable.replaceAllMapped(
+        RegExp(r'\b' + RegExp.escape(key) + r'\b'),
+        (m) => valueStr,
       );
     }
 
-    // Valuta la condizione
-    try {
-      final parser = GrammarParser();
-      final exp = parser.parse(evaluableCondition);
-      final evaluator = RealEvaluator();
-      final result = evaluator.evaluate(exp);
-      return result != 0;
-    } catch (e) {
-      throw Exception('Condizione non valida: $condition');
+    // Sanifica: AND/OR/NOT, '=' -> '==' (preservando >=, <=, !=, ==), rimuovi ';'
+    evaluable = _sanitizeCondition(evaluable);
+
+    // Valuta con parser custom (supporta &&, ||, !, confronti, parentesi)
+    final res = _evaluateConditionExpression(evaluable);
+    if (res is bool) return res;
+    if (res is num) return res != 0;
+    throw Exception('Condizione non valida: $condition');
+  }
+
+  String _sanitizeCondition(String expression) {
+    var s = expression.trim();
+    if (s.endsWith(';')) s = s.substring(0, s.length - 1).trim();
+    s = s.replaceAll(RegExp(r'\\bAND\\b', caseSensitive: false), '&&');
+    s = s.replaceAll(RegExp(r'\\bOR\\b', caseSensitive: false), '||');
+    s = s.replaceAll(RegExp(r'\\bNOT\\b', caseSensitive: false), '!');
+
+    s = s
+        .replaceAll('>=', '__GE__')
+        .replaceAll('<=', '__LE__')
+        .replaceAll('!=', '__NE__')
+        .replaceAll('==', '__EQ__');
+    s = s.replaceAll('=', '==');
+    s = s
+        .replaceAll('__GE__', '>=')
+        .replaceAll('__LE__', '<=')
+        .replaceAll('__NE__', '!=')
+        .replaceAll('__EQ__', '==');
+
+    s = s.replaceAll(RegExp(r'\\s+'), ' ').trim();
+    return s;
+  }
+
+  dynamic _evaluateConditionExpression(String expression) {
+    var expr = expression.trim();
+
+    // letterali
+    if (expr.toLowerCase() == 'true') return true;
+    if (expr.toLowerCase() == 'false') return false;
+    final n = num.tryParse(expr);
+    if (n != null) return n;
+
+    expr = _stripOuterParentheses(expr);
+
+    final orSplit = _splitAtTopLevel(expr, '||');
+    if (orSplit != null) {
+      final l = _evaluateConditionExpression(orSplit[0]);
+      final r = _evaluateConditionExpression(orSplit[1]);
+      final lb = (l is bool) ? l : (l != 0);
+      final rb = (r is bool) ? r : (r != 0);
+      return lb || rb;
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    if (widget.node is OutputNode) {
-      return _buildOutputForm(theme);
-    } else if (widget.node is AssignmentNode) {
-      return _buildAssignmentForm(theme);
-    } else if (widget.node is DecisionNode) {
-      return _buildDecisionForm(theme);
+    final andSplit = _splitAtTopLevel(expr, '&&');
+    if (andSplit != null) {
+      final l = _evaluateConditionExpression(andSplit[0]);
+      final r = _evaluateConditionExpression(andSplit[1]);
+      final lb = (l is bool) ? l : (l != 0);
+      final rb = (r is bool) ? r : (r != 0);
+      return lb && rb;
     }
-    return const SizedBox.shrink();
-  }
 
-  Widget _buildOutputForm(FluentThemeData theme) {
-    final outputNode = widget.node as OutputNode;
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: widget.projectRepo.watchDebugVariables(projectId: widget.flowchartId),
-      builder: (context, snapshot) {
-        final runtimeVars = snapshot.data ?? {};
+    if (expr.startsWith('!')) {
+      final inner = _evaluateConditionExpression(expr.substring(1).trim());
+      final ib = (inner is bool) ? inner : (inner != 0);
+      return !ib;
+    }
 
-        // Prefill controllers se il valore esiste e controller è vuoto (solo prima volta)
-        for (final variable in outputNode.variables) {
-          final c = _controllers[variable.name];
-            if (c != null && c.text.isEmpty) {
-              final existing = runtimeVars[variable.name];
-              if (existing != null && (existing is! String || existing.isNotEmpty)) {
-                c.text = existing.toString();
-              }
-            }
+    for (final op in const ['>=', '<=', '==', '!=']) {
+      final parts = _splitAtTopLevel(expr, op);
+      if (parts != null) {
+        final l = _evaluateConditionExpression(parts[0]);
+        final r = _evaluateConditionExpression(parts[1]);
+        switch (op) {
+          case '>=':
+            return (l is num && r is num && l >= r) ? 1 : 0;
+          case '<=':
+            return (l is num && r is num && l <= r) ? 1 : 0;
+          case '==':
+            return (l == r) ? 1 : 0;
+          case '!=':
+            return (l != r) ? 1 : 0;
         }
+      }
+    }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Info Box con sintassi
-            Container(
-              padding: const EdgeInsets.all(10),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: theme.accentColor.defaultBrushFor(theme.brightness).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: theme.accentColor.defaultBrushFor(theme.brightness).withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: FaIcon(
-                      FontAwesomeIcons.circleInfo,
-                      size: 12,
-                      color: theme.accentColor.defaultBrushFor(theme.brightness),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Sintassi supportata:',
-                          style: theme.typography.caption?.copyWith(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: theme.accentColor.defaultBrushFor(theme.brightness),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '• {nome} → usa variabile esistente\n'
-                          '• 100 → numero letterale\n'
-                          '• testo → stringa letterale\n'
-                          '• {a} + {b} → espressioni',
-                          style: theme.typography.caption?.copyWith(
-                            fontSize: 10,
-                            height: 1.4,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Text('Inserisci i valori da stampare (o lascia quelli già assegnati):',
-              style: theme.typography.bodyStrong?.copyWith(fontSize: 12)),
-            const SizedBox(height: 12),
-            ...outputNode.variables.map((variable) {
-              final controller = _controllers[variable.name]!;
-              final varDecl = widget.allVariables.firstWhere(
-                (v) => v.name == variable.name,
-                orElse: () => VariableDeclaration(name: variable.name, dataType: 'string'),
-              );
-              final error = _errors[variable.name];
-              final existing = runtimeVars[variable.name];
-              final hasExisting = existing != null && (!(existing is String) || existing.isNotEmpty);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${variable.name} (${varDecl.dataType})',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        if (hasExisting && controller.text == existing.toString())
-                           Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Icon(FluentIcons.check_mark, size: 14, color: Colors.green),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    InfoLabel(
-                      label: hasExisting ? 'Valore (puoi sovrascrivere)' : 'Valore',
-                      child: TextBox(
-                        controller: controller,
-                        placeholder: hasExisting ? existing.toString() : 'Inserisci valore...',
-                        onChanged: (_) { if (_errors[variable.name] != null) setState(() { _errors.remove(variable.name); }); },
-                      ),
-                    ),
-                    if (error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          error,
-                          style: TextStyle(color: theme.resources.systemFillColorCritical, fontSize: 11),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                FilledButton(
-                  onPressed: _isExecuting ? null : _executeOutputNode,
-                  child: _isExecuting
-                      ? const SizedBox(width: 16, height: 16, child: ProgressRing())
-                      : Text(_outputCompleted ? 'Ristampa' : 'Stampa'),
-                ),
-                const SizedBox(width: 12),
-                if (_outputCompleted && _renderedOutput != null)
-                  Expanded(
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: 1,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: theme.resources.subtleFillColorSecondary,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: theme.resources.cardStrokeColorDefault.withValues(alpha: .4)),
-                        ),
-                        child: SelectableText(
-                          _renderedOutput!,
-                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            if (_outputCompleted && _renderedOutput != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  'Output generato. Usa Avanti per proseguire.',
-                  style: TextStyle(color: theme.resources.textFillColorSecondary, fontSize: 11, fontStyle: FontStyle.italic),
-                ),
-              ),
-            if (_errors['general'] != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _errors['general']!,
-                  style: TextStyle(
-                    color: theme.resources.systemFillColorCritical,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildAssignmentForm(FluentThemeData theme) {
-    final assignmentNode = widget.node as AssignmentNode;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Inserisci i valori per le variabili assegnate (poi usa Avanti in alto):',
-          style: theme.typography.bodyStrong?.copyWith(fontSize: 12),
-        ),
-        const SizedBox(height: 12),
-        ...assignmentNode.assignments.map((assignment) {
-          final target = assignment.target;
-          final controller = _controllers[target]!;
-          final error = _errors[target];
-          final varDecl = widget.allVariables.firstWhere(
-            (v) => v.name == target,
-            orElse: () => VariableDeclaration(name: target, dataType: 'string'),
-          );
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InfoLabel(
-                  label: '$target (${varDecl.dataType})',
-                  child: TextBox(
-                    controller: controller,
-                    placeholder: 'Valore per $target',
-                    expands: false,
-                    onChanged: (_) {
-                      // Pulizia errore dinamica mentre l'utente digita
-                      if (_errors[target] != null) {
-                        setState(() { _errors.remove(target); });
-                      }
-                    },
-                  ),
-                ),
-                if (error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      error,
-                      style: TextStyle(
-                        color: theme.resources.systemFillColorCritical,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          );
-        }).toList(),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            FilledButton(
-              onPressed: _isExecuting ? null : _executeAssignmentNode,
-              child: _isExecuting
-                  ? const SizedBox(width: 16, height: 16, child: ProgressRing())
-                  : Text(_assignmentCompleted ? 'Riassegna' : 'Assegna'),
-            ),
-            const SizedBox(width: 12),
-            if (_assignmentCompleted)
-              AnimatedOpacity(
-                opacity: _assignmentCompleted ? 1 : 0,
-                duration: const Duration(milliseconds: 200),
-                child: Row(
-                  children: [
-                     Icon(FluentIcons.check_mark, size: 16, color: Colors.green),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Valori assegnati. Ora puoi usare Avanti.',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        if (_errors['general'] != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              _errors['general']!,
-              style: TextStyle(
-                color: theme.resources.systemFillColorCritical,
-                fontSize: 11,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDecisionForm(FluentThemeData theme) {
-    final decisionNode = widget.node as DecisionNode;
-    final error = _errors['condition'];
-    final varsInCondition = _extractVariablesFromCondition(decisionNode.condition);
-
-    return FutureBuilder<Map<String, dynamic>>(
-      future: widget.projectRepo.getDebugVariables(projectId: widget.flowchartId),
-      builder: (context, snapshot) {
-        final currentVars = snapshot.data ?? {};
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Condizione:',
-              style: theme.typography.bodyStrong?.copyWith(fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.resources.subtleFillColorSecondary,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: SelectableText(
-                decisionNode.condition,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (varsInCondition.isNotEmpty)
-              Text(
-                'Variabili utilizzate nella condizione:',
-                style: theme.typography.bodyStrong?.copyWith(fontSize: 12),
-              ),
-            if (varsInCondition.isNotEmpty) const SizedBox(height: 8),
-            ...varsInCondition.map((varName) {
-              final controller = _controllers[varName]!;
-              final varDecl = widget.allVariables.firstWhere(
-                (v) => v.name == varName,
-                orElse: () => VariableDeclaration(name: varName, dataType: 'string'),
-              );
-              final currentValue = currentVars[varName];
-              final bool needsInput = currentValue == null || (currentValue is String && currentValue.isEmpty);
-              final fieldError = _errors[varName];
-              if (!needsInput) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: InfoLabel(
-                    label: '$varName (${varDecl.dataType})',
-                    child: Text(
-                      currentValue.toString(),
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                    ),
-                  ),
-                );
-              }
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    InfoLabel(
-                      label: '$varName (${varDecl.dataType})',
-                      child: TextBox(
-                        controller: controller,
-                        placeholder: 'Inserisci valore...',
-                        expands: false,
-                      ),
-                    ),
-                    if (fieldError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          fieldError,
-                          style: TextStyle(
-                            color: theme.resources.systemFillColorCritical,
-                            fontSize: 11,
-                          ),
-                        ),
-                      )
-                  ],
-                ),
-              );
-            }),
-            if (error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  error,
-                  style: TextStyle(
-                    color: theme.resources.systemFillColorCritical,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _isExecuting ? null : _executeNode,
-              child: _isExecuting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: ProgressRing(),
-                    )
-                  : const Text('Valuta e Avanti'),
-            ),
-            if (_errors['general'] != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _errors['general']!,
-                  style: TextStyle(
-                    color: theme.resources.systemFillColorCritical,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-  /// Renderizza un template con le variabili correnti
-  String _renderTemplate(String template, Map<String, dynamic> vars) {
-    String result = template;
-
-    // Sostituisci tutti i placeholder {variabile} con i loro valori
-    return result.replaceAllMapped(
-      RegExp(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}'),
-      (match) {
-        final varName = match.group(1)!;
-
-        if (vars.containsKey(varName)) {
-          final value = vars[varName];
-          // Se il valore è vuoto o null, mantieni il placeholder
-          if (value == null || (value is String && value.isEmpty)) {
-            return '{$varName}';
-          }
-          return value.toString();
+    for (final op in const ['>', '<']) {
+      final parts = _splitAtTopLevel(expr, op);
+      if (parts != null) {
+        final l = _evaluateConditionExpression(parts[0]);
+        final r = _evaluateConditionExpression(parts[1]);
+        switch (op) {
+          case '>':
+            return (l is num && r is num && l > r) ? 1 : 0;
+          case '<':
+            return (l is num && r is num && l < r) ? 1 : 0;
         }
+      }
+    }
 
-        // Variabile non trovata, mantieni il placeholder
-        return '{$varName}';
-      },
-    );
+    // fallback: espressione aritmetica
+    return _evaluateExpression(expr, {});
+  }
+
+  String _stripOuterParentheses(String s) {
+    while (s.length >= 2 && s.startsWith('(') && s.endsWith(')')) {
+      var depth = 0;
+      var enclosesAll = true;
+      for (int i = 0; i < s.length; i++) {
+        final c = s[i];
+        if (c == '(') depth++;
+        if (c == ')') {
+          depth--;
+          if (depth == 0 && i != s.length - 1) { enclosesAll = false; break; }
+        }
+      }
+      if (enclosesAll) {
+        s = s.substring(1, s.length - 1).trim();
+      } else {
+        break;
+      }
+    }
+    return s;
+  }
+
+  List<String>? _splitAtTopLevel(String s, String operator) {
+    int depth = 0;
+    for (int i = 0; i <= s.length - operator.length; i++) {
+      final c = s[i];
+      if (c == '(') depth++;
+      else if (c == ')') { depth--; if (depth < 0) depth = 0; }
+      if (depth == 0 && s.substring(i, i + operator.length) == operator) {
+        final left = s.substring(0, i).trim();
+        final right = s.substring(i + operator.length).trim();
+        return [left, right];
+      }
+    }
+    return null;
   }
 }
-
-// --- HELPER WIDGETS (manteniamo quelli esistenti) ---
 
 /// 🎨 Custom Tab Button
 class _TabButton extends StatelessWidget {
