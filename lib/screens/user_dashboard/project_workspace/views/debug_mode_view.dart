@@ -8,6 +8,7 @@ import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
+import 'debug_console.dart';
 import 'workarea.dart';
 
 /// 🐛 Debug Mode View - Modalità di debug con validazione runtime
@@ -327,17 +328,21 @@ class _DebugNavigationControls extends StatelessWidget {
         return _ValidationResult(true, 'Variabili di input dichiarate');
 
       case FlowNodeKind.output:
-        // Ora si comporta come input: richiede solo che le variabili siano dichiarate (non per forza valorizzate)
+        // OUTPUT ora si comporta come ASSIGNMENT: richiede valori VALIDI per tutte le variabili
         final outputNode = node as OutputNode;
         for (final variable in outputNode.variables) {
           if (!currentVariables.containsKey(variable.name)) {
-            return _ValidationResult(false, 'La variabile "${variable.name}" non è stata dichiarata');
+            return _ValidationResult(false, 'Inserisci un valore per "${variable.name}" prima di stampare');
+          }
+          final value = currentVariables[variable.name];
+          if (value == null || (value is String && value.isEmpty)) {
+            return _ValidationResult(false, 'La variabile "${variable.name}" necessita di un valore valido');
           }
         }
-        return _ValidationResult(true, 'Variabili di output dichiarate');
+        return _ValidationResult(true, 'Tutte le variabili di output hanno valori validi');
 
       case FlowNodeKind.assignment:
-        // Aggiornato: richiede che ogni variabile assegnata abbia un valore VALIDO (non vuoto)
+        // ASSIGNMENT richiede che ogni variabile assegnata abbia un valore VALIDO (non vuoto)
         final assignmentNode = node as AssignmentNode;
         for (final assignment in assignmentNode.assignments) {
           if (!currentVariables.containsKey(assignment.target)) {
@@ -351,16 +356,25 @@ class _DebugNavigationControls extends StatelessWidget {
         return _ValidationResult(true, 'Tutte le assegnazioni sono state effettuate');
 
       case FlowNodeKind.decision:
-        // Verifica che tutte le variabili di LAVORO nella condizione abbiano un valore a runtime
+        // DECISION verifica che tutte le variabili di LAVORO nella condizione abbiano un valore runtime VALIDO
         final decisionNode = node as DecisionNode;
         final varsInCondition = _extractVariablesFromCondition(decisionNode.condition, allVariables);
         for (final varName in varsInCondition) {
-          if (!currentVariables.containsKey(varName)) {
-            return _ValidationResult(false, 'La variabile "$varName" non è stata dichiarata');
-          }
-          final value = currentVariables[varName];
-          if (value == null || (value is String && value.isEmpty)) {
-            return _ValidationResult(false, 'Assegna un valore runtime a "$varName" prima di valutare la condizione');
+          final varDecl = allVariables.firstWhere(
+            (v) => v.name == varName,
+            orElse: () => const VariableDeclaration(name: '', dataType: 'string'),
+          );
+
+          // Solo le variabili di LAVORO (local) richiedono valore runtime nella condizione
+          // Le variabili input/output possono essere già state valorizzate
+          if (varDecl.scope == VariableScope.local || !currentVariables.containsKey(varName)) {
+            if (!currentVariables.containsKey(varName)) {
+              return _ValidationResult(false, 'La variabile di lavoro "$varName" deve essere dichiarata');
+            }
+            final value = currentVariables[varName];
+            if (value == null || (value is String && value.isEmpty)) {
+              return _ValidationResult(false, 'Assegna un valore runtime a "$varName" per valutare la condizione');
+            }
           }
         }
         return _ValidationResult(true, 'Tutte le variabili della condizione hanno un valore');
@@ -462,6 +476,22 @@ class _DebugDetailsPanelState extends State<DebugDetailsPanel> {
                   ? _buildStateTab(context, theme, state, currentNode)
                   : _buildTraceTab(context, theme, state),
             ),
+
+            // 🆕 CONSOLE INTERATTIVA - Sempre visibile sotto
+            if (_requiresRuntimeInput(currentNode))
+              SizedBox(
+                height: 300,
+                child: DebugConsole(
+                  currentNode: currentNode,
+                  flowchartId: state.flowchart.flowchartId,
+                  projectRepo: context.read<ProjectBloc>().projectRepository,
+                  allVariables: state.flowchart.variables,
+                  onCommandExecuted: () {
+                    // Callback quando l'esecuzione è completata
+                    setState(() {});
+                  },
+                ),
+              ),
           ],
         );
       },
@@ -623,17 +653,8 @@ class _DebugDetailsPanelState extends State<DebugDetailsPanel> {
     FlowNode currentNode,
     dynamic projectRepo,
   ) {
-    return _DebugExpander(
-      title: 'Esecuzione Runtime',
-      icon: FontAwesomeIcons.play,
-      initiallyExpanded: true,
-      child: _RuntimeExecutionForm(
-        node: currentNode,
-        flowchartId: state.flowchart.flowchartId,
-        projectRepo: projectRepo,
-        allVariables: state.flowchart.variables,
-      ),
-    );
+    // Rimosso - sostituito dalla console interattiva
+    return const SizedBox.shrink();
   }
 
   /// 🗺️ Trace Tab - Execution Path
@@ -905,48 +926,67 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, String?> _errors = {};
   bool _isExecuting = false;
-  bool _assignmentCompleted = false; // per assignment
-  bool _outputCompleted = false;     // per output
-  String? _renderedOutput;           // anteprima output
+  bool _assignmentCompleted = false;
+  bool _outputCompleted = false;
+  String? _renderedOutput;
 
   @override
   void initState() {
     super.initState();
-    _initializeControllers();
+    // 1. Chiama il nuovo metodo di setup all'inizio
+    _setupControllersForNode(widget.node);
   }
 
-  void _initializeControllers() {
-    if (widget.node is OutputNode) {
-      final outputNode = widget.node as OutputNode;
-      for (final variable in outputNode.variables) {
+  @override
+  void didUpdateWidget(covariant _RuntimeExecutionForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 2. Controlla se il nodo è effettivamente cambiato
+    if (widget.node.id != oldWidget.node.id) {
+      // 3. Se è cambiato, riesegui il setup
+      _setupControllersForNode(widget.node);
+    }
+  }
+
+  /// Pulisce i vecchi controller e ne crea di nuovi per il nodo corrente.
+  void _setupControllersForNode(FlowNode node) {
+    // Pulisce i controller precedenti per evitare memory leak
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    _controllers.clear();
+    _errors.clear();
+    setState(() {
+      _outputCompleted = false;
+      _assignmentCompleted = false;
+      _renderedOutput = null;
+    });
+
+    // Inizializza i nuovi controller in base al tipo di nodo
+    // (Questa logica è la stessa che avevi in _initializeControllers)
+    if (node is OutputNode) {
+      for (final variable in node.variables) {
         _controllers[variable.name] = TextEditingController();
       }
-    } else if (widget.node is AssignmentNode) {
-      final assignmentNode = widget.node as AssignmentNode;
-      for (final assignment in assignmentNode.assignments) {
+    } else if (node is AssignmentNode) {
+      for (final assignment in node.assignments) {
         _controllers[assignment.target] = TextEditingController();
       }
-    } else if (widget.node is DecisionNode) {
-      final decisionNode = widget.node as DecisionNode;
-      final varsInCondition = _extractVariablesFromCondition(decisionNode.condition);
+    } else if (node is DecisionNode) {
+      final varsInCondition = _extractVariablesFromCondition(node.condition);
       for (final varName in varsInCondition) {
         _controllers[varName] = TextEditingController();
       }
     }
   }
 
-  void _disposeControllers() {
+  @override
+  void dispose() {
+    // Assicurati che tutti i controller siano deallocati quando il widget viene rimosso
     for (final controller in _controllers.values) {
       controller.dispose();
     }
-  }
-
-  @override
-  void dispose() {
-    _disposeControllers();
     super.dispose();
   }
-
   /// Estrae le variabili da una condizione
   List<String> _extractVariablesFromCondition(String condition) {
     final List<String> foundVariables = [];
@@ -1001,6 +1041,174 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
     return null;
   }
 
+  /// 🆕 VALUE RESOLVER - Risolve espressioni, variabili e letterali
+  /// Restituisce un oggetto con il valore risolto o un errore
+  ///
+  /// SINTASSI:
+  /// - {nomeVariabile}  → usa il valore della variabile dalla sessione
+  /// - 100              → numero letterale
+  /// - testo            → stringa letterale
+  /// - {a} + {b}        → espressione con variabili
+  Future<ResolvedValue> _resolveValue(String input, String targetVarName) async {
+    final trimmedInput = input.trim();
+
+    if (trimmedInput.isEmpty) {
+      return ResolvedValue.error('Input vuoto');
+    }
+
+    // Ottieni le variabili di sessione correnti
+    final sessionVars = await widget.projectRepo.getDebugVariables(
+      projectId: widget.flowchartId,
+    );
+
+    // Verifica se contiene riferimenti a variabili {nome}
+    final varPattern = RegExp(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}');
+    final hasVariables = varPattern.hasMatch(trimmedInput);
+
+    if (hasVariables) {
+      // Estrai tutte le variabili referenziate
+      final varMatches = varPattern.allMatches(trimmedInput);
+      final referencedVars = <String>[];
+
+      for (final match in varMatches) {
+        final varName = match.group(1)!;
+        referencedVars.add(varName);
+
+        // Verifica che la variabile esista e abbia un valore
+        if (!sessionVars.containsKey(varName)) {
+          return ResolvedValue.error(
+            'Variabile "$varName" non trovata. Usa "{$varName}" solo per variabili esistenti.'
+          );
+        }
+
+        final value = sessionVars[varName];
+        if (value == null || (value is String && value.isEmpty)) {
+          return ResolvedValue.error(
+            'Variabile "$varName" non ha un valore assegnato.'
+          );
+        }
+      }
+
+      // Se è solo "{nome}" senza operazioni, restituisci direttamente il valore
+      if (trimmedInput == '{${referencedVars.first}}' && referencedVars.length == 1) {
+        return ResolvedValue.success(sessionVars[referencedVars.first]!, isLiteral: false);
+      }
+
+      // Altrimenti è un'espressione - sostituisci le variabili e valuta
+      String processedExpression = trimmedInput;
+
+      for (final varName in referencedVars) {
+        final value = sessionVars[varName];
+        // Sostituisci {nome} con il valore
+        processedExpression = processedExpression.replaceAll(
+          '{$varName}',
+          value.toString(),
+        );
+      }
+
+      // Verifica se contiene operatori matematici
+      final hasOperators = RegExp(r'[+\-*/()%]').hasMatch(processedExpression);
+
+      if (hasOperators) {
+        // Valuta l'espressione matematica
+        try {
+          final parser = GrammarParser();
+          final exp = parser.parse(processedExpression);
+          final evaluator = RealEvaluator();
+          final result = evaluator.evaluate(exp);
+          return ResolvedValue.success(result, isLiteral: false);
+        } catch (e) {
+          return ResolvedValue.error('Errore nella valutazione: ${e.toString()}');
+        }
+      } else {
+        // Se non ci sono operatori, tratta come valore semplice
+        return ResolvedValue.success(processedExpression, isLiteral: false);
+      }
+    }
+
+    // Nessuna variabile referenziata - tratta come letterale
+
+    // Tentativo di parsing come numero intero
+    final intValue = int.tryParse(trimmedInput);
+    if (intValue != null) {
+      return ResolvedValue.success(intValue, isLiteral: true);
+    }
+
+    // Tentativo di parsing come numero decimale
+    final doubleValue = double.tryParse(trimmedInput);
+    if (doubleValue != null) {
+      return ResolvedValue.success(doubleValue, isLiteral: true);
+    }
+
+    // Tentativo come booleano
+    if (trimmedInput.toLowerCase() == 'true') {
+      return ResolvedValue.success(true, isLiteral: true);
+    }
+    if (trimmedInput.toLowerCase() == 'false') {
+      return ResolvedValue.success(false, isLiteral: true);
+    }
+
+    // Altrimenti, tratta come stringa letterale
+    return ResolvedValue.success(trimmedInput, isLiteral: true);
+  }
+
+  /// Estrae i nomi delle variabili da un'espressione matematica
+  List<String> _extractVariablesFromExpression(String expression) {
+    final foundVars = <String>[];
+
+    // Cerca pattern {nome}
+    final varPattern = RegExp(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}');
+    final matches = varPattern.allMatches(expression);
+
+    for (final match in matches) {
+      final varName = match.group(1)!;
+      if (!foundVars.contains(varName)) {
+        foundVars.add(varName);
+      }
+    }
+
+    return foundVars;
+  }
+
+  /// Converte un valore risolto nel tipo target con validazione
+  dynamic _convertResolvedValue(dynamic resolvedValue, String dataType) {
+    switch (dataType.toLowerCase()) {
+      case 'int':
+      case 'integer':
+        if (resolvedValue is int) return resolvedValue;
+        if (resolvedValue is double) return resolvedValue.toInt();
+        if (resolvedValue is String) {
+          final parsed = int.tryParse(resolvedValue);
+          if (parsed != null) return parsed;
+        }
+        throw Exception('Impossibile convertire "$resolvedValue" in integer');
+
+      case 'double':
+      case 'float':
+      case 'number':
+        if (resolvedValue is double) return resolvedValue;
+        if (resolvedValue is int) return resolvedValue.toDouble();
+        if (resolvedValue is String) {
+          final parsed = double.tryParse(resolvedValue);
+          if (parsed != null) return parsed;
+        }
+        throw Exception('Impossibile convertire "$resolvedValue" in number');
+
+      case 'bool':
+      case 'boolean':
+        if (resolvedValue is bool) return resolvedValue;
+        if (resolvedValue is String) {
+          if (resolvedValue.toLowerCase() == 'true') return true;
+          if (resolvedValue.toLowerCase() == 'false') return false;
+        }
+        throw Exception('Impossibile convertire "$resolvedValue" in boolean');
+
+      case 'string':
+      default:
+        return resolvedValue.toString();
+    }
+  }
+
   /// Esegue il nodo corrente
   Future<void> _executeNode() async {
     setState(() { _errors.clear(); _isExecuting = true; });
@@ -1033,32 +1241,47 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
     for (final variable in outputNode.variables) {
       final name = variable.name;
       final controller = _controllers[name];
-
-      // Se controller vuoto ma esiste già un valore non vuoto in sessione, non forzo inserimento
       final existing = currentVars[name];
       final raw = controller?.text.trim() ?? '';
 
-      if ((existing == null || (existing is String && existing.isEmpty)) && raw.isEmpty) {
-        setState(() { _errors[name] = 'Valore obbligatorio'; });
-        hasErrors = true; continue;
+      // Se controller vuoto ma esiste già un valore non vuoto in sessione, usa quello esistente
+      if (raw.isEmpty && existing != null && (existing is! String || existing.isNotEmpty)) {
+        newValues[name] = existing;
+        continue;
       }
 
-      if (raw.isNotEmpty) {
+      if (raw.isEmpty) {
+        setState(() { _errors[name] = 'Valore obbligatorio'; });
+        hasErrors = true;
+        continue;
+      }
+
+      // 🆕 USA IL VALUE RESOLVER per risolvere l'input
+      final resolved = await _resolveValue(raw, name);
+
+      if (resolved.error != null) {
+        setState(() { _errors[name] = resolved.error!; });
+        hasErrors = true;
+        continue;
+      }
+
+      // Converti il valore risolto nel tipo target
+      try {
         final varDecl = widget.allVariables.firstWhere(
           (v) => v.name == name,
           orElse: () => VariableDeclaration(name: name, dataType: 'string'),
         );
-        final typeError = _validateValue(name, raw);
-        if (typeError != null) {
-          setState(() { _errors[name] = typeError; });
-          hasErrors = true; continue;
-        }
-        newValues[name] = _convertValue(raw, varDecl.dataType);
+        newValues[name] = _convertResolvedValue(resolved.value, varDecl.dataType);
+      } catch (e) {
+        setState(() { _errors[name] = e.toString(); });
+        hasErrors = true;
+        continue;
       }
     }
 
     if (hasErrors) return;
 
+    // 🆕 PERSISTENZA: Salva SEMPRE i valori in sessione
     if (newValues.isNotEmpty) {
       await widget.projectRepo.updateDebugVariables(
         projectId: widget.flowchartId,
@@ -1066,9 +1289,11 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
       );
     }
 
+    // Rileggi le variabili aggiornate per il rendering
     final merged = await widget.projectRepo.getDebugVariables(projectId: widget.flowchartId);
-    final outputNode2 = widget.node as OutputNode;
-    _renderedOutput = _renderTemplate(outputNode2.template, merged);
+
+    // 🆕 FIX RENDERING: usa la funzione corretta
+    _renderedOutput = _renderTemplate(outputNode.template, merged);
 
     if (mounted) setState(() { _outputCompleted = true; });
   }
@@ -1280,6 +1505,59 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Info Box con sintassi
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: theme.accentColor.defaultBrushFor(theme.brightness).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: theme.accentColor.defaultBrushFor(theme.brightness).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: FaIcon(
+                      FontAwesomeIcons.circleInfo,
+                      size: 12,
+                      color: theme.accentColor.defaultBrushFor(theme.brightness),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sintassi supportata:',
+                          style: theme.typography.caption?.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: theme.accentColor.defaultBrushFor(theme.brightness),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '• {nome} → usa variabile esistente\n'
+                          '• 100 → numero letterale\n'
+                          '• testo → stringa letterale\n'
+                          '• {a} + {b} → espressioni',
+                          style: theme.typography.caption?.copyWith(
+                            fontSize: 10,
+                            height: 1.4,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Text('Inserisci i valori da stampare (o lascia quelli già assegnati):',
               style: theme.typography.bodyStrong?.copyWith(fontSize: 12)),
             const SizedBox(height: 12),
@@ -1615,13 +1893,25 @@ class _RuntimeExecutionFormState extends State<_RuntimeExecutionForm> {
   }
   /// Renderizza un template con le variabili correnti
   String _renderTemplate(String template, Map<String, dynamic> vars) {
-    return template.replaceAllMapped(
+    String result = template;
+
+    // Sostituisci tutti i placeholder {variabile} con i loro valori
+    return result.replaceAllMapped(
       RegExp(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}'),
-      (m) {
-        final key = m.group(1)!;
-        final v = vars[key];
-        if (v == null || (v is String && v.isEmpty)) return '{'+key+'}';
-        return v.toString();
+      (match) {
+        final varName = match.group(1)!;
+
+        if (vars.containsKey(varName)) {
+          final value = vars[varName];
+          // Se il valore è vuoto o null, mantieni il placeholder
+          if (value == null || (value is String && value.isEmpty)) {
+            return '{$varName}';
+          }
+          return value.toString();
+        }
+
+        // Variabile non trovata, mantieni il placeholder
+        return '{$varName}';
       },
     );
   }
@@ -1918,4 +2208,14 @@ class _ExecutionStep extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 🛠️ Resolved Value - Risultato della risoluzione di un valore
+class ResolvedValue {
+  final dynamic value;
+  final bool isLiteral;
+  final String? error;
+
+  ResolvedValue.success(this.value, {this.isLiteral = false}) : error = null;
+  ResolvedValue.error(this.error) : value = null, isLiteral = false;
 }
