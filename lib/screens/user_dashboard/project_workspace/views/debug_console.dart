@@ -33,7 +33,6 @@ class _DebugConsoleState extends State<DebugConsole> {
   bool _isWaitingForInput = false;
   String? _currentPrompt;
   String? _currentVariable;
-  Map<String, dynamic> _pendingValues = {};
   List<String> _variablesQueue = [];
 
   @override
@@ -59,7 +58,6 @@ class _DebugConsoleState extends State<DebugConsole> {
 
   void _initializeForNode() {
     _history.clear();
-    _pendingValues.clear();
     _variablesQueue.clear();
     _isWaitingForInput = false;
 
@@ -174,45 +172,6 @@ class _DebugConsoleState extends State<DebugConsole> {
     }
 
     return foundVariables;
-  }
-
-  Future<void> _finalizeExecution() async {
-    _isWaitingForInput = false;
-
-    if (_pendingValues.isEmpty) {
-      _addErrorMessage('Nessun valore da salvare');
-      return;
-    }
-
-    try {
-      // Salva i valori in sessione
-      await widget.projectRepo.updateDebugVariables(
-        projectId: widget.flowchartId,
-        variables: _pendingValues,
-      );
-
-      // Se è un output, renderizza il template
-      if (widget.currentNode is OutputNode) {
-        final outputNode = widget.currentNode as OutputNode;
-        final allVars = await widget.projectRepo.getDebugVariables(
-          projectId: widget.flowchartId,
-        );
-
-        final rendered = _renderTemplate(outputNode.template, allVars);
-        _addOutputMessage(rendered);
-      }
-
-      _addSuccessMessage('✓ Operazione completata');
-      _addSystemMessage('');
-      _addInfoMessage('Usa il pulsante "Avanti" per continuare');
-
-      widget.onCommandExecuted();
-    } catch (e) {
-      _addErrorMessage('Errore: ${e.toString()}');
-    }
-
-    setState(() {});
-    _scrollToBottom();
   }
 
   Future<void> _handleInput(String input) async {
@@ -692,14 +651,16 @@ class _DebugConsoleState extends State<DebugConsole> {
       (match) {
         final varName = match.group(1)!;
 
-        if (vars.containsKey(varName)) {
-          final value = vars[varName];
-          if (value != null && !(value is String && value.isEmpty)) {
-            return value.toString();
-          }
+        if (!vars.containsKey(varName)) {
+          throw Exception('Variabile "$varName" non trovata nelle variabili di sessione');
         }
 
-        return '{$varName}';
+        final value = vars[varName];
+        if (value == null || (value is String && value.isEmpty)) {
+          throw Exception('Variabile "$varName" senza valore valido');
+        }
+
+        return value.toString();
       },
     );
   }
