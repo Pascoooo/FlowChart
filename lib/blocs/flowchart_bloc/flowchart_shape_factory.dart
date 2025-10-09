@@ -45,15 +45,28 @@ class FlowNodeFactory {
         (initialData?['arguments'] as List?)?.cast<String>() ?? [],
         resultTarget: initialData?['resultTarget'] as String?,
       ),
-      FlowNodeKind.decision => DecisionNode(
-        id: _uuid.v4(),
-        x: position.dx,
-        y: position.dy,
-        width: 120.0,
-        height: 80.0,
-        text: text,
-        condition: initialData?['condition'] as String? ?? '',
-      ),
+      FlowNodeKind.decision => () {
+        // Supporto per nuovo formato con clausole
+        final clausesData = initialData?['clauses'] as List?;
+        List<ConditionClause> clauses = [];
+
+        if (clausesData != null && clausesData.isNotEmpty) {
+          clauses = clausesData
+              .map((c) => ConditionClause.fromMap(c as Map<String, dynamic>))
+              .toList();
+        }
+
+        return DecisionNode(
+          id: _uuid.v4(),
+          x: position.dx,
+          y: position.dy,
+          width: 120.0,
+          height: 80.0,
+          text: text,
+          clauses: clauses,
+          logicalJoin: initialData?['logicalJoin'] as String? ?? 'AND',
+        );
+      }(),
 
     // CORRETTO: La logica ora si aspetta una semplice List<String> dal dialogo,
     // rendendo il codice più semplice e robusto.

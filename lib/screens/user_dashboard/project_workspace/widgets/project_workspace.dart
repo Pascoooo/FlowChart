@@ -1,17 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/sidebar.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/topbar.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:universal_html/html.dart' as html;
-import 'package:flutter/widgets.dart' show BoxConstraints; // aggiunto per BoxConstraints
 import '../../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../../blocs/auth_bloc/authentication_state.dart';
@@ -199,80 +196,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     }
   }
 
-  Future<void> _handleAddVariable(BuildContext blocContext, VariableScope scope) async {
-    final flowchartState = blocContext.read<FlowchartBloc>().state;
-    if (flowchartState is! FlowchartLoaded) return;
-
-    final existingNames = flowchartState.flowchart.variables.map((v) => v.name).toSet();
-
-    final newVariable = await AppDialogs.showAddVariableDialog(
-      context: blocContext,  // Use blocContext here too for the dialog
-      scope: scope,
-      existingVariableNames: existingNames,
-    );
-
-    if (newVariable != null && mounted) {
-      blocContext.read<FlowchartBloc>().add(AddGlobalVariable(newVariable));
-    }
-  }
-
-  Future<void> _handleEditVariable(BuildContext blocContext, VariableDeclaration variableToEdit) async {
-    final flowchartState = blocContext.read<FlowchartBloc>().state;
-    if (flowchartState is! FlowchartLoaded) return;
-
-    final existingNames = flowchartState.flowchart.variables
-        .where((v) => v.name != variableToEdit.name)
-        .map((v) => v.name)
-        .toSet();
-
-    final updatedVariable = await AppDialogs.showEditVariableDialog(
-      context: blocContext,  // Use blocContext here too
-      variableToEdit: variableToEdit,
-      existingVariableNames: existingNames,
-    );
-
-    if (updatedVariable != null && mounted) {
-      final newVariablesList = flowchartState.flowchart.variables.map((v) {
-        return v.name == variableToEdit.name ? updatedVariable : v;
-      }).toList();
-      blocContext.read<FlowchartBloc>().add(UpdateGlobalVariables(newVariablesList));
-    }
-  }
-
-  Future<void> _handleDeleteVariable(BuildContext blocContext, VariableDeclaration variableToDelete) async {
-    final flowchartState = blocContext.read<FlowchartBloc>().state;
-    if (flowchartState is! FlowchartLoaded) return;
-
-    final confirmed = await AppDialogs.showConfirmationDialog(
-      blocContext,  // Use blocContext here too
-      title: 'Conferma Eliminazione',
-      message: 'Sei sicuro di voler eliminare la variabile "${variableToDelete.name}"? Verrà rimossa da tutti i nodi che la utilizzano.',
-      isDestructive: true,
-    );
-
-    if (confirmed == true && mounted) {
-      final newVariablesList = flowchartState.flowchart.variables
-          .where((v) => v.name != variableToDelete.name)
-          .toList();
-
-      final newNodes = flowchartState.flowchart.nodes.map((node) {
-        if (node is InputNode) {
-          return node.copyWith(targetVariables: node.targetVariables.where((name) => name != variableToDelete.name).toList());
-        }
-        if (node is OutputNode) {
-          return node.copyWith(variables: node.variables.where((v) => v.name != variableToDelete.name).toList());
-        }
-        if (node is AssignmentNode) {
-          return node.copyWith(assignments: node.assignments.where((a) => a.target != variableToDelete.name).toList());
-        }
-        return node;
-      }).toList();
-
-      final newFlowchart = flowchartState.flowchart.copyWith(variables: newVariablesList, nodes: newNodes);
-      blocContext.read<FlowchartBloc>().add(UpdateFlowchart(newFlowchart));
-    }
-  }
-
   @override
   Widget build(BuildContext outerContext) {
     return ScaffoldPage(
@@ -293,8 +216,8 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
               listenWhen: (prev, curr) {
                 if (prev is FlowchartLoaded && curr is FlowchartLoaded) {
                   return prev.isDebugMode != curr.isDebugMode ||
-                         prev.debugIndex != curr.debugIndex ||
-                         prev.selectedNodeId != curr.selectedNodeId;
+                      prev.debugIndex != curr.debugIndex ||
+                      prev.selectedNodeId != curr.selectedNodeId;
                 }
                 return false;
               },
@@ -447,12 +370,12 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
                   // 3) Invia AddNode con i constraints per calcolo posizione
                   context.read<FlowchartBloc>().add(AddNode(
-                        kind: state.kind,
-                        fromNodeId: state.fromNodeId,
-                        fromPort: state.fromPort,
-                        canvasConstraints: canvasConstraints,
-                        initialData: data,
-                      ));
+                    kind: state.kind,
+                    fromNodeId: state.fromNodeId,
+                    fromPort: state.fromPort,
+                    canvasConstraints: canvasConstraints,
+                    initialData: data,
+                  ));
                 }
               },
             ),
@@ -482,9 +405,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                     showGrid: _showGrid,
                     toggleGrid: _toggleGrid,
                     onStartDebug: () => _handleStartDebug(innerContext),
-                    onAddVariable: (scope) => _handleAddVariable(innerContext, scope),
-                    onEditVariable: (variable) => _handleEditVariable(innerContext, variable),
-                    onDeleteVariable: (variable) => _handleDeleteVariable(innerContext, variable),
                     isReadOnly: widget.isReadOnly,
                     onLeave: widget.onLeave,
                   );
@@ -512,9 +432,6 @@ class _WorkspaceLayout extends StatelessWidget {
   final bool showGrid;
   final VoidCallback toggleGrid;
   final VoidCallback onStartDebug;
-  final void Function(VariableScope) onAddVariable;
-  final void Function(VariableDeclaration) onEditVariable;
-  final void Function(VariableDeclaration) onDeleteVariable;
   final bool isReadOnly;
   final VoidCallback? onLeave;
 
@@ -531,9 +448,6 @@ class _WorkspaceLayout extends StatelessWidget {
     required this.showGrid,
     required this.toggleGrid,
     required this.onStartDebug,
-    required this.onAddVariable,
-    required this.onEditVariable,
-    required this.onDeleteVariable,
     required this.isReadOnly,
     this.onLeave,
   });
@@ -581,9 +495,6 @@ class _WorkspaceLayout extends StatelessWidget {
                           repaintKey: workareaKey,
                           showGrid: showGrid,
                           onToggleGrid: toggleGrid,
-                          onAddVariable: onAddVariable,
-                          onEditVariable: onEditVariable,
-                          onDeleteVariable: onDeleteVariable,
                           isReadOnly: isReadOnly,
                         ),
                       ),

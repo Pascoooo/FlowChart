@@ -47,7 +47,6 @@ class GridToggleButton extends StatelessWidget {
 
               showGrid ? Icons.grid_off_rounded : Icons.grid_on_rounded,
               key: ValueKey<bool>(showGrid),
-              // Material `primary` -> Fluent `accentColor`
               color: theme.accentColor,
               size: 25,
             ),

@@ -8,6 +8,7 @@ import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import 'node_widget.dart';
 import 'painters.dart';
+import 'node_creation_service.dart';
 
 class FlowchartCanvas extends StatelessWidget {
   final bool showGrid;
@@ -177,14 +178,34 @@ class _ConnectorOverlay extends StatelessWidget {
         ? 'Collega ${state.selectedConnectorNodeIds.length} nod${state.selectedConnectorNodeIds.length > 1 ? "i" : "o"}'
         : 'Seleziona nodi';
 
-    // Handler che chiude il flyout e passa il tipo di nodo selezionato al BLoC
-    void handleNodeTypeSelection(FlowNodeKind kind) {
+    // Handler che apre i dialog di configurazione prima di creare il nodo
+    Future<void> handleNodeTypeSelection(FlowNodeKind kind) async {
       _flyoutController.close();
-      // Passa al BLoC il tipo di nodo da creare e i nodi selezionati
+
+      // Ottieni tutti i nodi sorgente selezionati per il contesto
+      final sourceNodeIds = {
+        state.connectorSourceNodeId!,
+        ...state.selectedConnectorNodeIds
+      };
+
+      // Usa il servizio centralizzato per preparare la creazione del nodo
+      final nodeData = await NodeCreationService.prepareNodeCreation(
+        context: context,
+        kind: kind,
+        flowState: state,
+        sourceNodeIds: sourceNodeIds,
+      );
+
+      if (nodeData == null) {
+        // L'utente ha annullato il dialog o c'è stato un errore
+        return;
+      }
+
+      // Crea il nodo con i dati configurati
       bloc.add(ApplyConnectorAndCreateNode(
         kind: kind,
         canvasConstraints: constraints,
-        initialData: {}, // I dati verranno richiesti dal dialogo nel BLoC
+        initialData: nodeData,
       ));
     }
 

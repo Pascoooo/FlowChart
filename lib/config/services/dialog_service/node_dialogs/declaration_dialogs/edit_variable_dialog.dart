@@ -3,15 +3,17 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 
 /// Un dialogo per modificare una variabile esistente.
-/// Permette di cambiare nome e tipo, ma non lo scope.
+/// Permette di cambiare nome e tipo (se non usata in condizioni), ma non lo scope.
 class EditVariableDialog extends StatefulWidget {
   final VariableDeclaration variableToEdit;
   final Set<String> existingVariableNames;
+  final bool canEditType;
 
   const EditVariableDialog({
     super.key,
     required this.variableToEdit,
     required this.existingVariableNames,
+    this.canEditType = true,
   });
 
   @override
@@ -73,7 +75,11 @@ class _EditVariableDialogState extends State<EditVariableDialog> {
       scope: widget.variableToEdit.scope, // Lo scope non è modificabile
     );
 
-    Navigator.of(context).pop(updatedVariable);
+    // Restituisce un Map con la variabile aggiornata e il vecchio nome
+    Navigator.of(context).pop({
+      'variable': updatedVariable,
+      'oldName': widget.variableToEdit.name,
+    });
   }
 
   @override
@@ -105,17 +111,40 @@ class _EditVariableDialogState extends State<EditVariableDialog> {
           const SizedBox(height: 16),
           InfoLabel(
             label: 'Tipo di Dato *',
-            child: ComboBox<String>(
-              isExpanded: true,
-              value: _selectedType,
-              items: _cTypes
-                  .map((t) => ComboBoxItem(value: t, child: Text(t)))
-                  .toList(),
-              onChanged: (val) => setState(() {
-                if (val != null) _selectedType = val;
-              }),
+            child: Tooltip(
+              message: widget.canEditType
+                ? ''
+                : 'Il tipo non può essere modificato perché questa variabile è utilizzata in una condizione',
+              child: ComboBox<String>(
+                isExpanded: true,
+                value: _selectedType,
+                items: _cTypes
+                    .map((t) => ComboBoxItem(value: t, child: Text(t)))
+                    .toList(),
+                onChanged: widget.canEditType
+                  ? (val) => setState(() {
+                      if (val != null) _selectedType = val;
+                    })
+                  : null,
+              ),
             ),
           ),
+          if (!widget.canEditType)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Row(
+                children: [
+                  Icon(FluentIcons.info, size: 14, color: Colors.orange),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Il tipo non può essere modificato perché questa variabile è usata in una condizione.',
+                      style: TextStyle(fontSize: 12, color: Colors.orange),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 16),
           InfoLabel(
             label: 'Categoria (non modificabile)',

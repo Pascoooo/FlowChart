@@ -49,8 +49,6 @@ class FlowchartEntity {
             .toList(),
         returnType: signatureDoc['returnType'] ?? 'void',
       ),
-      // FIX: Chiamato VariableDeclaration.fromMap() invece di fromJson.
-      // Aggiunto un cast (as Map<String, dynamic>) per sicurezza sui tipi.
       variables: variablesList
           .map((v) => VariableDeclaration.fromMap(v as Map<String, dynamic>))
           .toList(),

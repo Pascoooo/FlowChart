@@ -102,14 +102,9 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
         row.rightError = null;
       }
     } else {
-      final rightType = _varMeta(row.rightVariable)?['type'];
+      // Rimozione del controllo di corrispondenza dei tipi
       if (row.rightVariable == null) {
         row.rightError = 'Scegli una variabile';
-        isRowValid = false;
-      } else if (leftType != null &&
-          rightType != null &&
-          leftType != rightType) {
-        row.rightError = 'I tipi ($leftType, $rightType) non corrispondono';
         isRowValid = false;
       } else {
         row.rightError = null;
@@ -230,12 +225,70 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
   void _confirm() {
     setState(() => _attemptedSubmit = true);
     if (!_validateForm()) return;
+
+    // Costruiamo le clausole strutturate
+    final rowsToBuild = _mode == _ConditionMode.simple ? [_simpleRow] : _advancedRows;
+    final clauses = <Map<String, dynamic>>[];
+
+    for (final row in rowsToBuild) {
+      final leftVar = row.leftVariable!;
+      final op = _normalizeOperator(row.operator);
+      String rightOp;
+      bool isLiteral;
+
+      if (row.rightMode == _RightHandMode.literal) {
+        final type = _varMeta(row.leftVariable)?['type'] ?? 'string';
+        rightOp = _normalizedLiteral(type, row.literalController.text);
+        isLiteral = true;
+      } else {
+        rightOp = row.rightVariable!;
+        isLiteral = false;
+      }
+
+      clauses.add({
+        'leftOperand': leftVar,
+        'operator': op,
+        'rightOperand': rightOp,
+        'isRightLiteral': isLiteral,
+      });
+    }
+
+    // Determiniamo il connettore logico
+    String logicalJoin = 'AND';
+    if (_mode == _ConditionMode.advanced && _connectors.isNotEmpty) {
+      // Assumiamo che tutti i connettori siano dello stesso tipo
+      // (se l'utente vuole mescolare AND/OR, dovrebbe usare le parentesi)
+      logicalJoin = _connectors.first;
+    }
+
+    // Costruiamo anche la stringa condition per il text del nodo
     final condition = _buildExpression();
+
     Navigator.of(context).pop({
-      // Etichetta autogenerata: coincide con la condizione.
       'text': condition,
-      'condition': condition,
+      'clauses': clauses,
+      'logicalJoin': logicalJoin,
     });
+  }
+
+  /// Normalizza gli operatori dal formato dialogo a quello standard
+  String _normalizeOperator(String op) {
+    switch (op) {
+      case '=':
+        return '==';
+      case '!=':
+        return '!=';
+      case '<':
+        return '<';
+      case '<=':
+        return '<=';
+      case '>':
+        return '>';
+      case '>=':
+        return '>=';
+      default:
+        return op;
+    }
   }
 
   @override
@@ -429,6 +482,7 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
                       .toList(),
                   onChanged: (val) => setState(() {
                     row.leftVariable = val;
+                    // Reset della variabile destra quando cambia quella sinistra
                     row.rightVariable = null;
                     if (_attemptedSubmit) _validateRow(row);
                   }),
@@ -461,8 +515,8 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
                     key: const ValueKey('variable'),
                     value: row.rightVariable,
                     isExpanded: true,
+                    // Mostra tutte le variabili disponibili
                     items: widget.variables
-                        .where((v) => v['name'] != row.leftVariable)
                         .map((v) => ComboBoxItem(
                         value: v['name'], child: Text(v['name']!)))
                         .toList(),

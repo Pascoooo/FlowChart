@@ -34,7 +34,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<DebugBranchSelected>(_onDebugBranchSelected);
     on<AddGlobalVariable>(_onAddGlobalVariable);
     on<UpdateGlobalVariables>(_onUpdateGlobalVariables);
-    on<AssignmentNodeCreationRequested>(_onAssignmentNodeCreationRequested);
+    on<UpdateFlowchart>(_onUpdateFlowchart);
 
     // =========================================================
     // ✨ REGISTRAZIONE DEI NUOVI EVENTI PER IL CONNETTORE ✨
@@ -48,38 +48,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   bool get canUndo => _history.canUndo;
   bool get canRedo => _history.canRedo;
 
-  void _onAssignmentNodeCreationRequested(
-      AssignmentNodeCreationRequested event, Emitter<FlowchartState> emit) {
-    if (state is! FlowchartLoaded) return;
-    final currentState = state as FlowchartLoaded;
-
-    final assignableVariableNames = currentState.flowchart.nodes
-        .whereType<InputNode>()
-        .expand((node) => node.targetVariables)
-        .toSet();
-
-    if (assignableVariableNames.isEmpty) {
-      emit(const FlowchartActionFailure(
-        title: 'Nessuna Variabile Disponibile',
-        message:
-        'Per usare un nodo di Assegnazione, devi prima inserire un nodo di Input e specificare quali variabili può usare.',
-      ));
-      emit(currentState);
-      return;
-    }
-
-    final availableVariables = currentState.flowchart.variables
-        .where((v) => assignableVariableNames.contains(v.name))
-        .toList();
-
-    emit(ShowNodeCreationDialog(
-      kind: FlowNodeKind.assignment,
-      fromNodeId: event.fromNodeId,
-      fromPort: event.fromPort,
-      availableVariables: availableVariables,
-    ));
-    emit(currentState);
-  }
 
   void _onAddGlobalVariable(
       AddGlobalVariable event, Emitter<FlowchartState> emit) {
@@ -109,6 +77,15 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     emit(currentState.copyWith(flowchart: newFlowchart));
   }
 
+  /// Aggiorna l'intero flowchart (variabili + nodi)
+  void _onUpdateFlowchart(
+      UpdateFlowchart event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final currentState = state as FlowchartLoaded;
+
+    emit(currentState.copyWith(flowchart: event.flowchart));
+  }
+
   FlowNode _createUpdatedNode(FlowNode oldNode, Map<String, dynamic> newData,
       FlowchartLoaded currentState) {
     if (oldNode is InputNode) {
@@ -133,7 +110,20 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     }
 
     else if (oldNode is DecisionNode) {
-      return oldNode.copyWith(condition: newData['condition'] as String?);
+      // Supporto per nuovo formato con clausole
+      final clausesData = newData['clauses'] as List?;
+      List<ConditionClause>? clauses;
+
+      if (clausesData != null && clausesData.isNotEmpty) {
+        clauses = clausesData
+            .map((c) => ConditionClause.fromMap(c as Map<String, dynamic>))
+            .toList();
+      }
+
+      return oldNode.copyWith(
+        clauses: clauses,
+        logicalJoin: newData['logicalJoin'] as String?,
+      );
     }
 
     else if (oldNode is OutputNode) {

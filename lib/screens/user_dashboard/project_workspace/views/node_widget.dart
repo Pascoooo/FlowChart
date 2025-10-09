@@ -3,15 +3,11 @@ import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:file_repository/file_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flowchart_thesis/config/services/dialog_service/app_dialogs.dart';
-import 'package:flowchart_thesis/blocs/file_bloc/file_system_bloc.dart';
-import 'package:flowchart_thesis/blocs/file_bloc/file_system_state.dart';
-import '../../../../config/services/dialog_service/service_dialog.dart';
 import 'painters.dart';
+import 'node_creation_service.dart';
 
 enum HandleDirection { top, right, bottom, left }
 
@@ -79,9 +75,10 @@ class _NodeWidgetState extends State<NodeWidget> {
         final bool isThisNodeAValidTarget =
             state.isLeafNode(widget.node.id) && !isThisNodeTheSource;
         final bool isThisNodeSelectedForConnector =
-        state.selectedConnectorNodeIds.contains(widget.node.id);
+            state.selectedConnectorNodeIds.contains(widget.node.id);
 
-        final bool isDimmed = isConnectorMode && !isThisNodeAValidTarget && !isThisNodeTheSource;
+        final bool isDimmed =
+            isConnectorMode && !isThisNodeAValidTarget && !isThisNodeTheSource;
 
         // ⚠️ MODIFICA: Controlla se siamo in modalità debug
         final bool isDebugMode = state.isDebugMode;
@@ -111,7 +108,7 @@ class _NodeWidgetState extends State<NodeWidget> {
           top: _dragPosition.dy - topPaddingForButton - handleAreaPadding,
           width: widget.node.width + 2 * handleAreaPadding,
           height:
-          widget.node.height + topPaddingForButton + 2 * handleAreaPadding,
+              widget.node.height + topPaddingForButton + 2 * handleAreaPadding,
           child: Opacity(
             opacity: isDimmed ? 0.4 : 1.0,
             child: Stack(
@@ -143,61 +140,61 @@ class _NodeWidgetState extends State<NodeWidget> {
                           behavior: HitTestBehavior.opaque,
                           onTap: handleTap,
                           onPanStart: (!widget.isReadOnly ||
-                              widget.allowDragInReadOnly) &&
-                              widget.isSelected &&
-                              !isConnectorMode
+                                      widget.allowDragInReadOnly) &&
+                                  widget.isSelected &&
+                                  !isConnectorMode
                               ? (_) => setState(() => _isDragging = true)
                               : null,
                           onPanUpdate: (!widget.isReadOnly ||
-                              widget.allowDragInReadOnly) &&
-                              widget.isSelected &&
-                              !isConnectorMode
+                                      widget.allowDragInReadOnly) &&
+                                  widget.isSelected &&
+                                  !isConnectorMode
                               ? (details) {
-                            setState(() {
-                              _dragPosition = Offset(
-                                _clampX(
-                                    _dragPosition.dx + details.delta.dx),
-                                _clampY(
-                                    _dragPosition.dy + details.delta.dy),
-                              );
-                            });
-                          }
+                                  setState(() {
+                                    _dragPosition = Offset(
+                                      _clampX(
+                                          _dragPosition.dx + details.delta.dx),
+                                      _clampY(
+                                          _dragPosition.dy + details.delta.dy),
+                                    );
+                                  });
+                                }
                               : null,
                           onPanEnd: (!widget.isReadOnly ||
-                              widget.allowDragInReadOnly) &&
-                              widget.isSelected &&
-                              !isConnectorMode
+                                      widget.allowDragInReadOnly) &&
+                                  widget.isSelected &&
+                                  !isConnectorMode
                               ? (_) {
-                            setState(() => _isDragging = false);
-                            context
-                                .read<FlowchartBloc>()
-                                .add(UpdateNodePosition(
-                              nodeId: widget.node.id,
-                              newX: _dragPosition.dx,
-                              newY: _dragPosition.dy,
-                              oldX: widget.node.x,
-                              oldY: widget.node.y,
-                            ));
-                          }
+                                  setState(() => _isDragging = false);
+                                  context
+                                      .read<FlowchartBloc>()
+                                      .add(UpdateNodePosition(
+                                        nodeId: widget.node.id,
+                                        newX: _dragPosition.dx,
+                                        newY: _dragPosition.dy,
+                                        oldX: widget.node.x,
+                                        oldY: widget.node.y,
+                                      ));
+                                }
                               : null,
                           child: MouseRegion(
                             cursor: isConnectorMode
                                 ? (isThisNodeAValidTarget
-                                ? SystemMouseCursors.click
-                                : SystemMouseCursors.basic)
+                                    ? SystemMouseCursors.click
+                                    : SystemMouseCursors.basic)
                                 : ((!widget.isReadOnly ||
-                                widget.allowDragInReadOnly)
-                                ? (widget.isSelected
-                                ? SystemMouseCursors.move
-                                : SystemMouseCursors.click)
-                                : (widget.isSelected
-                                ? SystemMouseCursors.basic
-                                : SystemMouseCursors.click)),
+                                        widget.allowDragInReadOnly)
+                                    ? (widget.isSelected
+                                        ? SystemMouseCursors.move
+                                        : SystemMouseCursors.click)
+                                    : (widget.isSelected
+                                        ? SystemMouseCursors.basic
+                                        : SystemMouseCursors.click)),
                             child: NodeRenderer(
                               node: widget.node,
                               isSelected: widget.isSelected,
                               isConnectorSelected:
-                              isThisNodeSelectedForConnector,
+                                  isThisNodeSelectedForConnector,
                             ),
                           ),
                         ),
@@ -288,168 +285,23 @@ class _NodeWidgetState extends State<NodeWidget> {
     final bloc = context.read<FlowchartBloc>();
 
     try {
-      if (kind == FlowNodeKind.assignment) {
-        bloc.add(AssignmentNodeCreationRequested(
-          fromNodeId: widget.node.id,
-          fromPort: fromPort,
-        ));
-        return;
-      }
-
-      final flowState = bloc.state;
-      if (flowState is! FlowchartLoaded) return;
-
-      if (kind == FlowNodeKind.end) {
-        final hasEndNode =
-        flowState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
-        if (hasEndNode) {
-          final bool? confirmed = await AppDialogs.showConfirmationDialog(
-            context,
-            title: 'Collega al nodo "Fine"',
-            message:
-            'Esiste già un nodo di fine nel flowchart. Vuoi collegare questo nodo al "Fine" esistente?',
-            confirmText: 'Collega',
-            cancelText: 'Annulla',
-          );
-          if (confirmed == true && mounted) {
-            bloc.add(
-                LinkToExistingEnd(fromNodeId: widget.node.id, fromPort: fromPort));
-          }
-          return;
-        }
-      }
-
-      List<MyFile>? filesForProcess;
-      List<VariableDeclaration>? variablesForDialog;
-
-      switch (kind) {
-        case FlowNodeKind.input:
-          final inputVariables = flowState.flowchart.variables
-              .where((v) => v.scope == VariableScope.input)
-              .toList();
-          if (inputVariables.isEmpty) {
-            if (mounted)
-              await AppDialogs.showInfoDialog(context,
-                  title: 'Nessuna Variabile di Input',
-                  message:
-                  'Per creare un nodo di Input, devi prima dichiarare almeno una variabile come "Input".',
-                  type: DialogType.warning);
-            return;
-          }
-          variablesForDialog = inputVariables;
-          break;
-
-        case FlowNodeKind.output:
-          final outputVariables = flowState.flowchart.variables
-              .where((v) => v.scope == VariableScope.output)
-              .toList();
-          if (outputVariables.isEmpty) {
-            if (mounted) {
-              await AppDialogs.showInfoDialog(context,
-                  title: 'Nessuna Variabile di Output',
-                  message:
-                  'Per creare un nodo di Output, devi prima dichiarare almeno una variabile come "Output".',
-                  type: DialogType.warning);
-            }
-            return;
-          }
-          variablesForDialog = outputVariables;
-          break;
-
-        case FlowNodeKind.assignment:
-          // Per l'assegnazione, usa solo le variabili dichiarate in nodi Input precedenti
-          final assignableVariableNames = flowState.flowchart.nodes
-              .whereType<InputNode>()
-              .expand((node) => node.targetVariables)
-              .toSet();
-
-          if (assignableVariableNames.isEmpty) {
-            if (mounted) {
-              await AppDialogs.showInfoDialog(context,
-                  title: 'Nessuna Variabile Disponibile',
-                  message:
-                  'Per usare un nodo di Assegnazione, devi prima inserire un nodo di Input e specificare quali variabili può usare.',
-                  type: DialogType.warning);
-            }
-            return;
-          }
-
-          variablesForDialog = flowState.flowchart.variables
-              .where((v) => assignableVariableNames.contains(v.name))
-              .toList();
-          break;
-
-        case FlowNodeKind.decision:
-          // Per le condizioni, usa SOLO variabili locali (di lavoro)
-          final localVariables = flowState.flowchart.variables
-              .where((v) => v.scope == VariableScope.local)
-              .toList();
-
-          if (localVariables.isEmpty) {
-            if (mounted) {
-              await AppDialogs.showInfoDialog(context,
-                  title: 'Nessuna Variabile di Lavoro',
-                  message:
-                  'Per creare una condizione, devi prima dichiarare almeno una variabile di Lavoro nella tabella delle variabili a sinistra.',
-                  type: DialogType.warning);
-            }
-            return;
-          }
-
-          variablesForDialog = localVariables;
-          break;
-
-        case FlowNodeKind.process:
-          final fsState = context.read<FileSystemBloc>().state;
-          if (fsState is FileSystemLoaded) {
-            filesForProcess = fsState.files
-                .where((f) => f.fileId != fsState.activeFileId)
-                .toList();
-            if (filesForProcess.isEmpty) {
-              if (mounted) {
-                await AppDialogs.showInfoDialog(context,
-                    title: 'Nessun File Disponibile',
-                    message:
-                    'Non ci sono altri flowchart da chiamare. Crea prima un altro file.',
-                    type: DialogType.warning);
-              }
-              return;
-            }
-          }
-          // Per i sottoprogrammi, passa solo le variabili Input/Output, non quelle di lavoro
-          variablesForDialog = flowState.flowchart.variables
-              .where((v) => v.scope == VariableScope.input || v.scope == VariableScope.output)
-              .toList();
-          break;
-
-        case FlowNodeKind.end:
-          // I nodi Fine non richiedono variabili
-          variablesForDialog = null;
-          break;
-
-        default:
-          variablesForDialog = flowState.flowchart.variables;
-          break;
-      }
-
-      if (!mounted) return;
-      final Map<String, dynamic>? nodeData =
-      await AppDialogs.showNodeCreationDialog(
+      NodeCreationService.createNode(
         context: context,
         kind: kind,
-        files: filesForProcess,
-        variables: variablesForDialog,
-      );
-
-      if (nodeData != null && mounted) {
-        bloc.add(AddNode(
-          kind: kind,
-          fromNodeId: widget.node.id,
-          fromPort: fromPort,
-          canvasConstraints: widget.canvasConstraints,
-          initialData: nodeData,
-        ));
-      }
+        sourceNodeId: widget.node.id,
+        fromPort: fromPort,
+        canvasConstraints: widget.canvasConstraints,
+      ).then((nodeData) {
+        if (nodeData != null && mounted) {
+          bloc.add(AddNode(
+            kind: kind,
+            fromNodeId: widget.node.id,
+            fromPort: fromPort,
+            canvasConstraints: widget.canvasConstraints,
+            initialData: nodeData,
+          ));
+        }
+      });
     } catch (e) {
       debugPrint("Errore durante la creazione del nodo: $e");
     }
@@ -476,7 +328,7 @@ class _EyeButton extends StatelessWidget {
         padding: WidgetStateProperty.all(EdgeInsets.zero),
         shape: WidgetStateProperty.all(const CircleBorder()),
         backgroundColor:
-        WidgetStateProperty.all(theme.cardColor.withOpacity(0.95)),
+            WidgetStateProperty.all(theme.cardColor.withOpacity(0.95)),
       ),
       child: Container(
         width: 36,
@@ -488,8 +340,8 @@ class _EyeButton extends StatelessWidget {
           ],
         ),
         child: Center(
-          child:
-          Icon(FluentIcons.view, size: 18, color: theme.typography.body?.color),
+          child: Icon(FluentIcons.view,
+              size: 18, color: theme.typography.body?.color),
         ),
       ),
     );
@@ -501,7 +353,11 @@ class NodeRenderer extends StatelessWidget {
   final bool isSelected;
   final bool isConnectorSelected;
 
-  const NodeRenderer({super.key, required this.node, required this.isSelected, this.isConnectorSelected = false});
+  const NodeRenderer(
+      {super.key,
+      required this.node,
+      required this.isSelected,
+      this.isConnectorSelected = false});
 
   @override
   Widget build(BuildContext context) {
@@ -509,7 +365,9 @@ class NodeRenderer extends StatelessWidget {
     // Grassetto solo per selezione normale, NON per selezione connettore
     final textStyle = TextStyle(
       fontSize: 13,
-      fontWeight: isSelected && !isConnectorSelected ? FontWeight.bold : FontWeight.w500,
+      fontWeight: isSelected && !isConnectorSelected
+          ? FontWeight.bold
+          : FontWeight.w500,
       color: Colors.black,
     );
 
@@ -558,7 +416,8 @@ class NodeRenderer extends StatelessWidget {
             height: node.height,
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Text(
                   node.text,
                   textAlign: TextAlign.center,
@@ -574,41 +433,45 @@ class NodeRenderer extends StatelessWidget {
       default:
         nodeContent = Container(
           width: node.width,
-            height: node.height,
-            decoration: BoxDecoration(
-              color: fillColor,
-              borderRadius: BorderRadius.circular(
-                (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 8,
-              ),
-              border: Border.all(color: borderColor, width: borderWidth),
-              boxShadow: [
-                if (isSelected && !isConnectorSelected)
-                  BoxShadow(
-                    color: theme.accentColor.withOpacity(0.25),
-                    blurRadius: 8,
-                  ),
-              ],
+          height: node.height,
+          decoration: BoxDecoration(
+            color: fillColor,
+            borderRadius: BorderRadius.circular(
+              (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end)
+                  ? 999
+                  : 8,
             ),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Text(
-                  node.text,
-                  textAlign: TextAlign.center,
-                  style: textStyle,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
+            border: Border.all(color: borderColor, width: borderWidth),
+            boxShadow: [
+              if (isSelected && !isConnectorSelected)
+                BoxShadow(
+                  color: theme.accentColor.withOpacity(0.25),
+                  blurRadius: 8,
                 ),
+            ],
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Text(
+                node.text,
+                textAlign: TextAlign.center,
+                style: textStyle,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          );
+          ),
+        );
         break;
     }
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(
-          (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end) ? 999 : 10,
+          (node.kind == FlowNodeKind.start || node.kind == FlowNodeKind.end)
+              ? 999
+              : 10,
         ),
         boxShadow: const [],
       ),
@@ -696,7 +559,8 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
               child: Icon(FontAwesomeIcons.plus,
-                  size: 16, color: theme.typography.body?.color?.withOpacity(0.8)),
+                  size: 16,
+                  color: theme.typography.body?.color?.withOpacity(0.8)),
             ),
           ),
         ),
@@ -709,8 +573,16 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
     final state = bloc.state;
 
     bool isSourceNodeLeaf = false;
+    bool hasOtherLeafNodes = false;
+
     if (state is FlowchartLoaded) {
       isSourceNodeLeaf = state.isLeafNode(widget.sourceNodeId);
+
+      // Verifica se ci sono altri nodi foglia disponibili (escluso questo)
+      if (isSourceNodeLeaf) {
+        hasOtherLeafNodes = state.flowchart.nodes.any((node) =>
+            state.isLeafNode(node.id) && node.id != widget.sourceNodeId);
+      }
     }
 
     MenuFlyoutItem buildItem(
@@ -722,7 +594,8 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
           onPressed();
         },
         text: Text(label,
-            style: TextStyle(fontSize: 13, color: theme.typography.body?.color)),
+            style:
+                TextStyle(fontSize: 13, color: theme.typography.body?.color)),
         leading: Icon(icon,
             size: 16, color: theme.typography.body?.color?.withOpacity(0.8)),
       );
@@ -730,42 +603,26 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
 
     return [
       buildItem('Input', FontAwesomeIcons.download,
-              () => widget.onNodeCreate(FlowNodeKind.input)),
+          () => widget.onNodeCreate(FlowNodeKind.input)),
       buildItem('Assegnazione', FontAwesomeIcons.calculator,
-              () => widget.onNodeCreate(FlowNodeKind.assignment)),
+          () => widget.onNodeCreate(FlowNodeKind.assignment)),
       buildItem('Output', FontAwesomeIcons.upload,
-              () => widget.onNodeCreate(FlowNodeKind.output)),
+          () => widget.onNodeCreate(FlowNodeKind.output)),
       buildItem('Condizione', FontAwesomeIcons.codeBranch,
-              () => widget.onNodeCreate(FlowNodeKind.decision)),
+          () => widget.onNodeCreate(FlowNodeKind.decision)),
       buildItem('Sottoprogramma', FontAwesomeIcons.gears,
-              () => widget.onNodeCreate(FlowNodeKind.process)),
+          () => widget.onNodeCreate(FlowNodeKind.process)),
 
       const MenuFlyoutSeparator(),
 
-      if (isSourceNodeLeaf)
-        buildItem('Connettore', FontAwesomeIcons.shareNodes, () async {
-          // Conta i nodi foglia disponibili (escluso questo)
-          final flowchartState = bloc.state as FlowchartLoaded;
-          final otherLeafNodes = flowchartState.flowchart.nodes
-              .where((node) => flowchartState.isLeafNode(node.id) && node.id != widget.sourceNodeId)
-              .toList();
-
-          if (otherLeafNodes.isEmpty) {
-            // Mostra warning se non ci sono altri nodi foglia da connettere
-            await AppDialogs.showInfoDialog(
-              context,
-              title: 'Nessun nodo disponibile',
-              message: 'Non ci sono altri nodi foglia disponibili per la connessione. Aggiungi prima altri nodi senza connessioni in uscita per poterli collegare insieme.',
-              type: DialogType.warning,
-            );
-            return;
-          }
-
+      // Mostra "Connettore" solo se questo è un nodo foglia E ci sono altri nodi foglia disponibili
+      if (isSourceNodeLeaf && hasOtherLeafNodes)
+        buildItem('Connettore', FontAwesomeIcons.shareNodes, () {
           bloc.add(StartConnectorMode(widget.sourceNodeId));
         }),
 
       buildItem('Fine', FontAwesomeIcons.flagCheckered,
-              () => widget.onNodeCreate(FlowNodeKind.end)),
+          () => widget.onNodeCreate(FlowNodeKind.end)),
     ];
   }
 }

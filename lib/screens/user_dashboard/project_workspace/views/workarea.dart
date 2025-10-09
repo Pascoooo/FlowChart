@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/dialog_service/service_dialog.dart';
@@ -16,18 +17,11 @@ class WorkArea extends StatefulWidget {
   final bool isReadOnly;
   final bool allowDragInReadOnly;
 
-  final void Function(VariableScope)? onAddVariable;
-  final void Function(VariableDeclaration)? onEditVariable;
-  final void Function(VariableDeclaration)? onDeleteVariable;
-
   const WorkArea({
     super.key,
     required this.repaintKey,
     required this.showGrid,
     required this.onToggleGrid,
-    this.onAddVariable,
-    this.onEditVariable,
-    this.onDeleteVariable,
     this.isReadOnly = false,
     this.allowDragInReadOnly = false,
   });
@@ -63,12 +57,337 @@ class _WorkAreaState extends State<WorkArea>
     super.dispose();
   }
 
+  String _renameInText(String text, String oldName, String newName) {
+    if (text.isEmpty || oldName.isEmpty || oldName == newName) return text;
+    final pattern = RegExp('\\b${RegExp.escape(oldName)}\\b');
+    return text.replaceAll(pattern, newName);
+  }
+
+  /// Verifica se una variabile è utilizzata in qualsiasi nodo del flowchart
+  bool _isVariableInUse(String variableName, List<FlowNode> nodes) {
+    for (final node in nodes) {
+      if (node is InputNode) {
+        if (node.targetVariables.contains(variableName)) return true;
+      } else if (node is OutputNode) {
+        if (node.variables.any((v) => v.name == variableName)) return true;
+      } else if (node is AssignmentNode) {
+        if (node.assignments.any((a) => a.target == variableName || a.expression.contains(variableName))) return true;
+      } else if (node is ProcessNode) {
+        if (node.arguments.contains(variableName) || node.resultTarget == variableName) return true;
+      } else if (node is DecisionNode) {
+        // Controlla se la variabile è usata nelle clausole strutturate
+        if (node.clauses.any((clause) =>
+            clause.leftOperand == variableName ||
+            (!clause.isRightLiteral && clause.rightOperand == variableName))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Restituisce una lista di nodi che utilizzano la variabile specificata
+  List<String> _getNodesUsingVariable(String variableName, List<FlowNode> nodes) {
+    final List<String> usingNodes = [];
+    for (final node in nodes) {
+      bool isUsed = false;
+      if (node is InputNode) {
+        isUsed = node.targetVariables.contains(variableName);
+      } else if (node is OutputNode) {
+        isUsed = node.variables.any((v) => v.name == variableName);
+      } else if (node is AssignmentNode) {
+        isUsed = node.assignments.any((a) => a.target == variableName || a.expression.contains(variableName));
+      } else if (node is ProcessNode) {
+        isUsed = node.arguments.contains(variableName) || node.resultTarget == variableName;
+      } else if (node is DecisionNode) {
+        // Controlla se la variabile è usata nelle clausole strutturate
+        isUsed = node.clauses.any((clause) =>
+            clause.leftOperand == variableName ||
+            (!clause.isRightLiteral && clause.rightOperand == variableName));
+      }
+      if (isUsed) {
+        usingNodes.add('${node.kind.name.toUpperCase()}: "${node.text}"');
+      }
+    }
+    return usingNodes;
+  }
+
+  /// Gestisce l'aggiunta di una nuova variabile
+  Future<void> _handleAddVariable(VariableScope scope) async {
+    final flowchartBloc = context.read<FlowchartBloc>();
+    final flowchartState = flowchartBloc.state;
+    if (flowchartState is! FlowchartLoaded) return;
+
+    final existingNames = flowchartState.flowchart.variables.map((v) => v.name).toSet();
+
+    final newVariable = await AppDialogs.showAddVariableDialog(
+      context: context,
+      scope: scope,
+      existingVariableNames: existingNames,
+    );
+
+    if (newVariable != null && mounted) {
+      flowchartBloc.add(AddGlobalVariable(newVariable));
+    }
+  }
+
+  /// Gestisce la modifica di una variabile esistente
+  Future<void> _handleEditVariable(VariableDeclaration variableToEdit) async {
+    final flowchartBloc = context.read<FlowchartBloc>();
+    final flowchartState = flowchartBloc.state;
+    if (flowchartState is! FlowchartLoaded) return;
+
+    // Controlla se la variabile è usata in un DecisionNode (clausole strutturate)
+    final isUsedInDecision = flowchartState.flowchart.nodes
+        .whereType<DecisionNode>()
+        .any((node) => node.clauses.any((clause) =>
+            clause.leftOperand == variableToEdit.name ||
+            (!clause.isRightLiteral && clause.rightOperand == variableToEdit.name)));
+
+    final existingNames = flowchartState.flowchart.variables
+        .where((v) => v.name != variableToEdit.name)
+        .map((v) => v.name)
+        .toSet();
+
+    final dynamic result = await AppDialogs.showEditVariableDialog(
+      context: context,
+      variableToEdit: variableToEdit,
+      existingVariableNames: existingNames,
+      canEditType: !isUsedInDecision,
+    );
+
+    if (result != null && result is Map<String, dynamic> && mounted) {
+      final updatedVariable = result['variable'] as VariableDeclaration;
+      final oldName = result['oldName'] as String;
+
+      // Se il nome è cambiato, propaga la modifica a tutti i nodi
+      if (oldName != updatedVariable.name) {
+        final newNodes = flowchartState.flowchart.nodes.map((node) {
+          final updatedText = _renameInText(node.text, oldName, updatedVariable.name);
+
+          if (node is InputNode) {
+            return node.copyWith(
+              text: updatedText,
+              targetVariables: node.targetVariables
+                  .map((name) => name == oldName ? updatedVariable.name : name)
+                  .toList(),
+            );
+          } else if (node is OutputNode) {
+            final updatedTemplate = _renameInText(node.template, oldName, updatedVariable.name);
+            return node.copyWith(
+              text: updatedText,
+              template: updatedTemplate,
+              variables: node.variables
+                  .map((v) => v.name == oldName
+                      ? VariableDeclaration(
+                          name: updatedVariable.name,
+                          dataType: v.dataType,
+                          scope: v.scope,
+                        )
+                      : v)
+                  .toList(),
+            );
+          } else if (node is AssignmentNode) {
+            return node.copyWith(
+              text: updatedText,
+              assignments: node.assignments
+                  .map((a) => Assignment(
+                        target: a.target == oldName ? updatedVariable.name : a.target,
+                        expression: a.expression.replaceAll(
+                          RegExp('\\b${RegExp.escape(oldName)}\\b'),
+                          updatedVariable.name,
+                        ),
+                      ))
+                  .toList(),
+            );
+          } else if (node is ProcessNode) {
+            return node.copyWith(
+              text: updatedText,
+              arguments: node.arguments
+                  .map((arg) => arg == oldName ? updatedVariable.name : arg)
+                  .toList(),
+              resultTarget: node.resultTarget == oldName
+                  ? updatedVariable.name
+                  : node.resultTarget,
+            );
+          } else if (node is DecisionNode) {
+            if (node.clauses.isEmpty) {
+              // Nodo legacy: converti il testo aggiornato in clausole
+              final parsedClauses = _parseClausesFromExpression(updatedText);
+              if (parsedClauses.isNotEmpty) {
+                // Determina il logicalJoin dal testo
+                final newLogicalJoin = updatedText.contains(' OR ') ? 'OR' : 'AND';
+                return node.copyWith(
+                  text: updatedText,
+                  clauses: parsedClauses,
+                  logicalJoin: newLogicalJoin,
+                );
+              }
+              // Se parsing fallisce, aggiorna solo l'etichetta
+              return node.copyWith(text: updatedText);
+            }
+            return node.copyWith(
+              text: updatedText,
+              clauses: node.clauses.map((clause) {
+                final newLeft = clause.leftOperand == oldName ? updatedVariable.name : clause.leftOperand;
+                final newRight = !clause.isRightLiteral && clause.rightOperand == oldName
+                    ? updatedVariable.name
+                    : clause.rightOperand;
+                return clause.copyWith(leftOperand: newLeft, rightOperand: newRight);
+              }).toList(),
+            );
+          } else if (node is StartNode) {
+            // StartNode.copyWith non supporta 'text': ricrea l'istanza
+            return StartNode(
+              id: node.id,
+              x: node.x,
+              y: node.y,
+              width: node.width,
+              height: node.height,
+              text: updatedText,
+              metadata: node.metadata,
+            );
+          } else if (node is EndNode) {
+            // EndNode.copyWith non supporta 'text': ricrea l'istanza
+            return EndNode(
+              id: node.id,
+              x: node.x,
+              y: node.y,
+              width: node.width,
+              height: node.height,
+              text: updatedText,
+              metadata: node.metadata,
+            );
+          } else {
+            // Nessuna modifica specifica: aggiorna solo l'etichetta se necessario
+            return node; // evita copyWith dinamico non supportato
+          }
+        }).toList();
+
+        final newVariablesList = flowchartState.flowchart.variables
+            .map((v) => v.name == oldName ? updatedVariable : v)
+            .toList();
+
+        final newFlowchart = flowchartState.flowchart.copyWith(
+          variables: newVariablesList,
+          nodes: newNodes,
+        );
+
+        flowchartBloc.add(UpdateFlowchart(newFlowchart));
+      } else {
+        // Solo il tipo è cambiato, aggiorna solo la lista delle variabili
+        final newVariablesList = flowchartState.flowchart.variables
+            .map((v) => v.name == oldName ? updatedVariable : v)
+            .toList();
+        flowchartBloc.add(UpdateGlobalVariables(newVariablesList));
+      }
+    }
+  }
+
+  /// Gestisce l'eliminazione di una variabile
+  Future<void> _handleDeleteVariable(VariableDeclaration variableToDelete) async {
+    final flowchartBloc = context.read<FlowchartBloc>();
+    final flowchartState = flowchartBloc.state;
+    if (flowchartState is! FlowchartLoaded) return;
+
+    // Verifica se la variabile è in uso
+    if (_isVariableInUse(variableToDelete.name, flowchartState.flowchart.nodes)) {
+      final usingNodes = _getNodesUsingVariable(variableToDelete.name, flowchartState.flowchart.nodes);
+      final nodesList = usingNodes.join('\n• ');
+
+      await AppDialogs.showInfoDialog(
+        context,
+        title: 'Impossibile Eliminare',
+        message: 'La variabile "${variableToDelete.name}" è attualmente utilizzata nei seguenti nodi:\n\n• $nodesList\n\nRimuovi prima tutti i riferimenti a questa variabile per poterla eliminare.',
+        type: DialogType.warning,
+      );
+      return;
+    }
+
+    final confirmed = await AppDialogs.showConfirmationDialog(
+      context,
+      title: 'Conferma Eliminazione',
+      message: 'Sei sicuro di voler eliminare la variabile "${variableToDelete.name}"?',
+      isDestructive: true,
+    );
+
+    if (confirmed == true && mounted) {
+      final newVariablesList = flowchartState.flowchart.variables
+          .where((v) => v.name != variableToDelete.name)
+          .toList();
+
+      flowchartBloc.add(UpdateGlobalVariables(newVariablesList));
+    }
+  }
+
+  List<ConditionClause> _parseClausesFromExpression(String expr, {String? outLogicalJoin}) {
+    // Parser semplice: supporta AND/OR piatti, senza parentesi annidate complesse
+    String s = expr.trim();
+    if (s.isEmpty) return [];
+
+    String logicalJoin = 'AND';
+    if (s.contains(' AND ')) {
+      logicalJoin = 'AND';
+    } else if (s.contains(' OR ')) {
+      logicalJoin = 'OR';
+    }
+
+    List<String> parts;
+    if (logicalJoin == 'AND' && s.contains(' AND ')) {
+      parts = s.split(' AND ');
+    } else if (logicalJoin == 'OR' && s.contains(' OR ')) {
+      parts = s.split(' OR ');
+    } else {
+      parts = [s];
+    }
+
+    ConditionClause? parseSingle(String raw) {
+      String t = raw.trim();
+      while (t.startsWith('(') && t.endsWith(')')) {
+        t = t.substring(1, t.length - 1).trim();
+      }
+      const ops = ['>=', '<=', '==', '!=', '>', '<', '='];
+      String? op;
+      for (final o in ops) {
+        final idx = t.indexOf(' $o ');
+        if (idx != -1) { op = o; break; }
+      }
+      if (op == null) return null;
+      final split = t.split(' $op ');
+      if (split.length != 2) return null;
+      final left = split[0].trim();
+      final right = split[1].trim();
+      final normOp = (op == '=') ? '==' : op;
+      bool isLiteral = false;
+      if (right.isEmpty) {
+        isLiteral = true;
+      } else if ((right.startsWith("'") && right.endsWith("'")) ||
+                 (right.startsWith('"') && right.endsWith('"')) ||
+                 right.toLowerCase() == 'true' || right.toLowerCase() == 'false' ||
+                 double.tryParse(right) != null) {
+        isLiteral = true;
+      }
+      return ConditionClause(
+        leftOperand: left,
+        operator: normOp,
+        rightOperand: right,
+        isRightLiteral: isLiteral,
+      );
+    }
+
+    final clauses = <ConditionClause>[];
+    for (final p in parts) {
+      final c = parseSingle(p);
+      if (c != null) clauses.add(c);
+    }
+    if (outLogicalJoin != null) {
+      outLogicalJoin = logicalJoin;
+    }
+    return clauses;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool canManageVariables = widget.onAddVariable != null &&
-        widget.onEditVariable != null &&
-        widget.onDeleteVariable != null;
-
     return Stack(
       children: [
         _WorkAreaContent(
@@ -78,7 +397,7 @@ class _WorkAreaState extends State<WorkArea>
           allowDragInReadOnly: widget.allowDragInReadOnly,
         ),
 
-        if (!widget.isReadOnly && canManageVariables)
+        if (!widget.isReadOnly)
           Positioned(
             top: 24,
             left: 24,
@@ -94,9 +413,9 @@ class _WorkAreaState extends State<WorkArea>
 
                     return _VariablesPanel(
                       variables: variables,
-                      onAddVariable: widget.onAddVariable!,
-                      onEditVariable: widget.onEditVariable!,
-                      onDeleteVariable: widget.onDeleteVariable!,
+                      onAddVariable: _handleAddVariable,
+                      onEditVariable: _handleEditVariable,
+                      onDeleteVariable: _handleDeleteVariable,
                     );
                   },
                 ),

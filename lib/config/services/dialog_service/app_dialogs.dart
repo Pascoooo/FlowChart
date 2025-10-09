@@ -1,10 +1,8 @@
 import 'dart:typed_data';
-
 import 'package:flowchart_thesis/config/services/dialog_service/service_dialog.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../blocs/project_bloc/project_state.dart';
 import '../banner_service.dart';
@@ -113,16 +111,18 @@ class AppDialogs {
   }
 
   /// Mostra un dialogo per modificare una variabile globale esistente.
-  static Future<VariableDeclaration?> showEditVariableDialog({
+  static Future<Map<String, dynamic>?> showEditVariableDialog({
     required BuildContext context,
     required VariableDeclaration variableToEdit,
     required Set<String> existingVariableNames,
+    bool canEditType = true,
   }) {
-    return showDialog<VariableDeclaration>(
+    return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => EditVariableDialog(
         variableToEdit: variableToEdit,
         existingVariableNames: existingVariableNames,
+        canEditType: canEditType,
       ),
     );
   }
@@ -139,10 +139,7 @@ class AppDialogs {
   }) {
     switch (kind) {
       case FlowNodeKind.input:
-        return showInputNodeDialog(
-          context,
-          availableInputVariables: variables ?? const [],
-        );
+        return showInputNodeDialog(context,availableInputVariables: variables ?? const [],);
 
       case FlowNodeKind.assignment:
         return showAssignmentNodeDialog(
@@ -154,33 +151,16 @@ class AppDialogs {
         return showOutputNodeDialog(context, availableVariables: variables ?? const []);
 
       case FlowNodeKind.process:
-        final fileOptions = files ?? const <MyFile>[];
-        if (fileOptions.isEmpty) {
-          return showInfoDialog(
-            context,
-            title: 'Nessun file disponibile',
-            message:
-            'Non è possibile creare un nodo Processo perché non ci sono altri flowchart da chiamare.',
-            type: DialogType.warning,
-          ).then((_) => null);
-        }
+        // NUOVA REGOLA: Apri il dialog anche se la lista è vuota, senza warning
         return showProcessNodeDialog(
           context,
-          files: fileOptions,
+          files: files ?? const <MyFile>[],
           availableVariables: variables ?? const <VariableDeclaration>[],
         );
 
       case FlowNodeKind.decision:
+        // NUOVA REGOLA: Apri il dialog anche se la lista è vuota, senza warning
         final vars = variables ?? const [];
-        if (vars.isEmpty) {
-          return showInfoDialog(
-            context,
-            title: 'Nessuna variabile disponibile',
-            message:
-            'Non è possibile creare una condizione perché non ci sono variabili nel programma.',
-            type: DialogType.warning,
-          ).then((_) => null);
-        }
         final decisionVars = vars
             .map((v) => {'name': v.name, 'type': v.dataType})
             .toList();
@@ -261,8 +241,6 @@ class AppDialogs {
       state: state,
     );
   }
-
-  // --- Banner e Notifiche (delegato a BannerService) ---
 
   static void showSuccessBanner(BuildContext context, String message) {
     BannerService.showSuccess(context, message);

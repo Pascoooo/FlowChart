@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_repository/file_repository.dart';
-import 'package:math_expressions/math_expressions.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:project_repository/src/services/firestore_storage_service.dart';
@@ -302,26 +301,6 @@ class FirebaseProjectRepo implements ProjectRepo {
     }
   }
 
-  /// Valuta un'espressione matematica/logica usando le variabili correnti
-  dynamic _evaluateExpression(String expression, Map<String, dynamic> variables) {
-    try {
-      // Sostituisci le variabili nell'espressione
-      String processedExpression = expression;
-      variables.forEach((key, value) {
-        // Sostituisci il nome della variabile con il suo valore
-        processedExpression = processedExpression.replaceAll(key, value.toString());
-      });
-
-      // Usa math_expressions per valutare l'espressione con le nuove API
-      final parser = GrammarParser();
-      final exp = parser.parse(processedExpression);
-      final evaluator = RealEvaluator();
-      return evaluator.evaluate(exp);
-    } catch (e) {
-      // Se la valutazione fallisce, ritorna l'espressione originale
-      return expression;
-    }
-  }
 
   @override
   Future<Map<String, dynamic>> getDebugVariables({required String projectId}) {

@@ -14,6 +14,59 @@ enum VariableScope {
   local,
 }
 
+/// Rappresenta una singola clausola di condizione.
+class ConditionClause extends Equatable {
+  final String leftOperand;   // Nome della variabile a sinistra
+  final String operator;       // Operatore: ==, !=, <, <=, >, >=, contains, !contains
+  final String rightOperand;   // Nome della variabile o valore letterale a destra
+  final bool isRightLiteral;   // true se rightOperand è un valore letterale, false se è una variabile
+
+  const ConditionClause({
+    required this.leftOperand,
+    required this.operator,
+    required this.rightOperand,
+    this.isRightLiteral = false,
+  });
+
+  @override
+  List<Object?> get props => [leftOperand, operator, rightOperand, isRightLiteral];
+
+  ConditionClause copyWith({
+    String? leftOperand,
+    String? operator,
+    String? rightOperand,
+    bool? isRightLiteral,
+  }) {
+    return ConditionClause(
+      leftOperand: leftOperand ?? this.leftOperand,
+      operator: operator ?? this.operator,
+      rightOperand: rightOperand ?? this.rightOperand,
+      isRightLiteral: isRightLiteral ?? this.isRightLiteral,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'leftOperand': leftOperand,
+    'operator': operator,
+    'rightOperand': rightOperand,
+    'isRightLiteral': isRightLiteral,
+  };
+
+  factory ConditionClause.fromMap(Map<String, dynamic> map) {
+    return ConditionClause(
+      leftOperand: map['leftOperand'] ?? '',
+      operator: map['operator'] ?? '==',
+      rightOperand: map['rightOperand'] ?? '',
+      isRightLiteral: map['isRightLiteral'] ?? false,
+    );
+  }
+
+  /// Converte la clausola in una stringa leggibile per la generazione del codice
+  String toExpression() {
+    return '$leftOperand $operator $rightOperand';
+  }
+}
+
 /// Rappresenta una singola dichiarazione di variabile.
 class VariableDeclaration extends Equatable {
   final String name;
@@ -289,43 +342,156 @@ class ProcessNode extends FlowNode {
 }
 
 class DecisionNode extends FlowNode {
-  final String condition;
-  const DecisionNode(
-      {required super.id,
-        required super.x,
-        required super.y,
-        required super.width,
-        required super.height,
-        required super.text,
-        this.condition = '',
-        super.metadata})
-      : super(kind: FlowNodeKind.decision);
+  final List<ConditionClause> clauses;
+  final String logicalJoin; // "AND" o "OR"
+
+  const DecisionNode({
+    required super.id,
+    required super.x,
+    required super.y,
+    required super.width,
+    required super.height,
+    required super.text,
+    this.clauses = const [],
+    this.logicalJoin = 'AND',
+    super.metadata,
+  }) : super(kind: FlowNodeKind.decision);
+
+  /// Genera la stringa della condizione completa per la visualizzazione
+  String get condition {
+    if (clauses.isEmpty) return '';
+
+    if (clauses.length == 1) {
+      return clauses.first.toExpression();
+    }
+
+    return clauses.map((c) => c.toExpression()).join(' $logicalJoin ');
+  }
 
   @override
   FlowNodeEntity toEntity() => FlowNodeEntity(
-      id: id,
-      kind: kind,
-      x: x,
-      y: y,
-      width: width,
-      height: height,
-      text: text,
-      data: {'condition': condition},
-      metadata: metadata);
-  static DecisionNode fromEntity(FlowNodeEntity e) => DecisionNode(
+    id: id,
+    kind: kind,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    text: text,
+    data: {
+      'clauses': clauses.map((c) => c.toMap()).toList(),
+      'logicalJoin': logicalJoin,
+      // Manteniamo anche la stringa condition per retrocompatibilità
+      'condition': condition,
+    },
+    metadata: metadata,
+  );
+
+  static DecisionNode fromEntity(FlowNodeEntity e) {
+    // Supporto per nuovo formato con clausole
+    final clausesData = e.data?['clauses'] as List?;
+
+    List<ConditionClause> clauses = [];
+    String logicalJoin = 'AND';
+
+    if (clausesData != null && clausesData.isNotEmpty) {
+      // Nuovo formato con clausole strutturate
+      clauses = clausesData
+          .map((c) => ConditionClause.fromMap(c as Map<String, dynamic>))
+          .toList();
+      logicalJoin = e.data?['logicalJoin'] ?? 'AND';
+    } else {
+      // Vecchio formato con stringa condition
+      final legacyCondition = (e.data?['condition'] as String?)?.trim() ?? '';
+
+      // Migrazione automatica della condizione legacy in clausole (parser semplice)
+      if (legacyCondition.isNotEmpty) {
+        // Determina il connettore principale (non gestisce parentesi annidate)
+        if (legacyCondition.contains(' AND ')) {
+          logicalJoin = 'AND';
+        } else if (legacyCondition.contains(' OR ')) {
+          logicalJoin = 'OR';
+        }
+
+        final parts = (logicalJoin == 'AND' && legacyCondition.contains(' AND '))
+            ? legacyCondition.split(' AND ')
+            : (logicalJoin == 'OR' && legacyCondition.contains(' OR '))
+                ? legacyCondition.split(' OR ')
+                : [legacyCondition];
+
+        ConditionClause? _parseClause(String raw) {
+          String s = raw.trim();
+          while (s.startsWith('(') && s.endsWith(')')) {
+            s = s.substring(1, s.length - 1).trim();
+          }
+          const ops = ['>=', '<=', '==', '!=', '>', '<', '='];
+          String? op;
+          for (final o in ops) {
+            final idx = s.indexOf(' $o ');
+            if (idx != -1) {
+              op = o;
+              break;
+            }
+          }
+          if (op == null) return null;
+          final split = s.split(' $op ');
+          if (split.length != 2) return null;
+          final left = split[0].trim();
+          String right = split[1].trim();
+          final normOp = (op == '=') ? '==' : op;
+          bool isLiteral = false;
+          if (right.isEmpty) {
+            isLiteral = true;
+          } else if (right.startsWith("'") && right.endsWith("'")) {
+            isLiteral = true;
+          } else if (right.startsWith('"') && right.endsWith('"')) {
+            isLiteral = true;
+          } else if (right.toLowerCase() == 'true' || right.toLowerCase() == 'false') {
+            isLiteral = true;
+          } else if (double.tryParse(right) != null) {
+            isLiteral = true;
+          }
+          return ConditionClause(
+            leftOperand: left,
+            operator: normOp,
+            rightOperand: right,
+            isRightLiteral: isLiteral,
+          );
+        }
+
+        final parsed = <ConditionClause>[];
+        for (final p in parts) {
+          final clause = _parseClause(p);
+          if (clause != null) parsed.add(clause);
+        }
+        if (parsed.isNotEmpty) {
+          clauses = parsed;
+        }
+      }
+    }
+
+    return DecisionNode(
       id: e.id,
       x: e.x,
       y: e.y,
       width: e.width,
       height: e.height,
       text: e.text,
-      condition: e.data?['condition'] ?? '',
-      metadata: e.metadata);
-  @override
-  List<Object?> get props => [...super.props, condition];
+      clauses: clauses,
+      logicalJoin: logicalJoin,
+      metadata: e.metadata,
+    );
+  }
 
-  DecisionNode copyWith(
-      {double? x, double? y, String? text, String? condition}) {
+  @override
+  List<Object?> get props => [...super.props, clauses, logicalJoin];
+
+  DecisionNode copyWith({
+    double? x,
+    double? y,
+    String? text,
+    List<ConditionClause>? clauses,
+    String? logicalJoin,
+  }) {
     return DecisionNode(
       id: id,
       x: x ?? this.x,
@@ -333,7 +499,8 @@ class DecisionNode extends FlowNode {
       width: width,
       height: height,
       text: text ?? this.text,
-      condition: condition ?? this.condition,
+      clauses: clauses ?? this.clauses,
+      logicalJoin: logicalJoin ?? this.logicalJoin,
       metadata: metadata,
     );
   }
@@ -566,3 +733,4 @@ class FlowchartEdge extends Equatable {
   @override
   List<Object?> get props => [from, to, port];
 }
+

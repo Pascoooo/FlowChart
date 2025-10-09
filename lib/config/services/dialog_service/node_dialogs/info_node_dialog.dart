@@ -1,13 +1,8 @@
-// Tuo file info_node_dialog.dart
-
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
 import '../app_dialogs.dart';
 import '../service_dialog.dart';
-
-// ... (il resto degli import)
 
 /// 📋 Node Details Dialog - Professional Information Display
 Future<void> showNodeDetailsDialog({
@@ -785,46 +780,6 @@ class _TruncatedList extends StatelessWidget {
               },
             ),
           ),
-      ],
-    );
-  }
-}
-
-// NUOVO: Widget helper per la riga della variabile in _TruncatedList
-class _VariableRowDisplay extends StatelessWidget {
-  final VariableDeclaration variable;
-  final FluentThemeData theme;
-
-  const _VariableRowDisplay({required this.variable, required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.3)),
-          ),
-          child: Text(
-            variable.dataType.toUpperCase(),
-            style: TextStyle(
-              color: theme.accentColor.defaultBrushFor(theme.brightness),
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            variable.name,
-            style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13),
-          ),
-        ),
       ],
     );
   }

@@ -1,7 +1,11 @@
+// file: lib/config/services/dialog_service/node_dialogs/assignment_node_dialog.dart
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import '../../expression_parser.dart';
+
+/// Mostra il dialog di configurazione per un nodo Assignment.
 Future<Map<String, dynamic>?> showAssignmentNodeDialog(
     BuildContext context, {
       required List<VariableDeclaration> availableVariables,
@@ -9,33 +13,9 @@ Future<Map<String, dynamic>?> showAssignmentNodeDialog(
   return showDialog<Map<String, dynamic>>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => _AssignmentNodeDialog(
-      availableVariables: availableVariables,
-    ),
+    builder: (_) => _AssignmentNodeDialog(availableVariables: availableVariables),
   );
 }
-
-// ============================================================================
-// EXPRESSION PARSER & VALIDATOR
-// NOTA: Questa sezione non è più utilizzata da questo dialogo, ma potrebbe
-// servire per altri nodi (es. Decisione). La lasciamo per compatibilità futura.
-// ============================================================================
-
-enum TokenType { number, variable, operator, leftParen, rightParen }
-
-class Token {
-  final TokenType type;
-  final String value;
-  Token(this.type, this.value);
-  bool get isVariable => type == TokenType.variable;
-  bool get isOperator => type == TokenType.operator;
-  bool get isNumber => type == TokenType.number;
-}
-
-
-// ============================================================================
-// DIALOG
-// ============================================================================
 
 class _AssignmentNodeDialog extends StatefulWidget {
   final List<VariableDeclaration> availableVariables;
@@ -46,89 +26,217 @@ class _AssignmentNodeDialog extends StatefulWidget {
 }
 
 class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
-  // MODIFICATO: La lista ora contiene solo i dati necessari
+  final _labelController = TextEditingController();
   final List<_AssignmentRowData> _assignments = [];
   bool _attemptedSubmit = false;
 
   @override
   void initState() {
     super.initState();
-    // Aggiunge una riga di assegnazione vuota all'inizio
     if (widget.availableVariables.isNotEmpty) {
       _addAssignment();
     }
+  }
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    for (final a in _assignments) {
+      a.dispose();
+    }
+    super.dispose();
   }
 
   void _addAssignment() => setState(() => _assignments.add(_AssignmentRowData()));
 
   void _removeAssignment(int i) {
     setState(() {
+      _assignments[i].dispose();
       _assignments.removeAt(i);
     });
     if (_attemptedSubmit) _validateForm();
   }
 
-
-  bool _validateForm() {
-    bool isFormValid = true;
-    for (final assignment in _assignments) {
-      assignment.targetError = null; // Resetta l'errore
-      if (assignment.target == null || assignment.target!.trim().isEmpty) {
-        assignment.targetError = 'Selezionare una variabile';
-        isFormValid = false;
+  /// **MODIFICA 1: Funzione che filtra le variabili per una data riga.**
+  /// Esclude quelle già selezionate nelle ALTRE righe.
+  List<VariableDeclaration> _getFilteredVariablesForRow(int currentRowIndex) {
+    // Trova tutti i target già selezionati nelle altre righe
+    final selectedInOtherRows = <String>{};
+    for (int i = 0; i < _assignments.length; i++) {
+      if (i == currentRowIndex) continue; // Salta la riga corrente
+      final assignment = _assignments[i];
+      if (assignment.selectedVariable != null) {
+        selectedInOtherRows.add(assignment.selectedVariable!);
       }
     }
-    setState(() {});
-    return isFormValid;
+    // Filtra la lista originale e la restituisce
+    return widget.availableVariables
+        .where((variable) => !selectedInOtherRows.contains(variable.name))
+        .toList();
   }
 
-  // MODIFICATO: L'etichetta ora riflette la nuova funzione
-  String _generateAutoLabel() {
-    final targets = _assignments
-        .map((a) => a.target)
-        .where((t) => t != null && t.isNotEmpty)
-        .toList();
+  bool _validateValue(String type, String value) {
+    if (value.isEmpty) return false;
+    switch (type.toLowerCase()) {
+      case 'int':
+        return int.tryParse(value) != null;
+      case 'float':
+      case 'double':
+        return double.tryParse(value) != null;
+      case 'bool':
+        return ['true', 'false', '0', '1'].contains(value.toLowerCase());
+      case 'char':
+        return value.length == 1;
+      case 'string':
+        return true;
+      default:
+        return false;
+    }
+  }
 
-    if (targets.isEmpty) return 'Input a Runtime';
-    return 'Assegnazione per: ${targets.join(', ')}';
+  bool _validateForm() {
+    if (_assignments.isEmpty) return false;
+    final selectedVars = <String, List<int>>{};
+    bool isFormValid = true;
+
+    for (var i = 0; i < _assignments.length; i++) {
+      final a = _assignments[i];
+      a.variableError = null;
+      a.valueError = null;
+
+      // Validazione variabile selezionata
+      if (a.selectedVariable == null) {
+        a.variableError = 'Seleziona variabile';
+        isFormValid = false;
+      } else {
+        selectedVars.putIfAbsent(a.selectedVariable!, () => []).add(i);
+      }
+
+      // Validazione valore/espressione SOLO se hasInit è true
+      if (a.hasInit) {
+        final value = a.useExpression
+            ? a.expressionController.text.trim()
+            : a.valueController.text.trim();
+
+        if (value.isEmpty) {
+          a.valueError = 'Obbligatorio';
+          isFormValid = false;
+        } else {
+          if (a.useExpression) {
+            final result = ExpressionParser.validate(
+              value,
+              widget.availableVariables.map((v) => v.name).toList(),
+            );
+            if (!result.isValid) {
+              a.valueError = result.errorMessage;
+              isFormValid = false;
+            }
+          } else {
+            final targetVar = widget.availableVariables.firstWhere(
+                  (v) => v.name == a.selectedVariable,
+              orElse: () => VariableDeclaration(
+                name: '',
+                dataType: 'string',
+                scope: VariableScope.local,
+              ),
+            );
+            if (!_validateValue(targetVar.dataType, value)) {
+              a.valueError = 'Valore non valido';
+              isFormValid = false;
+            }
+          }
+        }
+      }
+      // Se hasInit è false, non validare il valore (è opzionale)
+    }
+
+    // Validazione variabili duplicate
+    selectedVars.forEach((varName, indices) {
+      if (indices.length > 1) {
+        isFormValid = false;
+        for (var index in indices) {
+          _assignments[index].variableError = 'Già assegnata';
+        }
+      }
+    });
+
+    setState(() {});
+    return isFormValid;
   }
 
   void _confirm() {
     setState(() => _attemptedSubmit = true);
     if (!_validateForm()) return;
 
+    final assignmentsList = _assignments.map((a) {
+      String? expression;
+      if (a.hasInit) {
+        expression = a.useExpression
+            ? a.expressionController.text.trim()
+            : a.valueController.text.trim();
+      }
+
+      return {
+        'target': a.selectedVariable!,
+        'expression': (expression ?? '').trim(),
+      };
+    }).toList();
+
+    final summary = assignmentsList
+        .map((a) {
+          final expr = (a['expression'] as String).trim();
+          final tgt = a['target'] as String;
+          return expr.isNotEmpty ? '$tgt = $expr' : tgt;
+        })
+        .join('; ');
+
     Navigator.of(context).pop({
-      'text': _generateAutoLabel(),
-      'assignments': _assignments
-          .where((a) => a.target != null && a.target!.isNotEmpty)
-          .map((a) {
-        // ✨ LOGICA CHIAVE ✨
-        // Non salviamo più un'espressione, ma un segnaposto speciale.
-        // Il motore di debug interpreterà "?" come "fermati e chiedi un input".
-        return Assignment(
-          target: a.target!,
-          expression: '?',
-        ).toMap();
-      }).toList(),
+      'text': _labelController.text.trim().isEmpty ? summary : _labelController.text.trim(),
+      'assignments': assignmentsList,
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final hasVariables = widget.availableVariables.isNotEmpty;
+
     return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
-      content: SizedBox(
-        height: 520,
+      constraints: const BoxConstraints(maxWidth: 900, maxHeight: 750),
+      content: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
         child: Column(
           children: [
             _buildHeader(theme),
+            const SizedBox(height: 16),
+            const Divider(),
             const SizedBox(height: 20),
-            Expanded(
-              child: _buildAssignmentsSection(theme),
-            ),
-            const SizedBox(height: 12),
-            _buildDialogActions(),
+            if (!hasVariables) _buildNoVariablesInfo(theme),
+            if (hasVariables) ...[
+              InfoLabel(
+                label: 'Etichetta Nodo (opzionale)',
+                child: TextBox(
+                  controller: _labelController,
+                  placeholder: 'Es. Calcola Risultato',
+                ),
+              ),
+              const SizedBox(height: 24),
+              _buildAssignmentHeader(theme),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _assignments.isEmpty
+                    ? _buildEmptyState(theme)
+                    : ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  shrinkWrap: true,
+                  itemCount: _assignments.length,
+                  itemBuilder: (_, i) => _buildAssignmentRow(i, theme),
+                  separatorBuilder: (_, __) => const SizedBox(height: 16),
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            _buildDialogActions(hasVariables),
           ],
         ),
       ),
@@ -138,65 +246,17 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
   Widget _buildHeader(FluentThemeData theme) {
     return Row(
       children: [
-        FaIcon(FontAwesomeIcons.keyboard, color: theme.accentColor, size: 24),
+        FaIcon(FontAwesomeIcons.equals, color: theme.accentColor, size: 24),
         const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Configura Input a Runtime', style: theme.typography.title),
-              Text('Seleziona le variabili a cui verrà assegnato un valore durante il debug.',
-                  style: theme.typography.body),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAssignmentsSection(FluentThemeData theme) {
-    return Column(
-      children: [
-        _buildAssignmentsHeader(theme),
-        const SizedBox(height: 12),
-        Expanded(
-          child: widget.availableVariables.isEmpty
-              ? Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                'Nessuna variabile definita. Aggiungi prima un nodo di Input.',
-                style: theme.typography.caption,
-                textAlign: TextAlign.center,
+              Text('Configura Nodo Assegnazione', style: theme.typography.title),
+              Text(
+                'Seleziona variabili e assegna valori o espressioni. Ogni variabile può essere assegnata una sola volta.',
+                style: theme.typography.body,
               ),
-            ),
-          )
-              : _assignments.isEmpty
-              ? _buildEmptyAssignments(theme)
-              : ListView.builder(
-            itemCount: _assignments.length,
-            itemBuilder: (_, i) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _buildAssignmentRow(i, theme),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAssignmentsHeader(FluentThemeData theme) {
-    return Row(
-      children: [
-        Text('Variabili da Valorizzare', style: theme.typography.subtitle),
-        const Spacer(),
-        FilledButton(
-          onPressed: widget.availableVariables.isEmpty ? null : _addAssignment,
-          child: const Row(
-            children: [
-              Icon(FontAwesomeIcons.plus, size: 14),
-              SizedBox(width: 6),
-              Text('Aggiungi Variabile'),
             ],
           ),
         ),
@@ -204,89 +264,284 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
     );
   }
 
-  Widget _buildEmptyAssignments(FluentThemeData theme) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-        child: Text('Nessuna variabile aggiunta.', style: theme.typography.caption),
+  Widget _buildNoVariablesInfo(FluentThemeData theme) {
+    return Expanded(
+      child: Center(
+        child: InfoBar(
+          title: const Text('Nessuna variabile disponibile'),
+          content: const Text('Crea prima delle variabili nel progetto.'),
+          severity: InfoBarSeverity.info,
+          isLong: true,
+        ),
       ),
     );
   }
 
-  // MODIFICATO: La riga ora contiene solo la ComboBox di selezione
-  Widget _buildAssignmentRow(int index, FluentThemeData theme) {
-    final assignmentData = _assignments[index];
-    final availableVarNames = widget.availableVariables.map((v) => v.name).toList();
-
-    return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: theme.brightness == Brightness.light ? Colors.grey[10] : theme.cardColor.withOpacity(0.4),
-          borderRadius: const BorderRadius.all(Radius.circular(6)),
+  Widget _buildAssignmentHeader(FluentThemeData theme) {
+    return Row(
+      children: [
+        Text('Assegnazioni', style: theme.typography.subtitle),
+        const Spacer(),
+        FilledButton(
+          onPressed: _addAssignment,
+          style: ButtonStyle(
+            padding: ButtonState.all(const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+          ),
+          child: const Row(
+            children: [
+              Icon(FluentIcons.add, size: 16),
+              SizedBox(width: 8),
+              Text('Aggiungi'),
+            ],
+          ),
         ),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: InfoLabel(
-                    label: 'Variabile di destinazione*',
-                    child: ComboBox<String>(
-                      isExpanded: true,
-                      value: assignmentData.target,
-                      items: availableVarNames
-                          .map((name) => ComboBoxItem(value: name, child: Text(name)))
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          assignmentData.target = value;
-                          if (_attemptedSubmit) _validateForm();
-                        });
-                      },
-                      placeholder: const Text('Seleziona una variabile'),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Padding(
-                  padding: const EdgeInsets.only(top: 22.0), // Allinea con i campi
-                  child: IconButton(
-                    onPressed: () => _removeAssignment(index),
-                    icon: const FaIcon(FontAwesomeIcons.trash, size: 14),
-                    style: ButtonStyle(
-                        foregroundColor: ButtonState.resolveWith((states) {
-                          final color = Colors.red.defaultBrushFor(theme.brightness);
-                          return states.isHovering ? Colors.white : color;
-                        }),
-                        backgroundColor: ButtonState.resolveWith(
-                                (states) => states.isHovering ? Colors.red : Colors.transparent)
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (_attemptedSubmit && assignmentData.targetError != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0, left: 2.0),
-                child: _ErrorMessage(assignmentData.targetError!),
-              ),
-          ],
-        ));
+      ],
+    );
   }
 
-  Widget _buildDialogActions() {
+  Widget _buildEmptyState(FluentThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(FluentIcons.info, size: 48, color: theme.accentColor),
+          const SizedBox(height: 16),
+          Text('Nessuna assegnazione definita', style: theme.typography.bodyLarge),
+          const SizedBox(height: 4),
+          Text('Aggiungi la prima assegnazione.', style: theme.typography.caption),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignmentRow(int index, FluentThemeData theme) {
+    final a = _assignments[index];
+
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: theme.brightness == Brightness.light
+            ? Colors.grey[20]
+            : theme.cardColor.withOpacity(0.5),
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: 3,
+                child: InfoLabel(
+                  label: 'Variabile *',
+                  child: ComboBox<String>(
+                    isExpanded: true,
+                    placeholder: const Text('Seleziona...'),
+                    value: a.selectedVariable,
+                    /// **MODIFICA 2: Il ComboBox ora usa la lista filtrata.**
+                    items: _getFilteredVariablesForRow(index).map((v) {
+                      return ComboBoxItem(
+                        value: v.name,
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: theme.accentColor.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                v.dataType.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.accentColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(v.name, style: const TextStyle(fontFamily: 'Consolas, Monaco, monospace')),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) => setState(() {
+                      if (val != null) {
+                        a.selectedVariable = val;
+                        a.expressionController.clear();
+                        a.valueController.clear();
+                        if (_attemptedSubmit) _validateForm();
+                      }
+                    }),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 5,
+                child: AnimatedOpacity(
+                  opacity: a.hasInit ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: InfoLabel(
+                    label: a.useExpression ? 'Espressione *' : 'Valore *',
+                    child: TextBox(
+                      controller: a.useExpression ? a.expressionController : a.valueController,
+                      enabled: a.hasInit,
+                      placeholder: a.useExpression
+                          ? 'Es. {x} + 10 * {y}'
+                          : (a.selectedVariable != null ? _getHintForVariable(a.selectedVariable!) : ''),
+                      prefix: a.hasInit
+                          ? Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: FaIcon(
+                          a.useExpression ? FontAwesomeIcons.calculator : FontAwesomeIcons.hashtag,
+                          size: 14,
+                          color: theme.typography.body?.color?.withOpacity(0.5),
+                        ),
+                      )
+                          : null,
+                      style: const TextStyle(fontFamily: 'Consolas, Monaco, monospace', fontSize: 14),
+                      onChanged: (_) {
+                        if (_attemptedSubmit) _validateForm();
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                children: [
+                  const Text('Inizializza?', style: TextStyle(fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Checkbox(
+                    checked: a.hasInit,
+                    onChanged: (val) => setState(() {
+                      if (val != null) {
+                        a.hasInit = val;
+                        if (!val) {
+                          a.expressionController.clear();
+                          a.valueController.clear();
+                        }
+                        if (_attemptedSubmit) _validateForm();
+                      }
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: () => _removeAssignment(index),
+                style: ButtonStyle(
+                  foregroundColor: ButtonState.resolveWith((states) {
+                    final color = Colors.red.defaultBrushFor(theme.brightness);
+                    return states.isHovering ? Colors.white : color;
+                  }),
+                  backgroundColor: ButtonState.resolveWith((states) {
+                    return states.isHovering ? Colors.red : Colors.transparent;
+                  }),
+                ),
+                icon: const FaIcon(FontAwesomeIcons.trash, size: 16),
+              ),
+            ],
+          ),
+          if (a.hasInit) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Spacer(flex: 3),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 5,
+                  child: ToggleSwitch(
+                    checked: a.useExpression,
+                    onChanged: (val) => setState(() {
+                      a.useExpression = val;
+                      if (val) {
+                        a.valueController.clear();
+                      } else {
+                        a.expressionController.clear();
+                      }
+                      if (_attemptedSubmit) _validateForm();
+                    }),
+                    content: Text(
+                      a.useExpression ? 'Espressione matematica' : 'Valore diretto',
+                      style: theme.typography.body,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Spacer(flex: 1),
+                const SizedBox(width: 12),
+                const SizedBox(width: 40),
+              ],
+            ),
+          ],
+          if (_attemptedSubmit && (a.variableError != null || a.valueError != null))
+            _buildErrorMessages(a),
+        ],
+      ),
+    );
+  }
+
+  String _getHintForVariable(String variableName) {
+    final variable = widget.availableVariables.firstWhere(
+          (v) => v.name == variableName,
+      orElse: () => VariableDeclaration(name: '', dataType: 'string', scope: VariableScope.local),
+    );
+
+    switch (variable.dataType.toLowerCase()) {
+      case 'int':
+        return 'Es. 42';
+      case 'float':
+      case 'double':
+        return 'Es. 3.14';
+      case 'bool':
+        return 'Es. true';
+      case 'char':
+        return 'Es. A';
+      case 'string':
+        return 'Es. "Testo"';
+      default:
+        return '';
+    }
+  }
+
+  Widget _buildErrorMessages(_AssignmentRowData a) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0, left: 2.0, right: 2.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 3, child: _ErrorMessage(a.variableError ?? '')),
+          const SizedBox(width: 16),
+          Expanded(flex: 5, child: _ErrorMessage(a.valueError ?? '')),
+          const SizedBox(width: 16),
+          const Spacer(flex: 1),
+          const SizedBox(width: 12),
+          const SizedBox(width: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogActions(bool hasVariables) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Button(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(context).pop(null),
+          style: ButtonStyle(
+            padding: ButtonState.all(const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+          ),
           child: const Text('Annulla'),
         ),
         const SizedBox(width: 12),
         FilledButton(
-          onPressed: _confirm,
+          onPressed: hasVariables ? _confirm : null,
+          style: ButtonStyle(
+            padding: ButtonState.all(const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+          ),
           child: const Text('Conferma'),
         ),
       ],
@@ -302,25 +557,24 @@ class _ErrorMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     if (message.isEmpty) return const SizedBox.shrink();
     final theme = FluentTheme.of(context);
-    return Row(
-      children: [
-        Icon(FluentIcons.warning, size: 12, color: Colors.red.defaultBrushFor(theme.brightness)),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            message,
-            style: theme.typography.caption?.copyWith(color: Colors.red.defaultBrushFor(theme.brightness)),
-          ),
-        ),
-      ],
+    return Text(
+      message,
+      style: theme.typography.caption?.copyWith(color: Colors.red.defaultBrushFor(theme.brightness)),
     );
   }
 }
 
-// MODIFICATO: Classe di supporto dati ultra-semplificata
 class _AssignmentRowData {
-  String? target;
-  String? targetError;
+  final expressionController = TextEditingController();
+  final valueController = TextEditingController();
+  String? selectedVariable;
+  bool hasInit = false;
+  bool useExpression = false;
+  String? variableError;
+  String? valueError;
 
-  _AssignmentRowData();
+  void dispose() {
+    expressionController.dispose();
+    valueController.dispose();
+  }
 }
