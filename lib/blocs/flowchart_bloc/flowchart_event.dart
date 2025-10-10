@@ -210,3 +210,12 @@ class DebugBranchSelected extends FlowchartEvent {
   final bool result; // true -> ramo 'true', false -> ramo 'false'
   const DebugBranchSelected(this.result);
 }
+
+class DebugDecisionEvaluated extends FlowchartEvent {
+  final String nodeId;
+  final bool result; // true/false outcome evaluated at this decision node
+  const DebugDecisionEvaluated(this.nodeId, this.result);
+
+  @override
+  List<Object?> get props => [nodeId, result];
+}

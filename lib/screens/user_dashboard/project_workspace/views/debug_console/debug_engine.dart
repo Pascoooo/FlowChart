@@ -16,6 +16,8 @@ class DebugEngine {
   final VoidCallback onDebugExit;
   final VoidCallback? onDebugNext;
   final VoidCallback? onDebugPrev;
+  // NEW: notify decision result to the outside (Bloc) with nodeId
+  final void Function(String nodeId, bool result)? onDecisionEvaluated;
 
   final List<ConsoleEntry> _history = [];
   final List<String> _variablesQueue = [];
@@ -35,6 +37,7 @@ class DebugEngine {
     required this.onDebugExit,
     this.onDebugNext,
     this.onDebugPrev,
+    this.onDecisionEvaluated, // NEW optional
   }) {
     _commandRegistry = CommandRegistry(
       onNext: onDebugNext,
@@ -699,7 +702,7 @@ class DebugEngine {
     } catch (e) {
       // Mappa l'errore in un messaggio utente coerente
       final msg = e.toString();
-      final match = RegExp(r'Variabile "([^\"]+)"').firstMatch(msg);
+      final match = RegExp(r'Variabile "([^"]+)"').firstMatch(msg);
       if (match != null) {
         final varName = match.group(1);
         _addErrorMessage('Impossibile stampare il messaggio. La variabile $varName non ha un valore assegnato.');
@@ -727,7 +730,7 @@ class DebugEngine {
 
         evaluableCondition = evaluableCondition.replaceAll('{$key}', valueStr);
         evaluableCondition = evaluableCondition.replaceAllMapped(
-          RegExp(r'\\b' + RegExp.escape(key) + r'\\b'),
+          RegExp('\\b' + RegExp.escape(key) + '\\b'),
               (match) => valueStr,
         );
       }
@@ -739,6 +742,11 @@ class DebugEngine {
       _addInfoMessage('Valutazione condizione: $condition');
       _addInfoMessage('Espressione valutata: $evaluableCondition');
       _addSuccessMessage('Risultato: ${boolResult ? "TRUE" : "FALSE"}');
+
+      // NEW: notify branch evaluation (do not navigate)
+      if (onDecisionEvaluated != null) {
+        onDecisionEvaluated!(currentNode.id, boolResult);
+      }
     } catch (e) {
       _addErrorMessage('Errore valutazione condizione: ${e.toString()}');
     }
@@ -803,6 +811,11 @@ class DebugEngine {
     final boolResult = aggregate ?? false;
     // Messaggio finale
     _addSuccessMessage('Risultato: ${boolResult ? 'TRUE' : 'FALSE'}');
+
+    // NEW: notify branch evaluation (do not navigate)
+    if (onDecisionEvaluated != null) {
+      onDecisionEvaluated!(currentNode.id, boolResult);
+    }
   }
 
   /// Valuta una singola operazione di confronto con gestione tipi e operatori extra

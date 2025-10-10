@@ -159,7 +159,9 @@ class AppDialogs {
         );
 
       case FlowNodeKind.decision:
-        // NUOVA REGOLA: Apri il dialog anche se la lista è vuota, senza warning
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
+        // Usa lo stesso dialog per Decision, While e DoWhile (tutti gestiscono condizioni)
         final vars = variables ?? const [];
         final decisionVars = vars
             .map((v) => {'name': v.name, 'type': v.dataType})

@@ -13,7 +13,7 @@ class PlacementEngine {
     required Size newNodeSize,
     required List<FlowNode> existingNodes,
     required BoxConstraints canvasConstraints,
-    String? fromPort, // NUOVO: per gestire le uscite 'true'/'false' del DecisionNode
+    String? fromPort, // NUOVO: per gestire le uscite 'true'/'false' del DecisionNode/WhileNode/DoWhileNode
   }) {
     // Definiamo il rettangolo che rappresenta l'intera area di lavoro.
     final canvasRect = Rect.fromLTWH(
@@ -70,8 +70,10 @@ class PlacementEngine {
     required Size newNodeSize,
     String? fromPort,
   }) {
-    // Caso specifico per il DecisionNode.
-    if (fromNode.kind == FlowNodeKind.decision && fromPort != null) {
+    // Caso specifico per DecisionNode, WhileNode, DoWhileNode
+    if ((fromNode.kind == FlowNodeKind.decision ||
+         fromNode.kind == FlowNodeKind.whileLoop ||
+         fromNode.kind == FlowNodeKind.doWhileLoop) && fromPort != null) {
       if (fromPort == 'true') {
         // Prova solo a destra.
         return [

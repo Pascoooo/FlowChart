@@ -263,6 +263,8 @@ class _NodeWidgetState extends State<NodeWidget> {
 
     switch (widget.node.kind) {
       case FlowNodeKind.decision:
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
         final outgoingEdges = state.getOutgoingEdges(widget.node.id);
         final hasFalseBranch = outgoingEdges.any((e) => e.port == 'false');
         final hasTrueBranch = outgoingEdges.any((e) => e.port == 'true');
@@ -308,7 +310,9 @@ class _NodeWidgetState extends State<NodeWidget> {
   }
 
   String? _resolvePort(HandleDirection direction) {
-    if (widget.node.kind == FlowNodeKind.decision) {
+    if (widget.node.kind == FlowNodeKind.decision ||
+        widget.node.kind == FlowNodeKind.whileLoop ||
+        widget.node.kind == FlowNodeKind.doWhileLoop) {
       return direction == HandleDirection.left ? 'false' : 'true';
     }
     return null;
@@ -402,6 +406,37 @@ class NodeRenderer extends StatelessWidget {
           ),
         );
         break;
+
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
+        // Rombo con colore diverso per distinguerli dalla Decision
+        final loopBorderColor = isConnectorSelected
+            ? Colors.transparent
+            : (isSelected ? theme.accentColor : Colors.green);
+
+        nodeContent = CustomPaint(
+          painter: DiamondPainter(
+            color: fillColor,
+            borderColor: loopBorderColor,
+            strokeWidth: borderWidth,
+          ),
+          child: SizedBox(
+            width: node.width,
+            height: node.height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  node.text,
+                  textAlign: TextAlign.center,
+                  style: textStyle,
+                ),
+              ),
+            ),
+          ),
+        );
+        break;
+
       case FlowNodeKind.input:
       case FlowNodeKind.output:
         nodeContent = CustomPaint(
@@ -612,6 +647,14 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
           () => widget.onNodeCreate(FlowNodeKind.decision)),
       buildItem('Sottoprogramma', FontAwesomeIcons.gears,
           () => widget.onNodeCreate(FlowNodeKind.process)),
+
+      const MenuFlyoutSeparator(),
+
+      // Nuovi nodi per i cicli
+      buildItem('Ciclo Pre-Condizionale', FontAwesomeIcons.arrowsRotate,
+          () => widget.onNodeCreate(FlowNodeKind.whileLoop)),
+      buildItem('Ciclo Post-Condizionale', FontAwesomeIcons.repeat,
+          () => widget.onNodeCreate(FlowNodeKind.doWhileLoop)),
 
       const MenuFlyoutSeparator(),
 

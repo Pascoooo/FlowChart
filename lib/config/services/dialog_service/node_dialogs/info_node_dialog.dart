@@ -237,6 +237,10 @@ class _NodeDetailsDialog extends StatelessWidget {
       FlowNodeKind.end => ('Nodo Fine', FontAwesomeIcons.flagCheckered, errorColor),
     // NUOVO: Aggiunto titolo, icona e colore per il nodo di assegnazione.
       FlowNodeKind.assignment => ('Nodo Assegnazione', FontAwesomeIcons.calculator, accentColor),
+      // TODO: Handle this case.
+      FlowNodeKind.whileLoop => ('Ciclo While', FontAwesomeIcons.repeat, accentColor),
+      // TODO: Handle this case.
+      FlowNodeKind.doWhileLoop => ('Ciclo Do-While', FontAwesomeIcons.undo, accentColor),
     };
   }
 
@@ -331,6 +335,28 @@ class _NodeDetailsDialog extends StatelessWidget {
           _BoxedDetail(
             label: 'Condizione',
             value: decisionNode.condition.isNotEmpty ? decisionNode.condition : '–',
+            theme: theme,
+            isCode: true,
+          ),
+        ];
+
+      case FlowNodeKind.whileLoop:
+        final whileNode = node as WhileNode;
+        return [
+          _BoxedDetail(
+            label: 'Condizione (While)',
+            value: whileNode.condition.isNotEmpty ? whileNode.condition : '–',
+            theme: theme,
+            isCode: true,
+          ),
+        ];
+
+      case FlowNodeKind.doWhileLoop:
+        final doWhileNode = node as DoWhileNode;
+        return [
+          _BoxedDetail(
+            label: 'Condizione (Do-While)',
+            value: doWhileNode.condition.isNotEmpty ? doWhileNode.condition : '–',
             theme: theme,
             isCode: true,
           ),

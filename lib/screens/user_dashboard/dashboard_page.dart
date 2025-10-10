@@ -7,8 +7,6 @@ import '../../blocs/project_bloc/project_event.dart';
 import '../../blocs/project_bloc/project_state.dart';
 import '../../config/error/error_page.dart';
 import '../../config/services/banner_service.dart';
-// L'import di AppDialogs viene rimosso o aggiornato a seconda della struttura del progetto,
-// qui si fa riferimento diretto al nostro RecoveryDialogs ridisegnato.
 import '../../config/services/dialog_service/recovery_dialogs.dart';
 import 'animations/background_animation.dart';
 import 'project_selection/views/project_selector.dart';

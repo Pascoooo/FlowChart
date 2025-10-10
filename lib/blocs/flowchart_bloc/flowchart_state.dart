@@ -37,6 +37,9 @@ class FlowchartLoaded extends FlowchartState {
   final String? connectorSourceNodeId; // L'ID del nodo da cui è partita l'azione
   final Set<String> selectedConnectorNodeIds; // Gli ID dei nodi foglia selezionati
 
+  // NEW: Risultati decisione valutati ma non ancora applicati (nodeId -> result)
+  final Map<String, bool> decisionSelections;
+
   static const _uuid = Uuid();
 
   const FlowchartLoaded({
@@ -50,6 +53,7 @@ class FlowchartLoaded extends FlowchartState {
     this.isConnectorModeActive = false,
     this.connectorSourceNodeId,
     this.selectedConnectorNodeIds = const {},
+    this.decisionSelections = const {}, // NEW default
   });
 
   factory FlowchartLoaded.empty({String? fileName}) {
@@ -91,6 +95,8 @@ class FlowchartLoaded extends FlowchartState {
 
     final maxConnections = switch (node.kind) {
       FlowNodeKind.decision => 2,
+      FlowNodeKind.whileLoop => 2,
+      FlowNodeKind.doWhileLoop => 2,
       FlowNodeKind.end => 0,
       _ => 1,
     };
@@ -132,6 +138,7 @@ class FlowchartLoaded extends FlowchartState {
     String? connectorSourceNodeId,
     Set<String>? selectedConnectorNodeIds,
     bool clearConnectorSource = false, // Utility per resettare il sourceId a null
+    Map<String, bool>? decisionSelections, // NEW
   }) {
     return FlowchartLoaded(
       flowchart: flowchart ?? this.flowchart,
@@ -141,13 +148,14 @@ class FlowchartLoaded extends FlowchartState {
       debugPath: debugPath ?? this.debugPath,
       debugIndex: debugIndex ?? this.debugIndex,
       isDebugJustStarted: isDebugJustStarted ?? this.isDebugJustStarted, // ⚠️ NUOVO
-      isConnectorModeActive:
-      isConnectorModeActive ?? this.isConnectorModeActive,
+      // ✨ GESTISCI LE NUOVE PROPRIETÀ NEL copyWith
+      isConnectorModeActive: isConnectorModeActive ?? this.isConnectorModeActive,
       connectorSourceNodeId: clearConnectorSource
           ? null
           : (connectorSourceNodeId ?? this.connectorSourceNodeId),
       selectedConnectorNodeIds:
       selectedConnectorNodeIds ?? this.selectedConnectorNodeIds,
+      decisionSelections: decisionSelections ?? this.decisionSelections, // NEW
     );
   }
 
@@ -167,6 +175,7 @@ class FlowchartLoaded extends FlowchartState {
     isConnectorModeActive,
     connectorSourceNodeId,
     selectedConnectorNodeIds,
+    decisionSelections, // NEW
   ];
 }
 

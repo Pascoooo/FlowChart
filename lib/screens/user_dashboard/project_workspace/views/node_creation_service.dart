@@ -89,6 +89,8 @@ class NodeCreationService {
         break;
 
       case FlowNodeKind.decision:
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
         // NUOVA REGOLA: Passa tutte le variabili disponibili senza filtri
         variablesForDialog = flowState.flowchart.variables.toList();
         break;

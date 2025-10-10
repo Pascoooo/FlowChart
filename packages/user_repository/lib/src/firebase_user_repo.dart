@@ -5,17 +5,15 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import 'package:rxdart/rxdart.dart';
 import '../user_repository.dart';
+import 'google_drive_service.dart';
 
 // --- Costanti Globali ---
 
 /// Regione Firebase Functions per le chiamate HTTP.
 const String kFunctionsRegion = 'europe-west8';
-/// Scope di Google Drive per consentire la creazione di file.
-const String kDriveScope = 'https://www.googleapis.com/auth/drive.file';
 /// Nome della Cloud Function per l'eliminazione dell'utente.
 const String kDeleteUserFunctionName = 'deleteUserAuthHttp';
 /// Durata massima per le richieste API prima di un timeout.
@@ -34,6 +32,7 @@ class FirebaseUserRepo implements UserRepository {
   final FirebaseStorage _storage;
   final FirebaseFunctions _functions;
   late final CollectionReference<Map<String, dynamic>> _usersCollection;
+  late final GoogleDriveService _driveService;
 
   FirebaseUserRepo({
     FirebaseAuth? firebaseAuth,
@@ -45,6 +44,7 @@ class FirebaseUserRepo implements UserRepository {
         _storage = storage ?? FirebaseStorage.instance,
         _functions = functions ?? FirebaseFunctions.instanceFor(region: kFunctionsRegion) {
     _usersCollection = _firestore.collection('users');
+    _driveService = GoogleDriveService(functions: _functions);
   }
 
 
@@ -214,6 +214,8 @@ class FirebaseUserRepo implements UserRepository {
 
   /// Richiede all'utente il permesso di accedere a Google Drive.
   ///
+  /// Utilizza GoogleDriveService per ottenere il serverAuthCode e inviarlo
+  /// al backend per lo scambio con i token OAuth2.
   /// Se concesso, imposta `driveConnected` a `true` nel documento Firestore dell'utente.
   /// Restituisce `true` se il permesso è stato concesso, `false` se l'utente ha annullato.
   @override
@@ -222,86 +224,78 @@ class FirebaseUserRepo implements UserRepository {
     if (user == null) throw const AuthenticationException("Utente non autenticato.");
 
     try {
-      final provider = GoogleAuthProvider()..addScope(kDriveScope);
-      await user.reauthenticateWithPopup(provider);
+      // Usa il GoogleDriveService per gestire il flusso OAuth2
+      final granted = await _driveService.requestDrivePermission(user.uid);
 
-      await _usersCollection.doc(user.uid).update({'driveConnected': true});
-      return true;
-
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
-        return false;
+      if (granted) {
+        // Aggiorna Firestore per riflettere la connessione
+        await _usersCollection.doc(user.uid).update({'driveConnected': true});
+        return true;
       }
-      throw AuthenticationException("Errore durante la richiesta di permessi: ${e.message}");
-    } catch (_) {
-      throw const AuthenticationException("Si è verificato un errore imprevisto.");
+
+      return false;
+
+    } catch (e) {
+      throw AuthenticationException(
+        "Errore durante la richiesta di permessi Drive: ${e.toString()}"
+      );
     }
   }
 
   /// Revoca i permessi di accesso a Google Drive.
   ///
-  /// Chiama l'endpoint di revoca di Google e imposta `driveConnected` a `false`
-  /// nel documento Firestore dell'utente, indipendentemente dall'esito della chiamata API.
+  /// Utilizza GoogleDriveService per disconnettere l'account e eliminare i token dal backend.
+  /// Imposta `driveConnected` a `false` nel documento Firestore dell'utente.
   @override
   Future<void> revokeGoogleDrivePermission() async {
     final user = _firebaseAuth.currentUser;
     if (user == null) throw const AuthenticationException("Utente non autenticato.");
 
     try {
-      final provider = GoogleAuthProvider();
-      final userCredential = await user.reauthenticateWithPopup(provider);
-      final accessToken = userCredential.credential?.accessToken;
-
-      if (accessToken == null) {
-        throw const AuthenticationException("Impossibile ottenere il token per la revoca.");
-      }
-
-      await http.post(
-        Uri.parse('https://oauth2.googleapis.com/revoke'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {'token': accessToken},
-      );
-
+      await _driveService.revokeDrivePermission(user.uid);
+    } catch (e) {
+      // Log l'errore ma continua comunque
+      print('Warning: Error revoking Drive permission: $e');
     } finally {
+      // Aggiorna sempre lo stato su Firestore
       await _usersCollection.doc(user.uid).update({'driveConnected': false});
     }
   }
 
   /// Carica un file su Google Drive nella cartella dell'applicazione.
+  ///
+  /// Questo metodo funziona come proxy: invia i dati al backend che gestisce
+  /// le chiamate API a Google Drive usando i token salvati in modo sicuro.
   @override
   Future<void> uploadFileToDrive(String fileName, Uint8List fileBytes) async {
     final user = _firebaseAuth.currentUser;
     if (user == null) {
-      throw const AuthenticationException("User not authenticated.");
+      throw const AuthenticationException("Utente non autenticato.");
+    }
+
+    // Verifica che l'utente abbia connesso Drive
+    final userDoc = await _usersCollection.doc(user.uid).get();
+    if (!userDoc.exists || userDoc.data()?['driveConnected'] != true) {
+      throw const AuthenticationException(
+        "Devi prima connettere Google Drive nelle impostazioni."
+      );
     }
 
     try {
-      final provider = GoogleAuthProvider()..addScope(kDriveScope);
-      final userCredential = await user.reauthenticateWithPopup(provider);
-      final accessToken = userCredential.credential?.accessToken;
+      final result = await _driveService.uploadFileToDrive(
+        userId: user.uid,
+        fileName: fileName,
+        fileBytes: fileBytes,
+        mimeType: 'application/json',
+      );
 
-      if (accessToken == null) {
-        throw const AuthenticationException("Could not obtain a valid access token for Google Drive.");
-      }
+      // Successo - il file è stato caricato
+      print('File uploaded successfully: ${result['webViewLink']}');
 
-      final authHeaders = {'Authorization': 'Bearer $accessToken'};
-      final client = AuthenticatedHttpClient(http.Client(), authHeaders);
-      final driveApi = drive.DriveApi(client);
-
-      final fileToUpload = drive.File()..name = fileName;
-      final media = drive.Media(Stream.value(fileBytes), fileBytes.length);
-
-      await driveApi.files.create(fileToUpload, uploadMedia: media);
-
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
-        throw const AuthenticationException("Upload canceled by user.");
-      }
-      throw AuthenticationException("Firebase authentication error during upload: ${e.message}");
-    } on AuthenticationException {
-      rethrow;
     } catch (e) {
-      throw AuthenticationException("Failed to upload to Google Drive: ${e.toString()}");
+      throw AuthenticationException(
+        "Errore durante l'upload su Drive: ${e.toString()}"
+      );
     }
   }
 

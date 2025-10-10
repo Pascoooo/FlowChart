@@ -75,7 +75,11 @@ class OutgoingConnectionRule extends FlowchartRule {
     // Utilizziamo l'helper già presente nello state per una logica più pulita
     if (!state.canAddOutgoingConnection(fromNode.id)) {
       if (fromNode.kind == FlowNodeKind.end) return ValidationResult.failure("Il nodo 'Fine' non può avere uscite.");
-      if (fromNode.kind == FlowNodeKind.decision) return ValidationResult.failure("Un nodo 'Condizione' non può avere più di due uscite.");
+      if (fromNode.kind == FlowNodeKind.decision ||
+          fromNode.kind == FlowNodeKind.whileLoop ||
+          fromNode.kind == FlowNodeKind.doWhileLoop) {
+        return ValidationResult.failure("Un nodo condizionale/ciclo non può avere più di due uscite.");
+      }
       return ValidationResult.failure("Questo nodo ha già raggiunto il massimo di uscite.");
     }
     return ValidationResult.success();
@@ -91,29 +95,32 @@ class IncomingConnectionRule extends FlowchartRule {
     final toNode = state.getNodeById(actionContext.to);
     if (toNode == null) return ValidationResult.success();
 
+    // Il nodo 'Start' non può avere connessioni in entrata.
     if (toNode.kind == FlowNodeKind.start) {
       return ValidationResult.failure("Il nodo 'Inizio' non può avere connessioni in entrata.");
     }
 
-    // Il nodo 'End' può avere ingressi multipli. Per tutti gli altri, il limite è 1.
-    if (toNode.kind != FlowNodeKind.end) {
-      final incomingCount = state.flowchart.edges.where((e) => e.to == toNode.id).length;
-      if (incomingCount >= 1) {
-        return ValidationResult.failure("Questo nodo non può avere più di una connessione in entrata.");
-      }
-    }
+    // RIMOSSO il limite di 1 ingresso per permettere cicli e join.
+    // Tutti i nodi (eccetto Start) possono avere ingressi multipli.
     return ValidationResult.success();
   }
 }
 
-/// REGOLA: Impedisce di collegare due volte lo stesso ramo (true/false) di un DecisionNode.
+/// REGOLA: Impedisce di collegare due volte lo stesso ramo (true/false) di un DecisionNode/WhileNode/DoWhileNode.
 class DecisionPortUniquenessRule extends FlowchartRule {
   @override
   ValidationResult validate(FlowchartLoaded state, Object actionContext) {
     if (actionContext is! FlowchartEdge || actionContext.port == null) return ValidationResult.success();
 
     final fromNode = state.getNodeById(actionContext.from);
-    if (fromNode == null || fromNode.kind != FlowNodeKind.decision) return ValidationResult.success();
+    if (fromNode == null) return ValidationResult.success();
+
+    // Applica la regola a Decision, While e DoWhile
+    if (fromNode.kind != FlowNodeKind.decision &&
+        fromNode.kind != FlowNodeKind.whileLoop &&
+        fromNode.kind != FlowNodeKind.doWhileLoop) {
+      return ValidationResult.success();
+    }
 
     final hasDuplicatePort = state.flowchart.edges.any(
             (e) => e.from == actionContext.from && e.port == actionContext.port

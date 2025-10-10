@@ -263,48 +263,93 @@ class SessionVariablesPanel extends StatelessWidget {
     FlowchartLoaded state,
     FlowNode currentNode,
   ) {
-    final currentNodeKind = currentNode.kind;
     final debugIndex = state.debugIndex;
 
+    bool _encounteredInDecision(String varName) {
+      for (int i = 0; i <= debugIndex; i++) {
+        final nodeId = state.debugPath[i];
+        final node = state.getNodeById(nodeId);
+        if (node is DecisionNode) {
+          // Check structured clauses
+          if (node.clauses.isNotEmpty) {
+            final used = node.clauses.any((c) {
+              final leftMatch = c.leftOperand == varName;
+              final rightMatch = !c.isRightLiteral && c.rightOperand == varName;
+              return leftMatch || rightMatch;
+            });
+            if (used) return true;
+          } else {
+            // Legacy string condition
+            final pattern = RegExp(r'\b' + RegExp.escape(varName) + r'\b');
+            if (pattern.hasMatch(node.condition)) return true;
+          }
+        }
+      }
+      // Also consider current node if it's a Decision
+      if (currentNode is DecisionNode) {
+        final node = currentNode as DecisionNode;
+        if (node.clauses.isNotEmpty) {
+          final used = node.clauses.any((c) {
+            final leftMatch = c.leftOperand == varName;
+            final rightMatch = !c.isRightLiteral && c.rightOperand == varName;
+            return leftMatch || rightMatch;
+          });
+          if (used) return true;
+        } else {
+          final pattern = RegExp(r'\b' + RegExp.escape(varName) + r'\b');
+          if (pattern.hasMatch(node.condition)) return true;
+        }
+      }
+      return false;
+    }
+
+    bool _encounteredInAssignment(String varName) {
+      for (int i = 0; i <= debugIndex; i++) {
+        final nodeId = state.debugPath[i];
+        final node = state.getNodeById(nodeId);
+        if (node is AssignmentNode) {
+          if (node.assignments.any((a) => a.target == varName)) return true;
+        }
+      }
+      if (currentNode is AssignmentNode) {
+        final node = currentNode as AssignmentNode;
+        if (node.assignments.any((a) => a.target == varName)) return true;
+      }
+      return false;
+    }
+
+    bool _encounteredInOutput(String varName) {
+      for (int i = 0; i <= debugIndex; i++) {
+        final nodeId = state.debugPath[i];
+        final node = state.getNodeById(nodeId);
+        if (node is OutputNode) {
+          if (node.variables.any((v) => v.name == varName)) return true;
+        }
+      }
+      if (currentNode is OutputNode) {
+        final node = currentNode as OutputNode;
+        if (node.variables.any((v) => v.name == varName)) return true;
+      }
+      return false;
+    }
+
     return variables.entries.where((entry) {
+      final varName = entry.key;
       final decl = state.flowchart.variables.firstWhere(
-        (v) => v.name == entry.key,
+        (v) => v.name == varName,
         orElse: () => const VariableDeclaration(name: '_', dataType: 'string'),
       );
 
-      if (decl.name == '_') return true;
+      if (decl.name == '_') return true; // unknown -> show
 
-      if (decl.scope == VariableScope.output) {
-        bool hasPassedOutputNode = false;
-        for (int i = 0; i <= debugIndex; i++) {
-          final nodeId = state.debugPath[i];
-          final node = state.getNodeById(nodeId);
-          if (node is OutputNode &&
-              node.variables.any((v) => v.name == entry.key)) {
-            hasPassedOutputNode = true;
-            break;
-          }
-        }
-        return hasPassedOutputNode || currentNodeKind == FlowNodeKind.output;
+      switch (decl.scope) {
+        case VariableScope.input:
+          return true; // input sempre visibili
+        case VariableScope.output:
+          return _encounteredInOutput(varName);
+        case VariableScope.local:
+          return _encounteredInAssignment(varName) || _encounteredInDecision(varName);
       }
-
-      if (decl.scope == VariableScope.local) {
-        bool hasPassedDecisionNode = false;
-        for (int i = 0; i <= debugIndex; i++) {
-          final nodeId = state.debugPath[i];
-          final node = state.getNodeById(nodeId);
-          if (node is DecisionNode) {
-            final pattern = RegExp(r'\b' + RegExp.escape(entry.key) + r'\b');
-            if (pattern.hasMatch(node.condition)) {
-              hasPassedDecisionNode = true;
-              break;
-            }
-          }
-        }
-        return hasPassedDecisionNode || currentNodeKind == FlowNodeKind.decision;
-      }
-
-      return true;
     }).toList();
   }
 

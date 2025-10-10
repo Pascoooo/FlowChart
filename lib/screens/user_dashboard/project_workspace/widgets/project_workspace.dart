@@ -322,7 +322,9 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                           if (!mounted) return;
                           final flowchartBloc = context.read<FlowchartBloc>();
                           final currentState = flowchartBloc.state;
-                          final contentToLoad = liveContent ?? activeFile.content;
+                          // Ignora eventi null transitori per evitare revert a contenuti vecchi
+                          if (liveContent == null) return;
+                          final contentToLoad = liveContent;
                           if (currentState is FlowchartLoaded && currentState.toJson() == contentToLoad) return;
                           _lastRtdbContent = contentToLoad;
                           flowchartBloc.add(LoadFlowchart(

@@ -32,6 +32,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<DebugExit>(_onDebugExit);
     // 🆕 Gestione selezione ramo decisionale
     on<DebugBranchSelected>(_onDebugBranchSelected);
+    // NEW: Memorizza il risultato valutato del Decision, senza navigare
+    on<DebugDecisionEvaluated>(_onDebugDecisionEvaluated);
     on<AddGlobalVariable>(_onAddGlobalVariable);
     on<UpdateGlobalVariables>(_onUpdateGlobalVariables);
     on<UpdateFlowchart>(_onUpdateFlowchart);
@@ -111,6 +113,38 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
     else if (oldNode is DecisionNode) {
       // Supporto per nuovo formato con clausole
+      final clausesData = newData['clauses'] as List?;
+      List<ConditionClause>? clauses;
+
+      if (clausesData != null && clausesData.isNotEmpty) {
+        clauses = clausesData
+            .map((c) => ConditionClause.fromMap(c as Map<String, dynamic>))
+            .toList();
+      }
+
+      return oldNode.copyWith(
+        clauses: clauses,
+        logicalJoin: newData['logicalJoin'] as String?,
+      );
+    }
+
+    else if (oldNode is WhileNode) {
+      final clausesData = newData['clauses'] as List?;
+      List<ConditionClause>? clauses;
+
+      if (clausesData != null && clausesData.isNotEmpty) {
+        clauses = clausesData
+            .map((c) => ConditionClause.fromMap(c as Map<String, dynamic>))
+            .toList();
+      }
+
+      return oldNode.copyWith(
+        clauses: clauses,
+        logicalJoin: newData['logicalJoin'] as String?,
+      );
+    }
+
+    else if (oldNode is DoWhileNode) {
       final clausesData = newData['clauses'] as List?;
       List<ConditionClause>? clauses;
 
@@ -515,20 +549,123 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     ));
   }
 
+  // NEW handler: store decision result
+  void _onDebugDecisionEvaluated(DebugDecisionEvaluated event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final s = state as FlowchartLoaded;
+    final newMap = Map<String, bool>.from(s.decisionSelections);
+    newMap[event.nodeId] = event.result;
+    emit(s.copyWith(decisionSelections: newMap));
+  }
+
   void _onDebugNext(DebugNextNode event, Emitter<FlowchartState> emit) {
     if (state is! FlowchartLoaded) return;
     final s = state as FlowchartLoaded;
     if (!s.isDebugMode || s.debugPath.isEmpty) return;
 
-    final nextIndex = (s.debugIndex + 1).clamp(0, s.debugPath.length - 1);
-    if (nextIndex == s.debugIndex) return;
+    final currentId = s.debugPath[s.debugIndex];
+    final currentNode = s.getNodeById(currentId);
+    if (currentNode == null) return;
 
-    final newNodeId = s.debugPath[nextIndex];
-    // ⚠️ MODIFICA: Imposta isDebugJustStarted = false quando si naviga
+    // Se esistono outgoing edges
+    final outgoing = s.flowchart.edges.where((e) => e.from == currentId).toList();
+    if (outgoing.isEmpty) {
+      // Nessun next
+      return;
+    }
+
+    FlowchartEdge? chosen;
+    if (currentNode.kind == FlowNodeKind.decision) {
+      // Usa il risultato valutato se presente
+      if (s.decisionSelections.containsKey(currentId)) {
+        final res = s.decisionSelections[currentId]!;
+        final wanted = res ? 'true' : 'false';
+        chosen = outgoing.firstWhere(
+          (e) => e.port == wanted,
+          orElse: () => const FlowchartEdge(from: '', to: ''),
+        );
+        // Fallback: edge senza porta
+        if (chosen.from.isEmpty) {
+          chosen = outgoing.firstWhere(
+            (e) => e.port == null,
+            orElse: () => const FlowchartEdge(from: '', to: ''),
+          );
+        }
+      }
+    }
+
+    // Se non è un Decision o non c'è selezione salvata, usa priorità di default
+    chosen ??= outgoing.firstWhere(
+      (e) => e.port == null,
+      orElse: () => const FlowchartEdge(from: '', to: ''),
+    );
+    if (chosen.from.isEmpty) {
+      chosen = outgoing.firstWhere(
+        (e) => e.port == 'true',
+        orElse: () => const FlowchartEdge(from: '', to: ''),
+      );
+      if (chosen.from.isEmpty) {
+        chosen = outgoing.firstWhere(
+          (e) => e.port == 'false',
+          orElse: () => const FlowchartEdge(from: '', to: ''),
+        );
+      }
+    }
+
+    if (chosen.from.isEmpty) return; // nessun candidato
+
+    // Ricostruisci tail da chosen.to con priorità di default (non auto-usa decisionSelections oltre il primo passo)
+    final tail = <String>[];
+    final visited = <String>{};
+    String? nid = chosen.to;
+    while (nid != null && nid.isNotEmpty && !visited.contains(nid)) {
+      tail.add(nid);
+      visited.add(nid);
+
+      final outs = s.flowchart.edges.where((e) => e.from == nid).toList();
+      if (outs.isEmpty) break;
+      FlowchartEdge? next = outs.firstWhere(
+        (e) => e.port == null,
+        orElse: () => const FlowchartEdge(from: '', to: ''),
+      );
+      if (next.from.isEmpty) {
+        next = outs.firstWhere(
+          (e) => e.port == 'true',
+          orElse: () => const FlowchartEdge(from: '', to: ''),
+        );
+        if (next.from.isEmpty) {
+          next = outs.firstWhere(
+            (e) => e.port == 'false',
+            orElse: () => const FlowchartEdge(from: '', to: ''),
+          );
+        }
+      }
+      if (next.from.isEmpty) break;
+      nid = next.to;
+    }
+
+    // Costruisci nuovo path
+    final newPath = <String>[];
+    newPath.addAll(s.debugPath.take(s.debugIndex + 1));
+    newPath.addAll(tail);
+
+    // Se nessun avanzamento
+    if (newPath.length <= s.debugIndex + 1) {
+      emit(s.copyWith(
+        debugPath: newPath,
+        selectedNodeId: s.selectedNodeId,
+        isDebugJustStarted: false,
+      ));
+      return;
+    }
+
+    final nextIndex = s.debugIndex + 1;
+    final newSelectedId = newPath[nextIndex];
     emit(s.copyWith(
+      debugPath: newPath,
       debugIndex: nextIndex,
-      selectedNodeId: newNodeId,
-      isDebugJustStarted: false, // ⚠️ NUOVO: Disabilita lo zoom durante la navigazione
+      selectedNodeId: newSelectedId,
+      isDebugJustStarted: false,
     ));
   }
 
@@ -653,6 +790,13 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
 
+    final source = currentState.getNodeById(event.fromNodeId);
+    if (source == null) return;
+    // Guard: End node cannot be a connector source
+    if (source.kind == FlowNodeKind.end) {
+      return; // ignore activation if starting from End
+    }
+
     // Pre-seleziona automaticamente il nodo di origine
     emit(currentState.copyWith(
       isConnectorModeActive: true,
@@ -667,6 +811,13 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     if (state is! FlowchartLoaded) return;
     final currentState = state as FlowchartLoaded;
     if (!currentState.isConnectorModeActive) return;
+
+    final node = currentState.getNodeById(event.nodeId);
+    if (node == null) return;
+    // Guard: End node cannot be selected as a source in connector mode
+    if (node.kind == FlowNodeKind.end) {
+      return; // ignore selection of End nodes
+    }
 
     final newSelectedIds =
     Set<String>.from(currentState.selectedConnectorNodeIds);
@@ -700,18 +851,37 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         currentState.connectorSourceNodeId == null) return;
 
     // 1. Raccoglie tutti gli ID dei nodi sorgente
-    final sourceNodeIds = {
+    final rawSourceNodeIds = {
       currentState.connectorSourceNodeId!,
       ...currentState.selectedConnectorNodeIds
     };
 
-    final sourceNodes = sourceNodeIds
+    // Filtra eventuali nodi 'Fine' (non ammessi come sorgente)
+    final sourceNodes = rawSourceNodeIds
         .map((id) => currentState.getNodeById(id))
         .whereType<FlowNode>()
+        .where((n) => n.kind != FlowNodeKind.end)
         .toList();
+
     if (sourceNodes.isEmpty) {
       // Sicurezza: se non ci sono nodi validi, annulla l'operazione
       add(const CancelConnectorMode());
+      return;
+    }
+
+    // Caso speciale: se il target richiesto è un nodo Fine, non crearne uno nuovo.
+    if (event.kind == FlowNodeKind.end) {
+      // Chiama l'evento dedicato per collegare al Fine esistente per ogni sorgente
+      for (final src in sourceNodes) {
+        add(LinkToExistingEnd(fromNodeId: src.id));
+      }
+
+      // Esci dalla modalità connettore
+      emit(currentState.copyWith(
+        isConnectorModeActive: false,
+        clearConnectorSource: true,
+        selectedConnectorNodeIds: {},
+      ));
       return;
     }
 

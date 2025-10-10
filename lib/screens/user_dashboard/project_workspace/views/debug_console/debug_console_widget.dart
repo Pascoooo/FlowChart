@@ -79,6 +79,10 @@ class _DebugConsoleState extends State<DebugConsole> {
         // Torna al nodo precedente
         context.read<FlowchartBloc>().add(const DebugPrevNode());
       },
+      // NEW: dopo valutazione Decision registra il risultato ma NON naviga
+      onDecisionEvaluated: (String nodeId, bool result) {
+        context.read<FlowchartBloc>().add(DebugDecisionEvaluated(nodeId, result));
+      },
     );
   }
 
