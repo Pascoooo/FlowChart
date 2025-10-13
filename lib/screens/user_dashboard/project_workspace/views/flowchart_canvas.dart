@@ -169,14 +169,30 @@ class _ConnectorOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
     final bloc = context.read<FlowchartBloc>();
-    final hasSelection = state.selectedConnectorNodeIds.isNotEmpty;
-    // MODIFICA: Richiedi almeno 2 nodi selezionati per confermare
-    final canConfirm = state.selectedConnectorNodeIds.length >= 2;
 
-    // Calcola il testo del bottone
-    final String buttonText = hasSelection
-        ? 'Collega ${state.selectedConnectorNodeIds.length} nod${state.selectedConnectorNodeIds.length > 1 ? "i" : "o"}'
-        : 'Seleziona nodi';
+    // ⚠️ NUOVO: Verifica se siamo in modalità selezione corpo do-while
+    final sourceNode = state.connectorSourceNodeId != null
+        ? state.getNodeById(state.connectorSourceNodeId!)
+        : null;
+    final isDoWhileBodySelection = sourceNode?.kind == FlowNodeKind.doWhileLoop ||
+        state.connectorPurpose == ConnectorPurpose.doWhileBody;
+    final isResetSelection = state.connectorPurpose == ConnectorPurpose.resetFromNode;
+
+    // Per do-while/reset: l'utente deve selezionare UN SOLO nodo
+    // Per connettore normale: almeno 2 nodi
+    final hasSelection = state.selectedConnectorNodeIds.isNotEmpty;
+    final canConfirm = isDoWhileBodySelection || isResetSelection
+        ? state.selectedConnectorNodeIds.length == 1
+        : state.selectedConnectorNodeIds.length >= 2;
+
+    // Calcola il testo del bottone in base alla modalità
+    final String buttonText = isDoWhileBodySelection
+        ? (hasSelection ? 'Conferma selezione' : 'Seleziona il nodo di partenza del corpo')
+        : (isResetSelection
+            ? (hasSelection ? 'Conferma reset' : 'Seleziona il blocco finale')
+            : (hasSelection
+                ? 'Collega ${state.selectedConnectorNodeIds.length} nod${state.selectedConnectorNodeIds.length > 1 ? "i" : "o"}'
+                : 'Seleziona nodi'));
 
     // Handler che apre i dialog di configurazione prima di creare il nodo
     Future<void> handleNodeTypeSelection(FlowNodeKind kind) async {
@@ -209,6 +225,24 @@ class _ConnectorOverlay extends StatelessWidget {
       ));
     }
 
+    // ⚠️ NUOVO: Handler per confermare la selezione del corpo do-while
+    void handleDoWhileBodyConfirm() {
+      if (state.selectedConnectorNodeIds.isEmpty) return;
+
+      final selectedNodeId = state.selectedConnectorNodeIds.first;
+      bloc.add(SelectDoWhileBodyStart(
+        doWhileNodeId: state.connectorSourceNodeId!,
+        bodyStartNodeId: selectedNodeId,
+      ));
+    }
+
+    // ✨ NUOVO: Handler per confermare il reset da blocco
+    void handleResetFromNodeConfirm() {
+      if (state.selectedConnectorNodeIds.isEmpty) return;
+      final selectedNodeId = state.selectedConnectorNodeIds.first;
+      bloc.add(ResetFromNode(selectedNodeId));
+    }
+
     return Stack(
       children: [
         // Overlay semi-trasparente che NON blocca i click sui nodi
@@ -220,6 +254,51 @@ class _ConnectorOverlay extends StatelessWidget {
             ),
           ),
         ),
+
+        // ⚠️ NUOVO: Banner informativo in alto per do-while o reset
+        if (isDoWhileBodySelection || isResetSelection)
+          Positioned(
+            top: 24,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: theme.accentColor.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      FluentIcons.info,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      isDoWhileBodySelection
+                          ? 'Seleziona il nodo di partenza del corpo del ciclo'
+                          : 'Seleziona il blocco che diventerà l\'ultimo del flowchart',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
 
         // Indicatori visivi sui nodi selezionati
         ...state.selectedConnectorNodeIds.map((nodeId) {
@@ -265,7 +344,7 @@ class _ConnectorOverlay extends StatelessWidget {
           );
         }),
 
-        // ⚠️ MODIFICA 2: Controlli in basso AL CENTRO invece che a destra
+        // ⚠️ MODIFICA: Controlli in basso AL CENTRO
         Positioned(
           bottom: 24,
           left: 0,
@@ -300,69 +379,99 @@ class _ConnectorOverlay extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  FlyoutTarget(
-                    controller: _flyoutController,
-                    child: Opacity(
-                      // MODIFICA: Rende il pulsante semi-trasparente quando non può confermare
+                  // ⚠️ MODIFICA: Bottone diverso per do-while vs connettore normale vs reset
+                  if (isDoWhileBodySelection)
+                    Opacity(
                       opacity: canConfirm ? 1.0 : 0.5,
                       child: FilledButton(
-                        // MODIFICA: Abilita solo se ci sono almeno 2 nodi selezionati
-                        onPressed: canConfirm
-                            ? () {
-                                _flyoutController.showFlyout(
-                                  placementMode: FlyoutPlacementMode.bottomCenter,
-                                  dismissOnPointerMoveAway: false,
-                                  builder: (flyoutContext) {
-                                    return MenuFlyout(
-                                      items: [
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.input),
-                                          text: const Text('Input'),
-                                          leading: const FaIcon(FontAwesomeIcons.download, size: 16),
-                                        ),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.assignment),
-                                          text: const Text('Assegnazione'),
-                                          leading: const FaIcon(FontAwesomeIcons.calculator, size: 16),
-                                        ),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.output),
-                                          text: const Text('Output'),
-                                          leading: const FaIcon(FontAwesomeIcons.upload, size: 16),
-                                        ),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.decision),
-                                          text: const Text('Condizione'),
-                                          leading: const FaIcon(FontAwesomeIcons.codeBranch, size: 16),
-                                        ),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.process),
-                                          text: const Text('Sottoprogramma'),
-                                          leading: const FaIcon(FontAwesomeIcons.gears, size: 16),
-                                        ),
-                                        const MenuFlyoutSeparator(),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.end),
-                                          text: const Text('Fine'),
-                                          leading: const FaIcon(FontAwesomeIcons.flagCheckered, size: 16),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
-                              }
-                            : null,
+                        onPressed: canConfirm ? handleDoWhileBodyConfirm : null,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(FluentIcons.completed_solid, size: 16),
+                            const Icon(FluentIcons.check_mark, size: 16),
                             const SizedBox(width: 8),
                             Text(buttonText),
                           ],
                         ),
                       ),
+                    )
+                  else if (isResetSelection)
+                    Opacity(
+                      opacity: canConfirm ? 1.0 : 0.5,
+                      child: FilledButton(
+                        onPressed: canConfirm ? handleResetFromNodeConfirm : null,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(FluentIcons.history, size: 16),
+                            const SizedBox(width: 8),
+                            Text(buttonText),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    FlyoutTarget(
+                      controller: _flyoutController,
+                      child: Opacity(
+                        opacity: canConfirm ? 1.0 : 0.5,
+                        child: FilledButton(
+                          onPressed: canConfirm
+                              ? () {
+                                  _flyoutController.showFlyout(
+                                    placementMode: FlyoutPlacementMode.bottomCenter,
+                                    dismissOnPointerMoveAway: false,
+                                    builder: (flyoutContext) {
+                                      return MenuFlyout(
+                                        items: [
+                                          MenuFlyoutItem(
+                                            onPressed: () => handleNodeTypeSelection(FlowNodeKind.input),
+                                            text: const Text('Input'),
+                                            leading: const FaIcon(FontAwesomeIcons.download, size: 16),
+                                          ),
+                                          MenuFlyoutItem(
+                                            onPressed: () => handleNodeTypeSelection(FlowNodeKind.assignment),
+                                            text: const Text('Assegnazione'),
+                                            leading: const FaIcon(FontAwesomeIcons.calculator, size: 16),
+                                          ),
+                                          MenuFlyoutItem(
+                                            onPressed: () => handleNodeTypeSelection(FlowNodeKind.output),
+                                            text: const Text('Output'),
+                                            leading: const FaIcon(FontAwesomeIcons.upload, size: 16),
+                                          ),
+                                          MenuFlyoutItem(
+                                            onPressed: () => handleNodeTypeSelection(FlowNodeKind.decision),
+                                            text: const Text('Condizione'),
+                                            leading: const FaIcon(FontAwesomeIcons.codeBranch, size: 16),
+                                          ),
+                                          MenuFlyoutItem(
+                                            onPressed: () => handleNodeTypeSelection(FlowNodeKind.process),
+                                            text: const Text('Sottoprogramma'),
+                                            leading: const FaIcon(FontAwesomeIcons.gears, size: 16),
+                                          ),
+                                          const MenuFlyoutSeparator(),
+                                          MenuFlyoutItem(
+                                            onPressed: () => handleNodeTypeSelection(FlowNodeKind.end),
+                                            text: const Text('Fine'),
+                                            leading: const FaIcon(FontAwesomeIcons.flagCheckered, size: 16),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                }
+                              : null,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(FluentIcons.chevron_up, size: 16),
+                              const SizedBox(width: 8),
+                              Text(buttonText),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../../blocs/flowchart_bloc/flowchart_event.dart';
+import '../../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import 'console_models.dart';
 import 'console_entry_widget.dart';
 import 'debug_engine.dart';
@@ -60,6 +61,32 @@ class _DebugConsoleState extends State<DebugConsole> {
   }
 
   void _initializeEngine() {
+    // Determina se siamo in un do-while e se è una rivalutazione
+    final bloc = context.read<FlowchartBloc>();
+    final state = bloc.state;
+    bool isReentry = false;
+
+    if (state is FlowchartLoaded && widget.currentNode is DoWhileNode) {
+      // Se l'arrivo avviene tramite un arco 'loop' (dal nodo precedente a questo), è rivalutazione
+      final currentIndex = state.debugIndex;
+      if (currentIndex > 0 && state.debugPath.length > currentIndex) {
+        final prevId = state.debugPath[currentIndex - 1];
+        final currId = widget.currentNode.id;
+        final arrivedViaLoop = state.flowchart.edges.any(
+          (e) => e.from == prevId && e.to == currId && e.port == 'loop',
+        );
+        isReentry = arrivedViaLoop;
+      } else {
+        isReentry = false;
+      }
+    }
+
+    // 🆕 NUOVO: Determina se siamo in un sottoprogramma
+    bool isInSubprogram = false;
+    if (state is FlowchartLoaded) {
+      isInSubprogram = state.callStack.depth > 0;
+    }
+
     _engine = DebugEngine(
       currentNode: widget.currentNode,
       flowchartId: widget.flowchartId,
@@ -72,7 +99,12 @@ class _DebugConsoleState extends State<DebugConsole> {
         context.read<FlowchartBloc>().add(const DebugExit());
       },
       onDebugNext: () {
-        // Avanza al prossimo nodo
+        // 🆕 NUOVO: Se siamo su un EndNode in un sottoprogramma, ritorna dal sottoprogramma
+        if (widget.currentNode is EndNode && isInSubprogram) {
+          _handleReturnFromSubprogram();
+          return;
+        }
+        // Altrimenti, avanza al prossimo nodo
         context.read<FlowchartBloc>().add(const DebugNextNode());
       },
       onDebugPrev: () {
@@ -83,7 +115,78 @@ class _DebugConsoleState extends State<DebugConsole> {
       onDecisionEvaluated: (String nodeId, bool result) {
         context.read<FlowchartBloc>().add(DebugDecisionEvaluated(nodeId, result));
       },
+      // NEW: passa il flag per distinguere prima entrata vs rivalutazione
+      isDoWhileReentry: isReentry,
+      // 🆕 NUOVO: callback per entrare nel sottoprogramma
+      onStepIntoSubprogram: (ProcessNode node) {
+        context.read<FlowchartBloc>().add(DebugStepIntoSubprogram(node));
+      },
+      // 🆕 NUOVO: callback per tornare dal sottoprogramma
+      onReturnFromSubprogram: ({dynamic returnValue}) {
+        _handleReturnFromSubprogram(returnValue: returnValue);
+      },
+      // 🆕 NUOVO: indica se siamo in un sottoprogramma
+      isInSubprogram: isInSubprogram,
     );
+  }
+
+  // 🆕 NUOVO: Gestisce il ritorno dal sottoprogramma
+  Future<void> _handleReturnFromSubprogram({dynamic returnValue}) async {
+    final bloc = context.read<FlowchartBloc>();
+    final state = bloc.state;
+
+    if (state is! FlowchartLoaded || state.callStack.isEmpty) return;
+
+    try {
+      // 1. Recupera il valore di ritorno dalle variabili di sessione (se presente)
+      final sessionVars = await widget.projectRepo.getDebugVariables(
+        projectId: widget.flowchartId,
+      );
+
+      // Cerca la variabile OUTPUT che rappresenta il valore di ritorno
+      final returnVar = widget.allVariables
+          .where((v) => v.scope == VariableScope.output)
+          .firstOrNull;
+
+      dynamic finalReturnValue = returnValue;
+      if (returnVar != null && sessionVars.containsKey(returnVar.name)) {
+        finalReturnValue = sessionVars[returnVar.name];
+      }
+
+      // 2. Recupera il nodo ProcessNode chiamante dal frame corrente
+      final currentFrame = state.callStack.current;
+      if (currentFrame?.callerNodeId == null) return;
+
+      // 3. Trova il ProcessNode chiamante per ottenere la variabile target del risultato
+      final callerFlowchart = state.projectFlowcharts.values.firstWhere(
+        (f) => f.nodes.any((n) => n.id == currentFrame!.callerNodeId),
+        orElse: () => state.flowchart,
+      );
+
+      final callerNode = callerFlowchart.nodes
+          .firstWhere((n) => n.id == currentFrame!.callerNodeId);
+
+      // 4. Se il chiamante è un ProcessNode con resultTarget, salva il valore di ritorno
+      if (callerNode is ProcessNode &&
+          callerNode.resultTarget != null &&
+          callerNode.resultTarget!.trim().isNotEmpty &&
+          finalReturnValue != null) {
+
+        final resultVar = callerNode.resultTarget!.trim();
+
+        // Salva il valore di ritorno nella variabile target del chiamante
+        await widget.projectRepo.updateDebugVariables(
+          projectId: callerFlowchart.flowchartId,
+          variables: {resultVar: finalReturnValue},
+        );
+      }
+
+      // 5. Triggera l'evento di ritorno dal sottoprogramma
+      bloc.add(DebugReturnFromSubprogram(returnValue: finalReturnValue));
+
+    } catch (e) {
+      debugPrint('⚠️ Errore nel ritorno dal sottoprogramma: $e');
+    }
   }
 
   void _handleHistoryUpdate(List<ConsoleEntry> history) {

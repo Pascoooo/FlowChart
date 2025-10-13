@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'console_models.dart';
 import '../../../../../config/services/expression_parser.dart';
-import 'expression_evaluator.dart';
 import 'commands/commands.dart';
 
 /// Engine che gestisce la logica di debug per i nodi del flowchart
@@ -18,9 +17,16 @@ class DebugEngine {
   final VoidCallback? onDebugPrev;
   // NEW: notify decision result to the outside (Bloc) with nodeId
   final void Function(String nodeId, bool result)? onDecisionEvaluated;
+  // NEW: indica se stiamo entrando nel do-while per la prima volta (true) o rivalutando (false)
+  final bool isDoWhileReentry;
+  // 🆕 NUOVO: callback per entrare in un sottoprogramma
+  final void Function(ProcessNode)? onStepIntoSubprogram;
+  // 🆕 NUOVO: callback per tornare dal sottoprogramma con il valore di ritorno
+  final void Function({dynamic returnValue})? onReturnFromSubprogram;
+  // 🆕 NUOVO: indica se siamo in un sottoprogramma (call stack non vuoto)
+  final bool isInSubprogram;
 
   final List<ConsoleEntry> _history = [];
-  final List<String> _variablesQueue = [];
   late final CommandRegistry _commandRegistry;
 
   ConsoleState _state = ConsoleState.idle;
@@ -37,10 +43,32 @@ class DebugEngine {
     required this.onDebugExit,
     this.onDebugNext,
     this.onDebugPrev,
-    this.onDecisionEvaluated, // NEW optional
+    this.onDecisionEvaluated,
+    this.isDoWhileReentry = false, // NEW: default false = prima entrata
+    this.onStepIntoSubprogram, // 🆕 NUOVO
+    this.onReturnFromSubprogram, // 🆕 NUOVO
+    this.isInSubprogram = false, // 🆕 NUOVO
   }) {
+    // 🆕 NUOVO: Wrapper per onDebugNext che gestisce ProcessNode
+    VoidCallback? wrappedOnNext;
+    if (onDebugNext != null) {
+      wrappedOnNext = () {
+        // Se siamo su un ProcessNode con un sottoprogramma configurato, triggera step-into
+        if (currentNode is ProcessNode) {
+          final processNode = currentNode as ProcessNode;
+          if (processNode.flowchartToCall.isNotEmpty && onStepIntoSubprogram != null) {
+            // Chiama il callback per entrare nel sottoprogramma
+            onStepIntoSubprogram!(processNode);
+            return; // Non chiamare onDebugNext normale
+          }
+        }
+        // Altrimenti, procedi normalmente
+        onDebugNext!();
+      };
+    }
+
     _commandRegistry = CommandRegistry(
-      onNext: onDebugNext,
+      onNext: wrappedOnNext,
       onPrev: onDebugPrev,
     );
 
@@ -59,10 +87,21 @@ class DebugEngine {
     } else if (currentNode is AssignmentNode) {
       await _initializeAssignmentNode(currentNode as AssignmentNode);
     } else if (currentNode is OutputNode) {
+      // delega a finalize
       await _initializeOutputNode(currentNode as OutputNode);
+    } else if (currentNode is ProcessNode) {
+      // NEW: gestione completa del nodo di processo (chiamata a sottoprogramma)
+      await _initializeProcessNode(currentNode as ProcessNode);
     } else if (currentNode is DecisionNode) {
       // Valuta subito la condizione del nodo Decision
       await _evaluateDecisionNode(currentNode as DecisionNode);
+    } else if (currentNode is WhileNode) {
+      // Valuta subito la condizione del ciclo pre-condizionale (while)
+      await _evaluateWhileNode(currentNode as WhileNode);
+    } else if (currentNode is DoWhileNode) {
+      // Valuta subito la condizione del ciclo post-condizionale (do-while)
+      // Uniformiamo la logica a Decision: true/false determinano il ramo
+      await _evaluateDoWhileNode(currentNode as DoWhileNode);
     } else {
       _initializeGenericNode();
     }
@@ -73,12 +112,43 @@ class DebugEngine {
   void _initializeStartNode() {
     _addInfoMessage('Esecuzione avviata');
     _state = ConsoleState.completed;
+    // Non auto-avanzare: l'utente decide il passo successivo
   }
 
   /// Inizializza il nodo END
-  void _initializeEndNode() {
+  void _initializeEndNode() async {
     _addSuccessMessage('Esecuzione terminata');
+
+    // 🆕 NUOVO: Se siamo in un sottoprogramma, recupera il valore di ritorno
+    if (isInSubprogram && onReturnFromSubprogram != null) {
+      try {
+        // Recupera il valore della variabile di ritorno (se prevista)
+        final sessionVars = await projectRepo.getDebugVariables(
+          projectId: flowchartId,
+        );
+
+        // Cerca una variabile dichiarata come OUTPUT (che rappresenta il valore di ritorno)
+        final returnVar = allVariables.where((v) => v.scope == VariableScope.output).firstOrNull;
+
+        dynamic returnValue;
+        if (returnVar != null && sessionVars.containsKey(returnVar.name)) {
+          returnValue = sessionVars[returnVar.name];
+          _addInfoMessage('Valore di ritorno: ${returnVar.name} = $returnValue');
+        } else {
+          _addInfoMessage('Nessun valore di ritorno (void)');
+        }
+
+        _addInfoMessage('Premi "next" per tornare al chiamante');
+        _state = ConsoleState.completed;
+        _showCurrentPrompt('Scrivi "next" per continuare');
+        return;
+      } catch (e) {
+        _addErrorMessage('Errore nel recupero del valore di ritorno: ${e.toString()}');
+      }
+    }
+
     _state = ConsoleState.completed;
+    _showCurrentPrompt('Scrivi "next" per continuare');
   }
 
   /// Inizializza il nodo INPUT
@@ -88,14 +158,35 @@ class DebugEngine {
         projectId: flowchartId,
       );
 
-      // Verifica che tutte le variabili di input esistano
+      // Verifica che tutte le variabili di input siano dichiarate nel flowchart
       final inputVarNames = node.targetVariables;
-      final missing = inputVarNames.where((v) => !sessionVars.containsKey(v)).toList();
+      final undeclared = inputVarNames.where(
+        (v) => !allVariables.any((decl) => decl.name == v)
+      ).toList();
 
-      if (missing.isNotEmpty) {
-        _addErrorMessage('Impossibile acquisire le variabili di input definite');
+      if (undeclared.isNotEmpty) {
+        _addErrorMessage(
+          'ERRORE: Le seguenti variabili non sono dichiarate nel flowchart: ${undeclared.join(', ')}'
+        );
         _state = ConsoleState.error;
         return;
+      }
+
+      // Crea le variabili mancanti nella tabella di debug con valori placeholder
+      final toCreate = <String, dynamic>{};
+      for (final varName in inputVarNames) {
+        if (!sessionVars.containsKey(varName)) {
+          final varDecl = allVariables.firstWhere((v) => v.name == varName);
+          toCreate[varName] = _getInitialValueForType(varDecl.dataType);
+        }
+      }
+
+      // Se ci sono variabili da creare, creale nella tabella
+      if (toCreate.isNotEmpty) {
+        await projectRepo.updateDebugVariables(
+          projectId: flowchartId,
+          variables: toCreate,
+        );
       }
 
       // Costruisci il messaggio con solo i nomi delle variabili (senza valori)
@@ -104,8 +195,28 @@ class DebugEngine {
       _addInfoMessage('Acquisiti in input: $varList');
       _state = ConsoleState.completed;
     } catch (e) {
-      _addErrorMessage('Impossibile acquisire le variabili di input definite');
+      _addErrorMessage('Errore durante l\'acquisizione delle variabili di input: ${e.toString()}');
       _state = ConsoleState.error;
+    }
+  }
+
+  /// Restituisce un valore iniziale appropriato per il tipo di dato specificato
+  dynamic _getInitialValueForType(String dataType) {
+    final type = dataType.toLowerCase();
+    switch (type) {
+      case 'int':
+      case 'integer':
+        return 0;
+      case 'double':
+      case 'float':
+      case 'number':
+        return 0.0;
+      case 'bool':
+      case 'boolean':
+        return false;
+      case 'string':
+      default:
+        return '';
     }
   }
 
@@ -268,20 +379,27 @@ class DebugEngine {
 
       final targets = node.assignments.map((a) => a.target).toList();
 
+      // Verifica che tutte le variabili di destinazione siano DICHIARATE nella workarea
+      final notDeclared = <String>[];
+      for (final t in targets) {
+        final exists = allVariables.any((v) => v.name == t);
+        if (!exists) notDeclared.add(t);
+      }
+      if (notDeclared.isNotEmpty) {
+        for (final v in notDeclared) {
+          _addErrorMessage('Variabile "$v" non dichiarata nella workarea');
+        }
+        _state = ConsoleState.error;
+        _notifyUpdate();
+        return;
+      }
+
       // Separa variabili per scope
       final inputVars = <String>[];
       final outputAndLocalVars = <String>[];
 
       for (final target in targets) {
-        final varDecl = allVariables.firstWhere(
-          (v) => v.name == target,
-          orElse: () => VariableDeclaration(
-            name: target,
-            dataType: 'string',
-            scope: VariableScope.local,
-          ),
-        );
-
+        final varDecl = allVariables.firstWhere((v) => v.name == target);
         if (varDecl.scope == VariableScope.input) {
           inputVars.add(target);
         } else {
@@ -302,29 +420,9 @@ class DebugEngine {
         return;
       }
 
-      // Per variabili OUTPUT e LAVORO: crea entry se non esistono
-      for (final varName in outputAndLocalVars) {
-        if (!sessionVars.containsKey(varName)) {
-          // Crea la variabile nella sessione con valore null
-          await projectRepo.updateDebugVariables(
-            projectId: flowchartId,
-            variables: {varName: null},
-          );
-          sessionVars[varName] = null;
-
-          final varDecl = allVariables.firstWhere(
-            (v) => v.name == varName,
-            orElse: () => VariableDeclaration(
-              name: varName,
-              dataType: 'string',
-              scope: VariableScope.local,
-            ),
-          );
-
-          final scopeLabel = varDecl.scope == VariableScope.output ? 'OUTPUT' : 'LAVORO';
-          _addInfoMessage('Variabile $scopeLabel "$varName" aggiunta alla tabella');
-        }
-      }
+      // Non creare più automaticamente variabili OUTPUT/LOCAL mancanti
+      // Se un assegnamento proverà ad aggiornare variabili non presenti, il repository
+      // creerà l'entry solo se la variabile è dichiarata e il tipo è compatibile.
 
       // Applica le assegnazioni definite nel flowchart (se presenti)
       bool hasAssignmentError = false;
@@ -343,14 +441,7 @@ class DebugEngine {
           continue;
         }
 
-        final varDecl = allVariables.firstWhere(
-          (v) => v.name == target,
-          orElse: () => VariableDeclaration(
-            name: target,
-            dataType: 'string',
-            scope: VariableScope.local,
-          ),
-        );
+        final varDecl = allVariables.firstWhere((v) => v.name == target);
 
         try {
           final converted = _convertToType(resolved.value, varDecl.dataType);
@@ -384,14 +475,7 @@ class DebugEngine {
           continue;
         }
 
-        final varDecl = allVariables.firstWhere(
-          (v) => v.name == target,
-          orElse: () => VariableDeclaration(
-            name: target,
-            dataType: 'string',
-            scope: VariableScope.local,
-          ),
-        );
+        final varDecl = allVariables.firstWhere((v) => v.name == target);
 
         try {
           final converted = _convertToType(resolved.value, varDecl.dataType);
@@ -408,7 +492,7 @@ class DebugEngine {
       }
 
       if (hasAssignmentError) {
-        _addInfoMessage('Sono presenti errori nelle assegnazioni del flowchart: puoi correggere inserendo le assegnazioni mancanti');
+        _addInfoMessage('Sono presenti errori nelle assegnazioni del flowchart: correggi le variabili mancanti o di tipo errato');
       }
 
       _showAssignmentPrompt();
@@ -537,370 +621,69 @@ class DebugEngine {
     }
 
     _state = ConsoleState.completed;
-    onCommandExecuted();
+    // Non auto-avanzare: richiedi esplicitamente Next
+    _showCurrentPrompt('Scrivi "next" per continuare');
     _notifyUpdate();
   }
 
-  /// Mostra il prompt corrente
-  void _showCurrentPrompt() {
-    if (_currentPrompt != null) {
-      _addPrompt(_currentPrompt!);
-    }
-  }
-
-  /// Inizializza per un nodo Output
-  Future<void> _initializeOutputNode(OutputNode node) async {
-    _addSystemMessage('');
-
-    // Prova a stampare immediatamente il messaggio formattato.
-    try {
-      final sessionVars = await projectRepo.getDebugVariables(
-        projectId: flowchartId,
-      );
-
-      // Verifica rapidamente le variabili dichiarate nel nodo (se presenti)
-      for (final v in node.variables) {
-        if (!sessionVars.containsKey(v.name) || sessionVars[v.name] == null ||
-            (sessionVars[v.name] is String && (sessionVars[v.name] as String).isEmpty)) {
-          _addErrorMessage('Impossibile stampare il messaggio. La variabile ${v.name} non ha un valore assegnato.');
-          _state = ConsoleState.error;
-          _notifyUpdate();
-          return;
-        }
-      }
-
-      // Render del template e stampa
-      await _finalizeOutputNode(node);
-      _state = ConsoleState.completed;
-    } catch (e) {
-      // Intercetta eccezioni di render (es. variabile non trovata/senza valore)
-      final msg = e.toString();
-      // Prova a estrarre il nome variabile dall'eccezione
-      final match = RegExp(r'Variabile "([^"]+)"').firstMatch(msg);
-      if (match != null) {
-        final varName = match.group(1);
-        _addErrorMessage('Impossibile stampare il messaggio. La variabile $varName non ha un valore assegnato.');
-      } else {
-        _addErrorMessage('Impossibile stampare il messaggio. $msg');
-      }
-      _state = ConsoleState.error;
-    }
-  }
-
-  /// Inizializza per un nodo Decision - valutazione immediata
-  Future<void> _evaluateDecisionNode(DecisionNode node) async {
-    _addSystemMessage('');
-    try {
-      if (node.clauses.isNotEmpty) {
-        await _evaluateDecisionClauses(node);
-      } else {
-        // Fallback legacy su stringa condition
-        await _evaluateDecisionCondition(node.condition);
-      }
-      _state = ConsoleState.completed;
-      onCommandExecuted();
-    } catch (e) {
-      _addErrorMessage('Errore valutazione condizione: ${e.toString()}');
-      _state = ConsoleState.error;
-    }
-  }
-
-  /// Finalizza per nodi generici (start, end, process)
+  /// Nodo generico: stampa informazioni minime e completa subito
   void _initializeGenericNode() {
-    _addSystemMessage('');
+    _addInfoMessage('Nodo non interattivo: procedo al successivo');
     _state = ConsoleState.completed;
+    // Non auto-avanzare, lasciamo il controllo all'utente
+    _showCurrentPrompt('Scrivi "next" per continuare');
   }
 
-  /// Mostra il prompt per la prossima variabile
+  /// Fallback per avanzare quando viene richiesto il "prossimo" senza coda variabili
   Future<void> _promptNextVariable() async {
-    if (_variablesQueue.isEmpty) {
-      await _finalizeNode();
-      return;
-    }
-
-    final varName = _variablesQueue.removeAt(0);
-    _currentVariable = varName;
-
-    final varDecl = allVariables.firstWhere(
-          (v) => v.name == varName,
-      orElse: () => VariableDeclaration(
-        name: varName,
-        dataType: 'string',
-        scope: VariableScope.local,
-      ),
-    );
-
-    _currentPrompt = '$varName (${varDecl.dataType})';
-    _state = ConsoleState.waitingForInput;
-
-    _addPrompt(_currentPrompt!);
-    _notifyUpdate();
-  }
-
-  /// Finalizza il nodo corrente
-  Future<void> _finalizeNode() async {
-    _state = ConsoleState.processing;
-
-    if (currentNode is AssignmentNode) {
-      // Verifica che tutte le variabili siano state assegnate
-      final sessionVars = await projectRepo.getDebugVariables(
-        projectId: flowchartId,
-      );
-
-      final node = currentNode as AssignmentNode;
-      final targets = node.assignments.map((a) => a.target).toList();
-      final unassigned = targets.where((t) {
-        return !sessionVars.containsKey(t) || sessionVars[t] == null;
-      }).toList();
-
-      if (unassigned.isNotEmpty) {
-        _addErrorMessage('Impossibile proseguire: le seguenti variabili non sono state assegnate:');
-        for (final v in unassigned) {
-          _addErrorMessage('  - $v');
-        }
-        _addInfoMessage('Assegna tutte le variabili richieste prima di continuare');
-        _state = ConsoleState.waitingForInput;
-        _notifyUpdate();
-        return;
-      }
-
-      onCommandExecuted();
-    } else if (currentNode is DecisionNode) {
-      // Già valutato in _evaluateDecisionNode
-      onCommandExecuted();
-    }
-
+    // Completa il nodo corrente ma non chiama onCommandExecuted qui.
     _state = ConsoleState.completed;
-    _notifyUpdate();
+    // L'avanzamento vero e proprio è demandato al comando /next (CommandRegistry)
   }
 
-  /// Finalizza un nodo Output renderizzando il template
+  /// Renderizza il messaggio di Output sostituendo i placeholder {var}
   Future<void> _finalizeOutputNode(OutputNode node) async {
-    final allVars = await projectRepo.getDebugVariables(
+    final sessionVars = await projectRepo.getDebugVariables(
       projectId: flowchartId,
     );
 
+    // Verifica che tutte le variabili richieste abbiano un valore valido
+    for (final vName in node.variables) {
+      final v = sessionVars[vName];
+      if (v == null || (v is String && v.isEmpty)) {
+        throw StateError('Variabile "$vName" non ha un valore assegnato');
+      }
+    }
+
+    String rendered = node.template;
+    for (final vName in node.variables) {
+      final v = sessionVars[vName];
+      rendered = rendered.replaceAll('{$vName}', v.toString());
+    }
+
+    _addOutputMessage(rendered);
+    _state = ConsoleState.completed;
+    // Non auto-avanzare
+    _showCurrentPrompt('Scrivi "next" per continuare');
+  }
+
+  /// Inizializza un nodo Output (wrapper senza auto-avanzamento)
+  Future<void> _initializeOutputNode(OutputNode node) async {
     try {
-      // Sostituisci {variabile} con i valori
-      String rendered = node.template;
-      final pattern = RegExp(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}');
-      
-      rendered = rendered.replaceAllMapped(pattern, (match) {
-        final varName = match.group(1)!;
-        if (!allVars.containsKey(varName)) {
-          throw Exception('Variabile "$varName" non trovata');
-        }
-        final value = allVars[varName];
-        if (value == null) {
-          throw Exception('Variabile "$varName" non ha valore');
-        }
-        return value.toString();
-      });
-
-      _addOutputMessage(rendered);
-      onCommandExecuted();
+      await _finalizeOutputNode(node);
     } catch (e) {
-      // Mappa l'errore in un messaggio utente coerente
-      final msg = e.toString();
-      final match = RegExp(r'Variabile "([^"]+)"').firstMatch(msg);
-      if (match != null) {
-        final varName = match.group(1);
-        _addErrorMessage('Impossibile stampare il messaggio. La variabile $varName non ha un valore assegnato.');
-      } else {
-        _addErrorMessage('Impossibile stampare il messaggio. $msg');
-      }
+      _addErrorMessage('Errore nel nodo Output: ${e.toString()}');
+      _state = ConsoleState.error;
     }
   }
 
-  /// Valuta la condizione di un nodo Decision legacy (stringa)
-  Future<void> _evaluateDecisionCondition(String condition) async {
-    try {
-      final sessionVars = await projectRepo.getDebugVariables(
-        projectId: flowchartId,
-      );
-
-      // Sostituisci le variabili nella condizione
-      String evaluableCondition = condition;
-      for (final entry in sessionVars.entries) {
-        final key = entry.key;
-        final value = entry.value;
-        final valueStr = (value is bool)
-            ? (value ? 'true' : 'false')
-            : value.toString();
-
-        evaluableCondition = evaluableCondition.replaceAll('{$key}', valueStr);
-        evaluableCondition = evaluableCondition.replaceAllMapped(
-          RegExp('\\b' + RegExp.escape(key) + '\\b'),
-              (match) => valueStr,
-        );
-      }
-
-      evaluableCondition = ExpressionEvaluator.sanitizeCondition(evaluableCondition);
-      final result = ExpressionEvaluator.evaluateCondition(evaluableCondition);
-      final boolResult = (result is bool) ? result : (result != 0);
-
-      _addInfoMessage('Valutazione condizione: $condition');
-      _addInfoMessage('Espressione valutata: $evaluableCondition');
-      _addSuccessMessage('Risultato: ${boolResult ? "TRUE" : "FALSE"}');
-
-      // NEW: notify branch evaluation (do not navigate)
-      if (onDecisionEvaluated != null) {
-        onDecisionEvaluated!(currentNode.id, boolResult);
-      }
-    } catch (e) {
-      _addErrorMessage('Errore valutazione condizione: ${e.toString()}');
-    }
-  }
-
-  /// Valuta le clausole strutturate del DecisionNode con controlli di tipo
-  Future<void> _evaluateDecisionClauses(DecisionNode node) async {
-    final sessionVars = await projectRepo.getDebugVariables(projectId: flowchartId);
-
-    bool? aggregate; // inizia come null, poi combina con AND/OR
-    final isAnd = node.logicalJoin.toUpperCase() != 'OR';
-
-    for (final clause in node.clauses) {
-      // Recupera valore sinistro (variabile obbligatoria)
-      final leftName = clause.leftOperand;
-      if (!sessionVars.containsKey(leftName) || sessionVars[leftName] == null ||
-          (sessionVars[leftName] is String && (sessionVars[leftName] as String).isEmpty)) {
-        _addErrorMessage('La variabile $leftName utilizzata nella condizione non ha un valore assegnato.');
-        throw StateError('Variabile mancante');
-      }
-      final leftValue = sessionVars[leftName];
-      final leftType = _inferType(leftValue);
-
-      // Recupera valore destro
-      dynamic rightValue;
-      String rightType;
-      if (clause.isRightLiteral) {
-        rightValue = _parseLiteral(clause.rightOperand);
-        rightType = _inferType(rightValue);
-      } else {
-        final rightName = clause.rightOperand;
-        if (!sessionVars.containsKey(rightName) || sessionVars[rightName] == null ||
-            (sessionVars[rightName] is String && (sessionVars[rightName] as String).isEmpty)) {
-          _addErrorMessage('La variabile $rightName utilizzata nella condizione non ha un valore assegnato.');
-          throw StateError('Variabile destra mancante');
-        }
-        rightValue = sessionVars[rightName];
-        rightType = _inferType(rightValue);
-      }
-
-      // Valida compatibilità tipi per operatori di confronto stretti
-      final op = clause.operator.trim();
-      bool clauseResult;
-      try {
-        clauseResult = _evaluateOperator(op, leftValue, rightValue, leftType, rightType);
-      } on ArgumentError catch (_) {
-        _addErrorMessage('Confronto non valido tra il tipo $leftType e il tipo $rightType.');
-        throw StateError('Tipi incompatibili');
-      }
-
-      // Log minimale per clausola
-      _addInfoMessage('Condizione "${clause.toExpression()}" -> ${clauseResult ? 'TRUE' : 'FALSE'}');
-
-      // Aggrega
-      if (aggregate == null) {
-        aggregate = clauseResult;
-      } else {
-        aggregate = isAnd ? (aggregate && clauseResult) : (aggregate || clauseResult);
-      }
-    }
-
-    final boolResult = aggregate ?? false;
-    // Messaggio finale
-    _addSuccessMessage('Risultato: ${boolResult ? 'TRUE' : 'FALSE'}');
-
-    // NEW: notify branch evaluation (do not navigate)
-    if (onDecisionEvaluated != null) {
-      onDecisionEvaluated!(currentNode.id, boolResult);
-    }
-  }
-
-  /// Valuta una singola operazione di confronto con gestione tipi e operatori extra
-  bool _evaluateOperator(String op, dynamic left, dynamic right, String leftType, String rightType) {
-    final o = op.toLowerCase();
-
-    bool bothNumeric = left is num && right is num;
-
-    switch (o) {
-      case '==':
-        if (bothNumeric) return (left as num).toDouble() == (right as num).toDouble();
-        return left.toString() == right.toString();
-      case '!=':
-        if (bothNumeric) return (left as num).toDouble() != (right as num).toDouble();
-        return left.toString() != right.toString();
-      case '>':
-        if (!bothNumeric) throw ArgumentError('> richiede numeri');
-        return (left as num) > (right as num);
-      case '<':
-        if (!bothNumeric) throw ArgumentError('< richiede numeri');
-        return (left as num) < (right as num);
-      case '>=':
-        if (!bothNumeric) throw ArgumentError('>= richiede numeri');
-        return left >= right;
-      case '<=':
-        if (!bothNumeric) throw ArgumentError('<= richiede numeri');
-        return (left as num) <= (right as num);
-      case 'contains':
-        final ls = left.toString();
-        final rs = right.toString();
-        return ls.contains(rs);
-      case '!contains':
-        final ls2 = left.toString();
-        final rs2 = right.toString();
-        return !ls2.contains(rs2);
-      default:
-        throw ArgumentError('Operatore non supportato: $op');
-    }
-  }
-
-  String _inferType(dynamic v) {
-    if (v is int) return 'int';
-    if (v is double) return 'double';
-    if (v is bool) return 'bool';
-    if (v == null) return 'null';
-    return 'string';
-  }
-
-  dynamic _parseLiteral(String raw) {
-    final s = raw.trim();
-    if (s.isEmpty) return '';
-    if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"'))) {
-      return s.substring(1, s.length - 1);
-    }
-    if (s.toLowerCase() == 'true') return true;
-    if (s.toLowerCase() == 'false') return false;
-    final asInt = int.tryParse(s);
-    if (asInt != null) return asInt;
-    final asDouble = double.tryParse(s);
-    if (asDouble != null) return asDouble;
-    return s; // fallback stringa
-  }
-
-  /// Pulisce la history
-  void clearHistory() {
-    _history.clear();
-    _addSystemMessage('Console pulita');
-    _notifyUpdate();
-  }
-
-  // Metodi per aggiungere entry alla history
+  // ========== Metodi di utilità / logging ==========
   void _addSystemMessage(String text) {
     _history.add(ConsoleEntry(type: ConsoleEntryType.system, text: text));
   }
 
   void _addInfoMessage(String text) {
     _history.add(ConsoleEntry(type: ConsoleEntryType.info, text: text));
-  }
-
-  void _addPrompt(String prompt) {
-    _history.add(ConsoleEntry(type: ConsoleEntryType.prompt, text: prompt));
-  }
-
-  void _addUserInput(String text) {
-    _history.add(ConsoleEntry(type: ConsoleEntryType.userInput, text: text));
   }
 
   void _addSuccessMessage(String text) {
@@ -915,35 +698,238 @@ class DebugEngine {
     _history.add(ConsoleEntry(type: ConsoleEntryType.output, text: text));
   }
 
-  void _notifyUpdate() {
-    onHistoryUpdate(_history);
+  void _addUserInput(String text) {
+    _history.add(ConsoleEntry(type: ConsoleEntryType.userInput, text: text));
   }
 
-  /// Converte un valore nel tipo specificato, gestendo eventuali errori di conversione.
-  dynamic _convertToType(dynamic value, String targetType) {
-    try {
-      if (value == null) return null;
+  void _showCurrentPrompt([String? prompt]) {
+    _currentPrompt = prompt ?? _currentPrompt;
+    if (_currentPrompt != null && _currentPrompt!.isNotEmpty) {
+      _history.add(ConsoleEntry(type: ConsoleEntryType.prompt, text: _currentPrompt!));
+    }
+  }
 
-      switch (targetType.toLowerCase()) {
-        case 'string':
-          return value.toString();
-        case 'int':
-          return int.tryParse(value.toString()) ?? (throw FormatException('Impossibile convertire "$value" in int'));
-        case 'double':
-          return double.tryParse(value.toString()) ?? (throw FormatException('Impossibile convertire "$value" in double'));
-        case 'bool':
-          if (value is bool) return value;
-          final lowerStr = value.toString().toLowerCase();
-          if (lowerStr == 'true' || lowerStr == 'false') {
-            return lowerStr == 'true';
-          }
-          throw FormatException('Impossibile convertire "$value" in bool');
-        default:
-          throw FormatException('Tipo sconosciuto: $targetType');
-      }
+  void _notifyUpdate() {
+    onHistoryUpdate(List.unmodifiable(_history));
+  }
+
+  dynamic _convertToType(dynamic value, String dataType) {
+    final type = dataType.toLowerCase();
+    if (type == 'int' || type == 'integer') {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.parse(value.toString());
+    }
+    if (type == 'double' || type == 'float' || type == 'number') {
+      if (value is double) return value;
+      if (value is num) return value.toDouble();
+      return double.parse(value.toString());
+    }
+    if (type == 'bool' || type == 'boolean') {
+      if (value is bool) return value;
+      final s = value.toString().toLowerCase();
+      if (s == 'true' || s == '1') return true;
+      if (s == 'false' || s == '0') return false;
+      throw FormatException('Valore booleano non valido: $value');
+    }
+    // default: string
+    return value?.toString();
+  }
+
+  // ========== Valutazione condizioni ==========
+  Future<void> _evaluateDecisionNode(DecisionNode node) async {
+    try {
+      final sessionVars = await projectRepo.getDebugVariables(projectId: flowchartId);
+      final result = _evaluateClauses(node.clauses, node.logicalJoin, sessionVars);
+      _addInfoMessage('Decision: condizione = ${result ? 'TRUE' : 'FALSE'}');
+      _state = ConsoleState.completed;
+      onDecisionEvaluated?.call(node.id, result);
+      // Non auto-avanzare: attendi azione utente (Next)
+      _showCurrentPrompt('Scrivi "next" per continuare');
     } catch (e) {
-      // Gestisci l'errore di conversione qui (es. log, messaggio all'utente, ecc.)
-      throw FormatException('Errore di conversione: ${e.toString()}');
+      _addErrorMessage('Errore valutazione Decision: ${e.toString()}');
+      _state = ConsoleState.error;
+    }
+  }
+
+  Future<void> _evaluateWhileNode(WhileNode node) async {
+    try {
+      final sessionVars = await projectRepo.getDebugVariables(projectId: flowchartId);
+      final result = _evaluateClauses(node.clauses, node.logicalJoin, sessionVars);
+      _addInfoMessage('While: condizione = ${result ? 'TRUE (entra nel corpo)' : 'FALSE (esce)'}');
+      _state = ConsoleState.completed;
+      onDecisionEvaluated?.call(node.id, result);
+      _showCurrentPrompt('Scrivi "next" per continuare');
+    } catch (e) {
+      _addErrorMessage('Errore valutazione While: ${e.toString()}');
+      _state = ConsoleState.error;
+    }
+  }
+
+  Future<void> _evaluateDoWhileNode(DoWhileNode node) async {
+    // Valuta SEMPRE la condizione quando si arriva al nodo do-while
+    try {
+      final sessionVars = await projectRepo.getDebugVariables(projectId: flowchartId);
+      final result = _evaluateClauses(node.clauses, node.logicalJoin, sessionVars);
+      _addInfoMessage('Do-While: condizione = ${result ? 'TRUE (ripete il ciclo)' : 'FALSE (esce)'}');
+      _state = ConsoleState.completed;
+      onDecisionEvaluated?.call(node.id, result);
+      _showCurrentPrompt('Scrivi "next" per continuare');
+    } catch (e) {
+      _addErrorMessage('Errore valutazione Do-While: ${e.toString()}');
+      _state = ConsoleState.error;
+    }
+  }
+
+  bool _evaluateClauses(List<ConditionClause> clauses, String logicalJoin, Map<String, dynamic> sessionVars) {
+    if (clauses.isEmpty) return false;
+
+    bool evalClause(ConditionClause c) {
+      dynamic left = sessionVars[c.leftOperand];
+      if (!c.isRightLiteral && !sessionVars.containsKey(c.rightOperand)) {
+        // Se il destro è variabile ma non esiste, trattiamo come null
+      }
+      dynamic right;
+      if (c.isRightLiteral) {
+        right = _parseLiteral(c.rightOperand);
+      } else {
+        right = sessionVars[c.rightOperand];
+      }
+      switch (c.operator) {
+        case '==':
+          return _compareEq(left, right);
+        case '=':
+          return _compareEq(left, right);
+        case '!=':
+          return !_compareEq(left, right);
+        case '>=':
+          return _toNum(left) >= _toNum(right);
+        case '<=':
+          return _toNum(left) <= _toNum(right);
+        case '>':
+          return _toNum(left) > _toNum(right);
+        case '<':
+          return _toNum(left) < _toNum(right);
+        default:
+          throw UnsupportedError('Operatore non supportato: ${c.operator}');
+      }
+    }
+
+    bool agg(bool a, bool b) => (logicalJoin.toUpperCase() == 'AND') ? (a && b) : (a || b);
+
+    bool acc = evalClause(clauses.first);
+    for (int i = 1; i < clauses.length; i++) {
+      acc = agg(acc, evalClause(clauses[i]));
+    }
+    return acc;
+  }
+
+  bool _compareEq(dynamic a, dynamic b) {
+    if (a is num && b is num) return a == b;
+    if (a is bool && b is bool) return a == b;
+    return (a?.toString() ?? '') == (b?.toString() ?? '');
+  }
+
+  num _toNum(dynamic v) {
+    if (v is num) return v;
+    final s = v?.toString();
+    final n = num.tryParse(s ?? '');
+    if (n == null) {
+      throw FormatException('Valore non numerico: $v');
+    }
+    return n;
+  }
+
+  dynamic _parseLiteral(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '';
+    if ((s.startsWith('\'') && s.endsWith('\'')) || (s.startsWith('"') && s.endsWith('"'))) {
+      return s.substring(1, s.length - 1);
+    }
+    if (s.toLowerCase() == 'true') return true;
+    if (s.toLowerCase() == 'false') return false;
+    final n = num.tryParse(s);
+    if (n != null) return n;
+    return s; // fallback stringa
+  }
+
+  // ======================================================
+  // NEW: Gestione del nodo di PROCESSO (chiamata sottoprogramma)
+  // ======================================================
+  Future<void> _initializeProcessNode(ProcessNode node) async {
+    try {
+      final sessionVars = await projectRepo.getDebugVariables(projectId: flowchartId);
+
+      // 1) Informazioni sulla chiamata
+      final callName = (node.flowchartToCall.isNotEmpty) ? node.flowchartToCall : '(nessuna funzione configurata)';
+      _addInfoMessage('Processo: ${callName}');
+
+      // 2) Valuta e mostra gli argomenti (se presenti)
+      if (node.arguments.isNotEmpty) {
+        final argValues = <dynamic>[];
+        bool argsOk = true;
+        for (int i = 0; i < node.arguments.length; i++) {
+          final expr = node.arguments[i];
+          final res = ExpressionParser.evaluate(expr, sessionVars);
+          if (!res.isValid) {
+            _addErrorMessage('Argomento ${i + 1}: ${res.errorMessage ?? 'espressione non valida'}');
+            argsOk = false;
+            continue;
+          }
+          argValues.add(res.value);
+        }
+        if (argsOk) {
+          _addSuccessMessage('Argomenti valutati: ${argValues.join(', ')}');
+        } else {
+          _addInfoMessage('Correggi gli argomenti oppure prosegui dopo aver sistemato le variabili mancanti');
+        }
+      }
+
+      // 3) 🆕 NUOVO: Se c'è una funzione configurata, triggera lo step-into automatico
+      if (node.flowchartToCall.isNotEmpty) {
+        _addInfoMessage('Premi "next" per entrare nel sottoprogramma "${callName}"');
+        _state = ConsoleState.completed;
+        _showCurrentPrompt('Scrivi "next" per continuare');
+        return;
+      }
+
+      // 4) Gestione del risultato della chiamata (se previsto) - SOLO se non entriamo nel sottoprogramma
+      if (node.resultTarget != null && node.resultTarget!.trim().isNotEmpty) {
+        final resultVar = node.resultTarget!.trim();
+
+        // Verifica dichiarazione
+        final decl = allVariables.firstWhere(
+          (v) => v.name == resultVar,
+          orElse: () => VariableDeclaration(name: resultVar, dataType: 'string', scope: VariableScope.local),
+        );
+        final isDeclared = allVariables.any((v) => v.name == resultVar);
+        if (!isDeclared) {
+          _addErrorMessage('Variabile di risultato "$resultVar" non dichiarata nella workarea');
+          _state = ConsoleState.error;
+          return;
+        }
+
+        // Assicura l'esistenza nelle variabili di sessione (se manca, crea un placeholder)
+        if (!sessionVars.containsKey(resultVar)) {
+          final initial = _getInitialValueForType(decl.dataType);
+          await projectRepo.updateDebugVariables(
+            projectId: flowchartId,
+            variables: {resultVar: initial},
+          );
+        }
+
+        _addInfoMessage('Il risultato sarà assegnato automaticamente a "$resultVar" al ritorno dal sottoprogramma');
+        _state = ConsoleState.completed;
+        _showCurrentPrompt('Scrivi "next" per continuare');
+        return;
+      }
+
+      // 5) Se non c'è resultTarget, completa semplicemente la chiamata informativa
+      _state = ConsoleState.completed;
+      _showCurrentPrompt('Scrivi "next" per continuare');
+    } catch (e) {
+      _addErrorMessage('Errore nel nodo Processo: ${e.toString()}');
+      _state = ConsoleState.error;
     }
   }
 }

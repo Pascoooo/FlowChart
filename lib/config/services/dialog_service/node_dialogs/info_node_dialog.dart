@@ -235,12 +235,13 @@ class _NodeDetailsDialog extends StatelessWidget {
       FlowNodeKind.decision => ('Nodo Condizione', FontAwesomeIcons.codeBranch, warningColor),
       FlowNodeKind.start => ('Nodo Inizio', FontAwesomeIcons.play, successColor),
       FlowNodeKind.end => ('Nodo Fine', FontAwesomeIcons.flagCheckered, errorColor),
-    // NUOVO: Aggiunto titolo, icona e colore per il nodo di assegnazione.
       FlowNodeKind.assignment => ('Nodo Assegnazione', FontAwesomeIcons.calculator, accentColor),
-      // TODO: Handle this case.
       FlowNodeKind.whileLoop => ('Ciclo While', FontAwesomeIcons.repeat, accentColor),
-      // TODO: Handle this case.
       FlowNodeKind.doWhileLoop => ('Ciclo Do-While', FontAwesomeIcons.undo, accentColor),
+      FlowNodeKind.functionHeader => ('Intestazione Funzione', FontAwesomeIcons.signature, successColor),
+      FlowNodeKind.returnNode => ('Nodo Return', FontAwesomeIcons.reply, errorColor),
+      // TODO: Handle this case.
+      FlowNodeKind.doWhileStart => throw UnimplementedError(),
     };
   }
 

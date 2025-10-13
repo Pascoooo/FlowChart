@@ -12,6 +12,9 @@ enum ResetChoice {
   canvasAndVariables,
 }
 
+/// Scelta tra reset canvas o reset da un blocco specifico
+enum ResetActionChoice { resetCanvas, resetFromNode }
+
 /// 🎨 Professional Dialog System - Web-First Design with Perfect Centering
 class GenericDialogs {
   /// 📢 Info Dialog - Perfectly Centered Single-Button Layout
@@ -820,6 +823,107 @@ class GenericDialogs {
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 🔄 Nuovo dialogo: scegliere tra resettare la canvas o troncare da un blocco
+  static Future<ResetActionChoice?> showResetOrTruncateDialog(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String resetCanvasText,
+    required String resetFromNodeText,
+    required String cancelText,
+  }) {
+    final theme = FluentTheme.of(context);
+
+    return showDialog<ResetActionChoice>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return Center(
+          child: ContentDialog(
+            constraints: const BoxConstraints(minWidth: 520, maxWidth: 600),
+            content: Container(
+              padding: const EdgeInsets.fromLTRB(40, 32, 40, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
+                          border: Border.all(
+                            color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.2),
+                            width: 2,
+                          ),
+                        ),
+                        child: const FaIcon(FontAwesomeIcons.rotateLeft, size: 28),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        title,
+                        style: theme.typography.title?.copyWith(
+                          color: theme.typography.body?.color,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 18,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Text(
+                      message,
+                      style: theme.typography.body?.copyWith(
+                        color: theme.typography.body?.color?.withOpacity(0.8),
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Button(
+                    onPressed: () => Navigator.of(dialogContext).pop(ResetActionChoice.resetCanvas),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      child: Text(resetCanvasText),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(ResetActionChoice.resetFromNode),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      child: Text(resetFromNodeText),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Button(
+                    onPressed: () => Navigator.of(dialogContext).pop(null),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      child: Text(cancelText),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

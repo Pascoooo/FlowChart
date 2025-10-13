@@ -1,7 +1,10 @@
+import 'package:file_repository/file_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../../../blocs/file_bloc/file_system_bloc.dart';
+import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
@@ -320,29 +323,35 @@ class _WorkAreaState extends State<WorkArea>
     }
   }
 
-  List<ConditionClause> _parseClausesFromExpression(String expr, {String? outLogicalJoin}) {
-    // Parser semplice: supporta AND/OR piatti, senza parentesi annidate complesse
-    String s = expr.trim();
-    if (s.isEmpty) return [];
+  // Reset totale delle variabili dichiarate
+  Future<void> _handleResetAllVariables() async {
+    final flowchartBloc = context.read<FlowchartBloc>();
+    final flowchartState = flowchartBloc.state;
+    if (flowchartState is! FlowchartLoaded) return;
 
-    String logicalJoin = 'AND';
-    if (s.contains(' AND ')) {
-      logicalJoin = 'AND';
-    } else if (s.contains(' OR ')) {
-      logicalJoin = 'OR';
-    }
+    final confirmed = await AppDialogs.showConfirmationDialog(
+      context,
+      title: 'Reset Variabili',
+      message: 'Questa azione rimuoverà tutte le variabili dichiarate. Procedere?',
+      isDestructive: true,
+    );
 
-    List<String> parts;
-    if (logicalJoin == 'AND' && s.contains(' AND ')) {
-      parts = s.split(' AND ');
-    } else if (logicalJoin == 'OR' && s.contains(' OR ')) {
-      parts = s.split(' OR ');
-    } else {
-      parts = [s];
+    if (confirmed == true && mounted) {
+      flowchartBloc.add(const UpdateGlobalVariables([]));
     }
+  }
+
+  // Parser semplice di espressioni booleane legacy in elenco di clausole
+  List<ConditionClause> _parseClausesFromExpression(String text) {
+    final clauses = <ConditionClause>[];
+    if (text.trim().isEmpty) return clauses;
+
+    // Spezza su AND/OR (il join sarà calcolato altrove)
+    final parts = text.split(RegExp(r'\s+(?:AND|OR)\s+', caseSensitive: false));
 
     ConditionClause? parseSingle(String raw) {
       String t = raw.trim();
+      // Rimuovi parentesi esterne
       while (t.startsWith('(') && t.endsWith(')')) {
         t = t.substring(1, t.length - 1).trim();
       }
@@ -350,7 +359,10 @@ class _WorkAreaState extends State<WorkArea>
       String? op;
       for (final o in ops) {
         final idx = t.indexOf(' $o ');
-        if (idx != -1) { op = o; break; }
+        if (idx != -1) {
+          op = o;
+          break;
+        }
       }
       if (op == null) return null;
       final split = t.split(' $op ');
@@ -358,15 +370,18 @@ class _WorkAreaState extends State<WorkArea>
       final left = split[0].trim();
       final right = split[1].trim();
       final normOp = (op == '=') ? '==' : op;
+
       bool isLiteral = false;
       if (right.isEmpty) {
         isLiteral = true;
       } else if ((right.startsWith("'") && right.endsWith("'")) ||
-                 (right.startsWith('"') && right.endsWith('"')) ||
-                 right.toLowerCase() == 'true' || right.toLowerCase() == 'false' ||
-                 double.tryParse(right) != null) {
+          (right.startsWith('"') && right.endsWith('"')) ||
+          right.toLowerCase() == 'true' ||
+          right.toLowerCase() == 'false' ||
+          double.tryParse(right) != null) {
         isLiteral = true;
       }
+
       return ConditionClause(
         leftOperand: left,
         operator: normOp,
@@ -375,89 +390,112 @@ class _WorkAreaState extends State<WorkArea>
       );
     }
 
-    final clauses = <ConditionClause>[];
     for (final p in parts) {
       final c = parseSingle(p);
       if (c != null) clauses.add(c);
-    }
-    if (outLogicalJoin != null) {
-      outLogicalJoin = logicalJoin;
     }
     return clauses;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        _WorkAreaContent(
-          repaintKey: widget.repaintKey,
-          showGrid: widget.showGrid,
-          isReadOnly: widget.isReadOnly,
-          allowDragInReadOnly: widget.allowDragInReadOnly,
-        ),
+    // Avvolge il canvas con un listener sul FileSystemBloc per caricare il contenuto del file attivo
+    return BlocListener<FileSystemBloc, FileSystemState>(
+      listenWhen: (prev, curr) {
+        // Ascolta cambiamenti dell'activeFileId o modifica della lista file
+        if (prev is FileSystemLoaded && curr is FileSystemLoaded) {
+          return prev.activeFileId != curr.activeFileId || prev.files != curr.files;
+        }
+        return curr is FileSystemLoaded;
+      },
+      listener: (context, state) {
+        if (state is FileSystemLoaded) {
+          final activeId = state.activeFileId;
+          if (activeId == null) return;
+          final file = state.files.firstWhere(
+            (f) => f.fileId == activeId,
+            orElse: () => MyFile.empty,
+          );
+          if (file == MyFile.empty) return;
 
-        if (!widget.isReadOnly)
-          Positioned(
-            top: 24,
-            left: 24,
-            child: ScaleTransition(
-              scale: _buttonAnimation,
-              child: FadeTransition(
-                opacity: _buttonAnimation,
-                child: BlocBuilder<FlowchartBloc, FlowchartState>(
-                  builder: (context, state) {
-                    final variables = (state is FlowchartLoaded)
-                        ? state.flowchart.variables
-                        : <VariableDeclaration>[];
-
-                    return _VariablesPanel(
-                      variables: variables,
-                      onAddVariable: _handleAddVariable,
-                      onEditVariable: _handleEditVariable,
-                      onDeleteVariable: _handleDeleteVariable,
-                    );
-                  },
-                ),
-              ),
-            ),
+          // Carica il contenuto del file nel FlowchartBloc
+          context.read<FlowchartBloc>().add(
+                LoadFlowchart(jsonContent: file.content, fileName: file.name),
+              );
+        }
+      },
+      child: Stack(
+        children: [
+          _WorkAreaContent(
+            repaintKey: widget.repaintKey,
+            showGrid: widget.showGrid,
+            isReadOnly: widget.isReadOnly,
+            allowDragInReadOnly: widget.allowDragInReadOnly,
           ),
 
-        if (!widget.isReadOnly) ...[
-          Positioned(
-            bottom: 24,
-            left: 24,
-            child: ScaleTransition(
-              scale: _buttonAnimation,
-              child: FadeTransition(
-                opacity: _buttonAnimation,
-                child: _InfoRulesButton(
-                  onTap: () => AppDialogs.showInfoDialog(
-                    context,
-                    title: 'Regole',
-                    message: 'Opzione regole da implementare',
-                    type: DialogType.info,
+          if (!widget.isReadOnly)
+            Positioned(
+              top: 24,
+              left: 24,
+              child: ScaleTransition(
+                scale: _buttonAnimation,
+                child: FadeTransition(
+                  opacity: _buttonAnimation,
+                  child: BlocBuilder<FlowchartBloc, FlowchartState>(
+                    builder: (context, state) {
+                      final variables = (state is FlowchartLoaded)
+                          ? state.flowchart.variables
+                          : <VariableDeclaration>[];
+
+                      return _VariablesPanel(
+                        variables: variables,
+                        onAddVariable: _handleAddVariable,
+                        onEditVariable: _handleEditVariable,
+                        onDeleteVariable: _handleDeleteVariable,
+                        onResetAllVariables: _handleResetAllVariables,
+                      );
+                    },
                   ),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            bottom: 24,
-            right: 24,
-            child: ScaleTransition(
-              scale: _buttonAnimation,
-              child: FadeTransition(
-                opacity: _buttonAnimation,
-                child: GridToggleButton(
-                  showGrid: widget.showGrid,
-                  onToggle: widget.onToggleGrid,
+
+          if (!widget.isReadOnly) ...[
+            Positioned(
+              bottom: 24,
+              left: 24,
+              child: ScaleTransition(
+                scale: _buttonAnimation,
+                child: FadeTransition(
+                  opacity: _buttonAnimation,
+                  child: _InfoRulesButton(
+                    onTap: () => AppDialogs.showInfoDialog(
+                      context,
+                      title: 'Regole',
+                      message: 'Opzione regole da implementare',
+                      type: DialogType.info,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: ScaleTransition(
+                scale: _buttonAnimation,
+                child: FadeTransition(
+                  opacity: _buttonAnimation,
+                  child: GridToggleButton(
+                    showGrid: widget.showGrid,
+                    onToggle: widget.onToggleGrid,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -500,12 +538,14 @@ class _VariablesPanel extends StatelessWidget {
   final void Function(VariableScope) onAddVariable;
   final void Function(VariableDeclaration) onEditVariable;
   final void Function(VariableDeclaration) onDeleteVariable;
+  final VoidCallback onResetAllVariables;
 
   const _VariablesPanel({
     required this.variables,
     required this.onAddVariable,
     required this.onEditVariable,
     required this.onDeleteVariable,
+    required this.onResetAllVariables,
   });
 
   @override
@@ -517,17 +557,17 @@ class _VariablesPanel extends StatelessWidget {
     final localVars = variables.where((v) => v.scope == VariableScope.local).toList();
 
     return Container(
-      width: 220,
+      width: 260,
       padding: const EdgeInsets.all(12.0),
       decoration: BoxDecoration(
         color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: theme.resources.cardStrokeColorDefault),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Color(0x1A000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -535,9 +575,30 @@ class _VariablesPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: Text('Variabili', style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.w600)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Text('Variabili',
+                    style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.w600)),
+              ),
+              Button(
+                onPressed: onResetAllVariables,
+                style: ButtonStyle(
+                  padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                  backgroundColor: WidgetStateProperty.all(Colors.red.withOpacity(0.08)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(FluentIcons.refresh, size: 14),
+                    SizedBox(width: 6),
+                    Text('Resetta tutte'),
+                  ],
+                ),
+              ),
+            ],
           ),
           Divider(
             style: DividerThemeData(

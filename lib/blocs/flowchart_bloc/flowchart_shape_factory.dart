@@ -112,8 +112,8 @@ class FlowNodeFactory {
         );
       }(),
 
-    // CORRETTO: La logica ora si aspetta una semplice List<String> dal dialogo,
-    // rendendo il codice più semplice e robusto.
+      // CORRETTO: La logica ora si aspetta una semplice List<String> dal dialogo,
+      // rendendo il codice più semplice e robusto.
       FlowNodeKind.input => InputNode(
         id: _uuid.v4(),
         x: position.dx,
@@ -125,8 +125,8 @@ class FlowNodeFactory {
         (initialData?['targetVariables'] as List?)?.cast<String>() ?? [],
       ),
 
-    // CORRETTO: La logica qui era già giusta. Legge i nomi delle variabili
-    // e li "risolve" cercando l'oggetto completo nella lista globale.
+      // CORRETTO: La logica qui era già giusta. Legge i nomi delle variabili
+      // e li "risolve" cercando l'oggetto completo nella lista globale.
       FlowNodeKind.output => () {
         final variableNames =
             (initialData?['variables'] as List?)?.cast<String>() ?? [];
@@ -162,6 +162,35 @@ class FlowNodeFactory {
             .toList() ??
             [],
       ),
+
+      FlowNodeKind.functionHeader => () {
+        final params = (initialData?['parameters'] as List?)
+            ?.map((p) => FunctionParam.fromJson(p as Map<String, dynamic>))
+            .toList() ?? [];
+
+        return FunctionHeaderNode(
+          id: 'header_${_uuid.v4()}',
+          x: position.dx,
+          y: position.dy,
+          width: 250.0,
+          height: 100.0,
+          functionName: initialData?['functionName'] as String? ?? 'function',
+          returnType: initialData?['returnType'] as String? ?? 'void',
+          parameters: params,
+        );
+      }(),
+
+      FlowNodeKind.returnNode => ReturnNode(
+        id: 'return_${_uuid.v4()}',
+        x: position.dx,
+        y: position.dy,
+        width: 140.0,
+        height: 70.0,
+        text: 'Return',
+        returnExpression: initialData?['returnExpression'] as String?,
+      ),
+
+      FlowNodeKind.doWhileStart => throw UnimplementedError('doWhileStart è un marcatore interno e non dovrebbe creare un nodo direttamente'),
     };
   }
 }

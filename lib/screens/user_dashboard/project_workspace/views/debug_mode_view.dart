@@ -1,7 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flowchart_repository/flowchart_repository.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import 'debug_console.dart';
@@ -111,7 +111,7 @@ class _DebugModeViewState extends State<DebugModeView>
                         child: Container(
                           height: 8,
                           color: _isDraggingDivider
-                              ? theme.accentColor.withOpacity(0.3)
+                              ? theme.accentColor.withValues(alpha: 0.3)
                               : theme.resources.dividerStrokeColorDefault,
                           child: Center(
                             child: Container(
@@ -152,7 +152,10 @@ class _DebugModeViewState extends State<DebugModeView>
                               flowchartId: state.flowchart.flowchartId,
                               projectRepo: context.read<ProjectBloc>().projectRepository,
                               allVariables: state.flowchart.variables,
-                              onCommandExecuted: () {},
+                              onCommandExecuted: () {
+                                // Avanza automaticamente dopo la valutazione di nodi decisionali/ciclo
+                                context.read<FlowchartBloc>().add(const DebugNextNode());
+                              },
                             ),
                           ),
                         );
@@ -181,7 +184,7 @@ class _DebugModeViewState extends State<DebugModeView>
                   child: Container(
                     width: 8,
                     color: _isDraggingHorizontalDivider
-                        ? theme.accentColor.withOpacity(0.3)
+                        ? theme.accentColor.withValues(alpha: 0.3)
                         : theme.resources.dividerStrokeColorDefault,
                     child: Center(
                       child: Container(

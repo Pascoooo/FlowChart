@@ -110,7 +110,9 @@ class IncomingConnectionRule extends FlowchartRule {
 class DecisionPortUniquenessRule extends FlowchartRule {
   @override
   ValidationResult validate(FlowchartLoaded state, Object actionContext) {
-    if (actionContext is! FlowchartEdge || actionContext.port == null) return ValidationResult.success();
+    if (actionContext is! FlowchartEdge || actionContext.port == null) {
+      return ValidationResult.success();
+    }
 
     final fromNode = state.getNodeById(actionContext.from);
     if (fromNode == null) return ValidationResult.success();
@@ -122,13 +124,30 @@ class DecisionPortUniquenessRule extends FlowchartRule {
       return ValidationResult.success();
     }
 
-    final hasDuplicatePort = state.flowchart.edges.any(
-            (e) => e.from == actionContext.from && e.port == actionContext.port
+    // Normalizza le porte: nel do-while 'doWhileStart' è equivalente a 'true'
+    String _normalized(String? port) {
+      if (port == null) return '';
+      if (fromNode.kind == FlowNodeKind.doWhileLoop && port == 'doWhileStart') {
+        return 'true';
+      }
+      return port;
+    }
+
+    final newPort = _normalized(actionContext.port);
+
+    final hasSamePortAlready = state.flowchart.edges.any(
+      (e) => e.from == actionContext.from && _normalized(e.port) == newPort,
     );
 
-    if (hasDuplicatePort) {
-      return ValidationResult.failure("Il ramo '${actionContext.port}' di questo nodo è già collegato.");
+    if (hasSamePortAlready) {
+      // Messaggio chiaro per l'utente
+      final label = newPort == 'true'
+          ? "vero"
+          : (newPort == 'false' ? "falso" : newPort);
+      return ValidationResult.failure(
+          "Il ramo '$label' è già collegato per questo nodo.");
     }
+
     return ValidationResult.success();
   }
 }

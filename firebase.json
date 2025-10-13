@@ -42,3 +42,6 @@
         "GOOGLE_CLIENT_SECRET",
         "TOKEN_ENCRYPTION_KEY"
       ]
+    }
+  ]
+}

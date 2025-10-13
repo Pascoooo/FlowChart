@@ -5,7 +5,20 @@ import 'package:flowchart_repository/src/entities/entities.dart';
 const int kFlowNodeSchemaVersion = 2;
 
 /// Enum fortemente tipizzato per i tipi di nodi.
-enum FlowNodeKind { start, end, process, decision, input, output, assignment, whileLoop, doWhileLoop }
+enum FlowNodeKind {
+  start,
+  end,
+  process,
+  decision,
+  input,
+  output,
+  assignment,
+  whileLoop,
+  doWhileLoop,
+  doWhileStart,
+  functionHeader,  // Nodo intestazione sottoprogramma (non modificabile, solo in funzioni)
+  returnNode       // Nodo di ritorno (solo in sottoprogrammi)
+}
 
 /// Enum per le categorie di variabili
 enum VariableScope {
@@ -162,6 +175,9 @@ abstract class FlowNode extends Equatable {
       FlowNodeKind.assignment => AssignmentNode.fromEntity(entity),
       FlowNodeKind.whileLoop => WhileNode.fromEntity(entity),
       FlowNodeKind.doWhileLoop => DoWhileNode.fromEntity(entity),
+      FlowNodeKind.functionHeader => FunctionHeaderNode.fromEntity(entity),
+      FlowNodeKind.returnNode => ReturnNode.fromEntity(entity),
+      FlowNodeKind.doWhileStart => throw UnsupportedError('FlowNodeKind.doWhileStart è un marcatore interno e non dovrebbe essere deserializzato'),
     };
   }
 
@@ -705,64 +721,6 @@ class DoWhileNode extends FlowNode {
           .map((c) => ConditionClause.fromMap(c as Map<String, dynamic>))
           .toList();
       logicalJoin = e.data?['logicalJoin'] ?? 'AND';
-    } else {
-      // Supporto formato legacy con stringa 'condition'
-      final legacyCondition = (e.data?['condition'] as String?)?.trim() ?? '';
-      if (legacyCondition.isNotEmpty) {
-        if (legacyCondition.contains(' AND ')) {
-          logicalJoin = 'AND';
-        } else if (legacyCondition.contains(' OR ')) {
-          logicalJoin = 'OR';
-        }
-        final parts = (logicalJoin == 'AND' && legacyCondition.contains(' AND '))
-            ? legacyCondition.split(' AND ')
-            : (logicalJoin == 'OR' && legacyCondition.contains(' OR '))
-                ? legacyCondition.split(' OR ')
-                : [legacyCondition];
-
-        ConditionClause? _parseClause(String raw) {
-          String s = raw.trim();
-          while (s.startsWith('(') && s.endsWith(')')) {
-            s = s.substring(1, s.length - 1).trim();
-          }
-          const ops = ['>=', '<=', '==', '!=', '>', '<', '='];
-          String? op;
-          for (final o in ops) {
-            final idx = s.indexOf(' $o ');
-            if (idx != -1) { op = o; break; }
-          }
-          if (op == null) return null;
-          final split = s.split(' $op ');
-          if (split.length != 2) return null;
-          final left = split[0].trim();
-          String right = split[1].trim();
-          final normOp = (op == '=') ? '==' : op;
-          bool isLiteral = false;
-          if (right.isEmpty) {
-            isLiteral = true;
-          } else if ((right.startsWith("'") && right.endsWith("'")) ||
-                     (right.startsWith('"') && right.endsWith('"')) ||
-                     right.toLowerCase() == 'true' || right.toLowerCase() == 'false' ||
-                     double.tryParse(right) != null) {
-            isLiteral = true;
-          }
-          return ConditionClause(
-            leftOperand: left,
-            operator: normOp,
-            rightOperand: right,
-            isRightLiteral: isLiteral,
-          );
-        }
-
-        final parsed = <ConditionClause>[];
-        for (final p in parts) {
-          final clause = _parseClause(p);
-          if (clause != null) parsed.add(clause);
-        }
-        if (parsed.isNotEmpty) {
-          clauses = parsed;
-        }
-      }
     }
 
     return DoWhileNode(
@@ -825,25 +783,22 @@ class InputNode extends FlowNode {
     width: width,
     height: height,
     text: text,
-    data: {
-      'targetVariables': targetVariables,
-    },
+    data: {'targetVariables': targetVariables},
     metadata: metadata,
   );
 
   static InputNode fromEntity(FlowNodeEntity e) {
-    final targetNames =
-        (e.data?['targetVariables'] as List?)?.cast<String>() ?? [];
-
+    final targetVariables = (e.data?['targetVariables'] as List?)?.cast<String>() ?? [];
     return InputNode(
-        id: e.id,
-        x: e.x,
-        y: e.y,
-        width: e.width,
-        height: e.height,
-        text: e.text,
-        targetVariables: targetNames,
-        metadata: e.metadata);
+      id: e.id,
+      x: e.x,
+      y: e.y,
+      width: e.width,
+      height: e.height,
+      text: e.text,
+      targetVariables: targetVariables,
+      metadata: e.metadata,
+    );
   }
 
   @override
@@ -1010,6 +965,161 @@ class OutputNode extends FlowNode {
       text: text ?? this.text,
       template: template ?? this.template,
       variables: variables ?? this.variables,
+      metadata: metadata,
+    );
+  }
+}
+
+/// Nodo di intestazione del sottoprogramma (non modificabile dall'utente)
+/// Visualizza la firma della funzione: returnType functionName(params)
+class FunctionHeaderNode extends FlowNode {
+  final String functionName;
+  final String returnType;
+  final List<FunctionParam> parameters;
+
+  const FunctionHeaderNode({
+    required super.id,
+    required super.x,
+    required super.y,
+    required super.width,
+    required super.height,
+    required this.functionName,
+    required this.returnType,
+    required this.parameters,
+    super.metadata,
+  }) : super(
+    kind: FlowNodeKind.functionHeader,
+    text: '', // Il testo viene generato automaticamente
+  );
+
+  /// Genera il testo della firma da visualizzare
+  String get signatureText {
+    final params = parameters.map((p) => '${p.type} ${p.name}').join(', ');
+    return '$returnType $functionName($params)';
+  }
+
+  @override
+  FlowNodeEntity toEntity() => FlowNodeEntity(
+    id: id,
+    kind: kind,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    text: signatureText,
+    data: {
+      'functionName': functionName,
+      'returnType': returnType,
+      'parameters': parameters.map((p) => p.toJson()).toList(),
+    },
+    metadata: metadata,
+  );
+
+  static FunctionHeaderNode fromEntity(FlowNodeEntity e) {
+    final params = (e.data?['parameters'] as List?)
+        ?.map((p) => FunctionParam.fromJson(p as Map<String, dynamic>))
+        .toList() ?? [];
+
+    return FunctionHeaderNode(
+      id: e.id,
+      x: e.x,
+      y: e.y,
+      width: e.width,
+      height: e.height,
+      functionName: e.data?['functionName'] ?? '',
+      returnType: e.data?['returnType'] ?? 'void',
+      parameters: params,
+      metadata: e.metadata,
+    );
+  }
+
+  @override
+  List<Object?> get props => [...super.props, functionName, returnType, parameters];
+
+  FunctionHeaderNode copyWith({
+    double? x,
+    double? y,
+    String? functionName,
+    String? returnType,
+    List<FunctionParam>? parameters,
+  }) {
+    return FunctionHeaderNode(
+      id: id,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width,
+      height: height,
+      functionName: functionName ?? this.functionName,
+      returnType: returnType ?? this.returnType,
+      parameters: parameters ?? this.parameters,
+      metadata: metadata,
+    );
+  }
+}
+
+/// Nodo di ritorno per sottoprogrammi
+/// Per funzioni void: termina e restituisce il controllo
+/// Per funzioni con valore: restituisce un'espressione/valore
+class ReturnNode extends FlowNode {
+  final String? returnExpression;
+
+  const ReturnNode({
+    required super.id,
+    required super.x,
+    required super.y,
+    required super.width,
+    required super.height,
+    required super.text,
+    this.returnExpression,
+    super.metadata,
+  }) : super(kind: FlowNodeKind.returnNode);
+
+  @override
+  FlowNodeEntity toEntity() => FlowNodeEntity(
+    id: id,
+    kind: kind,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    text: text,
+    data: {
+      if (returnExpression != null && returnExpression!.isNotEmpty)
+        'returnExpression': returnExpression,
+    },
+    metadata: metadata,
+  );
+
+  static ReturnNode fromEntity(FlowNodeEntity e) {
+    return ReturnNode(
+      id: e.id,
+      x: e.x,
+      y: e.y,
+      width: e.width,
+      height: e.height,
+      text: e.text,
+      returnExpression: e.data?['returnExpression'],
+      metadata: e.metadata,
+    );
+  }
+
+  @override
+  List<Object?> get props => [...super.props, returnExpression];
+
+  ReturnNode copyWith({
+    double? x,
+    double? y,
+    String? text,
+    String? returnExpression,
+  }) {
+    return ReturnNode(
+      id: id,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width,
+      height: height,
+      text: text ?? this.text,
+      returnExpression: returnExpression ?? this.returnExpression,
       metadata: metadata,
     );
   }

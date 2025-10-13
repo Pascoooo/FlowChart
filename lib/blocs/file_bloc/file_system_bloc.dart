@@ -5,6 +5,7 @@ import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../flowchart_bloc/flowchart_shape_factory.dart';
 import '../flowchart_bloc/flowchart_state.dart';
 import 'file_system_event.dart';
@@ -131,9 +132,52 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     emit(currentState.copyWith(isLoading: true));
     try {
-      final emptyFlowchart = FlowchartLoaded.empty(fileName: fileName).flowchart;
-      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(1030.0, 50.0) ,allVariables: []);
-      final initialFlowchart = emptyFlowchart.copyWith(nodes: [startNode]);
+      // Base: flowchart vuoto con nome corretto
+      final baseFlowchart = FlowchartLoaded.empty(fileName: fileName).flowchart;
+
+      Flowchart initialFlowchart;
+      if (event.signature == null) {
+        // File "main": crea solo il nodo Inizio
+        final startNode = FlowNodeFactory.createNode(
+          FlowNodeKind.start,
+          const Offset(1030.0, 50.0),
+          allVariables: const [],
+        );
+        initialFlowchart = baseFlowchart.copyWith(
+          type: FlowchartType.main,
+          nodes: [startNode],
+        );
+      } else {
+        // Sottoprogramma: intestazione + variabili di input dai parametri
+        final signature = event.signature!;
+
+        final headerNode = FunctionHeaderNode(
+          id: 'header-${Uuid().v4()}',
+          x: 1030.0,
+          y: 50.0,
+          width: 250.0,
+          height: 100.0,
+          functionName: fileName,
+          returnType: signature.returnType,
+          parameters: signature.parameters,
+        );
+
+        final paramVariables = signature.parameters
+            .map((p) => VariableDeclaration(
+          name: p.name,
+          dataType: p.type,
+          scope: VariableScope.input,
+        ))
+            .toList();
+
+        initialFlowchart = baseFlowchart.copyWith(
+          type: FlowchartType.function,
+          nodes: [headerNode],
+          signature: signature,
+          variables: paramVariables,
+        );
+      }
+
       final initialContent = jsonEncode(initialFlowchart.toEntity().toDocument());
 
       final newFile = await projectRepository.addFileToProject(
@@ -148,6 +192,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         activeFileId: newFile.fileId,
         isLoading: false,
       ));
+      return;
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Impossibile creare il file: ${e.toString()}'));
     }

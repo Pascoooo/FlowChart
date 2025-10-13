@@ -230,29 +230,58 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<void> startDebugSession({required String projectId, required Flowchart flowchart}) async {
-    // Inizializza con una mappa contenente variabili di lavoro (local) e di output come placeholder
-    final Map<String, dynamic> initialVariables = {};
-    for (final v in flowchart.variables) {
-      if (v.scope == VariableScope.local || v.scope == VariableScope.output) {
-        initialVariables[v.name] = '';
-      }
-    }
-    await _session.initializeDebugSession(projectId, initialVariables);
+    // Avvia la sessione con tabella variabili vuota ma salva l'elenco delle variabili dichiarate
+    final declared = <String, Map<String, dynamic>>{
+      for (final v in flowchart.variables)
+        v.name: {
+          'dataType': v.dataType,
+          'scope': v.scope.name,
+        }
+    };
+    return _session.initializeDebugSession(projectId, {}, declaredVariables: declared);
   }
 
-  @override
-  Future<void> endDebugSession({required String projectId}) async {
-    await _session.clearDebugSession(projectId);
-  }
-
-  @override
-  Stream<Map<String, dynamic>> watchDebugVariables({required String projectId}) {
-    return _session.watchDebugVariables(projectId);
-  }
 
   @override
   Future<void> updateDebugVariables({required String projectId, required Map<String, dynamic> variables}) async {
+    // Valida che ogni variabile esista tra quelle dichiarate e che il tipo sia compatibile
+    final declared = await _session.getDeclaredVariables(projectId);
+
+    for (final entry in variables.entries) {
+      final name = entry.key;
+      final value = entry.value;
+
+      if (!declared.containsKey(name)) {
+        throw StateError('Variabile "$name" non dichiarata nella workarea');
+      }
+
+      final dataType = (declared[name]!['dataType'] as String?)?.toLowerCase() ?? 'string';
+      if (!_isTypeCompatible(dataType, value)) {
+        throw StateError('Tipo non compatibile per "$name": atteso $dataType, trovato ${value.runtimeType}');
+      }
+    }
+
     await _session.updateDebugVariables(projectId, variables);
+  }
+
+  bool _isTypeCompatible(String dataType, dynamic value) {
+    if (value == null) return true; // consenti null come placeholder
+    switch (dataType) {
+      case 'string':
+        return value is String;
+      case 'int':
+      case 'integer':
+        return value is int;
+      case 'double':
+      case 'number':
+      case 'float':
+        return value is num; // consente sia int sia double
+      case 'bool':
+      case 'boolean':
+        return value is bool;
+      default:
+        return true; // tipi custom non sono strettamente verificabili qui
+    }
   }
 
   @override
@@ -264,46 +293,38 @@ class FirebaseProjectRepo implements ProjectRepo {
   Future<void> advanceDebugStep({required String projectId, required FlowNode? currentNode}) async {
     if (currentNode == null) return;
 
-    // Ottieni le variabili correnti
-    final currentVariables = await _session.getCurrentDebugVariables(projectId);
-    final updatedVariables = Map<String, dynamic>.from(currentVariables);
-
-    // Logica di aggiornamento minima per rispettare i requisiti:
+    // Non creare più placeholder per Input/Output/Assignment: la logica e gli errori
+    // vengono gestiti nel DebugEngine. Qui non facciamo side-effect se non necessario.
     if (currentNode is InputNode) {
-      // Dichiara solo le variabili (placeholder stringa vuota) se non presenti.
-      for (final varName in currentNode.targetVariables) {
-        if (!updatedVariables.containsKey(varName)) {
-          updatedVariables[varName] = '';
-        }
-      }
+      return;
     } else if (currentNode is OutputNode) {
-      // Nessuna azione automatica
+      return;
     } else if (currentNode is AssignmentNode) {
-      // NON eseguire automaticamente: sarà il form runtime a farlo
-    } else if (currentNode is DecisionNode) {
-      // Nessuna modifica automatica
+      return;
+    } else if (currentNode is DecisionNode ||
+        currentNode is WhileNode ||
+        currentNode is DoWhileNode) {
+      return;
     }
 
-    // Aggiorna solo se qualcosa è cambiato
-    bool changed = false;
-    if (updatedVariables.length != currentVariables.length) {
-      changed = true;
-    } else {
-      for (final entry in updatedVariables.entries) {
-        if (!currentVariables.containsKey(entry.key) || currentVariables[entry.key] != entry.value) {
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (changed) {
-      await _session.updateDebugVariables(projectId, updatedVariables);
-    }
+    // Nessun aggiornamento di default
+    return;
   }
 
 
   @override
   Future<Map<String, dynamic>> getDebugVariables({required String projectId}) {
     return _session.getCurrentDebugVariables(projectId);
+  }
+
+
+  @override
+  Future<void> endDebugSession({required String projectId}) async {
+    await _session.clearDebugSession(projectId);
+  }
+
+  @override
+  Stream<Map<String, dynamic>> watchDebugVariables({required String projectId}) {
+    return _session.watchDebugVariables(projectId);
   }
 }

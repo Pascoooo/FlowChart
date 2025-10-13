@@ -3,14 +3,11 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:rxdart/rxdart.dart';
 import '../user_repository.dart';
 import 'google_drive_service.dart';
-
-// --- Costanti Globali ---
 
 /// Regione Firebase Functions per le chiamate HTTP.
 const String kFunctionsRegion = 'europe-west8';
@@ -286,7 +283,7 @@ class FirebaseUserRepo implements UserRepository {
         userId: user.uid,
         fileName: fileName,
         fileBytes: fileBytes,
-        mimeType: 'application/json',
+        mimeType: 'image/png',
       );
 
       // Successo - il file è stato caricato

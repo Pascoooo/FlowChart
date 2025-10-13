@@ -206,6 +206,11 @@ class CancelConnectorMode extends FlowchartEvent {
   const CancelConnectorMode();
 }
 
+/// ✨ Avvia la selezione di UN SOLO nodo per il comando "Resetta da un certo blocco"
+class StartResetFromNodeSelection extends FlowchartEvent {
+  const StartResetFromNodeSelection();
+}
+
 class DebugBranchSelected extends FlowchartEvent {
   final bool result; // true -> ramo 'true', false -> ramo 'false'
   const DebugBranchSelected(this.result);
@@ -218,4 +223,79 @@ class DebugDecisionEvaluated extends FlowchartEvent {
 
   @override
   List<Object?> get props => [nodeId, result];
+}
+
+/// Evento per chiudere un ciclo creando un arco di ritorno al nodo loop
+class CloseLoop extends FlowchartEvent {
+  final String fromNodeId; // Il nodo foglia da cui parte l'arco di ritorno
+  final String loopNodeId; // Il nodo loop a cui tornare
+
+  const CloseLoop({
+    required this.fromNodeId,
+    required this.loopNodeId,
+  });
+
+  @override
+  List<Object?> get props => [fromNodeId, loopNodeId];
+}
+
+/// Evento per selezionare il nodo di partenza del corpo di un ciclo do-while
+class SelectDoWhileBodyStart extends FlowchartEvent {
+  final String doWhileNodeId; // Il nodo do-while
+  final String bodyStartNodeId; // Il nodo selezionato come inizio del corpo
+
+  const SelectDoWhileBodyStart({
+    required this.doWhileNodeId,
+    required this.bodyStartNodeId,
+  });
+
+  @override
+  List<Object?> get props => [doWhileNodeId, bodyStartNodeId];
+}
+
+/// Evento per avviare la modalità di selezione del corpo do-while
+class StartDoWhileBodySelection extends FlowchartEvent {
+  final String doWhileNodeId;
+
+  const StartDoWhileBodySelection(this.doWhileNodeId);
+
+  @override
+  List<Object?> get props => [doWhileNodeId];
+}
+
+/// 🆕 NUOVO: Carica tutti i flowchart del progetto per risolvere le chiamate
+class LoadProjectFlowcharts extends FlowchartEvent {
+  final Map<String, Flowchart> flowcharts;
+
+  const LoadProjectFlowcharts(this.flowcharts);
+
+  @override
+  List<Object?> get props => [flowcharts];
+}
+
+/// 🆕 NUOVO: Entra nel sottoprogramma chiamato (step into)
+class DebugStepIntoSubprogram extends FlowchartEvent {
+  final ProcessNode callNode;
+
+  const DebugStepIntoSubprogram(this.callNode);
+
+  @override
+  List<Object?> get props => [callNode];
+}
+
+/// 🆕 NUOVO: Ritorna dal sottoprogramma al chiamante
+class DebugReturnFromSubprogram extends FlowchartEvent {
+  final dynamic returnValue;
+
+  const DebugReturnFromSubprogram({this.returnValue});
+
+  @override
+  List<Object?> get props => [returnValue];
+}
+
+class ResetFromNode extends FlowchartEvent {
+  final String nodeId;
+  const ResetFromNode(this.nodeId);
+  @override
+  List<Object?> get props => [nodeId];
 }

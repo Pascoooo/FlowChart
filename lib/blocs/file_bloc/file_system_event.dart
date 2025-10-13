@@ -19,9 +19,14 @@ class RefreshFileSystem extends FileSystemEvent {
 class CreateFile extends FileSystemEvent {
   final String projectId;
   final String fileName;
-  const CreateFile({required this.projectId, required this.fileName});
+  final FlowchartSignature? signature; // Firma opzionale per funzioni
+  const CreateFile({
+    required this.projectId,
+    required this.fileName,
+    this.signature,
+  });
   @override
-  List<Object?> get props => [projectId, fileName];
+  List<Object?> get props => [projectId, fileName, signature];
 }
 
 class DeleteFile extends FileSystemEvent {
