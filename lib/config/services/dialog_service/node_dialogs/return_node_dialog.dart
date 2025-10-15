@@ -6,12 +6,14 @@ Future<Map<String, dynamic>?> showReturnNodeDialog(
   BuildContext context, {
   required List<VariableDeclaration> availableVariables,
   String? initialExpression,
+  FlowchartSignature? signature, // REQUISITO: Riceve la signature
 }) {
   return showDialog<Map<String, dynamic>>(
     context: context,
     builder: (context) => _ReturnNodeDialog(
       availableVariables: availableVariables,
       initialExpression: initialExpression,
+      signature: signature, // REQUISITO: Passa la signature al widget
     ),
   );
 }
@@ -19,10 +21,12 @@ Future<Map<String, dynamic>?> showReturnNodeDialog(
 class _ReturnNodeDialog extends StatefulWidget {
   final List<VariableDeclaration> availableVariables;
   final String? initialExpression;
+  final FlowchartSignature? signature; // REQUISITO: Riceve la signature
 
   const _ReturnNodeDialog({
     required this.availableVariables,
     this.initialExpression,
+    this.signature, // REQUISITO: Riceve la signature
   });
 
   @override
@@ -31,7 +35,9 @@ class _ReturnNodeDialog extends StatefulWidget {
 
 class _ReturnNodeDialogState extends State<_ReturnNodeDialog> {
   late TextEditingController _expressionController;
-  bool _hasReturnValue = false;
+  bool _attemptedSubmit = false;
+  late bool _isVoidFunction;
+  String? _validationError;
 
   @override
   void initState() {
@@ -39,8 +45,8 @@ class _ReturnNodeDialogState extends State<_ReturnNodeDialog> {
     _expressionController = TextEditingController(
       text: widget.initialExpression ?? '',
     );
-    _hasReturnValue = widget.initialExpression != null &&
-                      widget.initialExpression!.isNotEmpty;
+    // Determina se la funzione è void (o se la signature non è disponibile, default a void)
+    _isVoidFunction = widget.signature?.returnType == 'void' || widget.signature == null;
   }
 
   @override
@@ -49,8 +55,49 @@ class _ReturnNodeDialogState extends State<_ReturnNodeDialog> {
     super.dispose();
   }
 
+  // REQUISITO: Valida l'espressione di ritorno
+  bool _validateExpression(String expression) {
+    if (expression.isEmpty) return true; // Gestito dal controllo obbligatorio
+
+    final variableNames = widget.availableVariables.map((v) => v.name).toSet();
+    // Estrae potenziali nomi di variabili (parole alfanumeriche con underscore)
+    final potentialVars = RegExp(r'[a-zA-Z_][a-zA-Z0-9_]*')
+        .allMatches(expression)
+        .map((m) => m.group(0)!)
+        // Esclude numeri e parole chiave booleane
+        .where((name) => num.tryParse(name) == null && name != 'true' && name != 'false')
+        .toSet();
+
+    final invalidVars = potentialVars.where((v) => !variableNames.contains(v)).toList();
+
+    if (invalidVars.isNotEmpty) {
+      setState(() {
+        _validationError = 'Variabili non definite: ${invalidVars.join(', ')}';
+      });
+      return false;
+    }
+
+    setState(() => _validationError = null);
+    return true;
+  }
+
   void _confirm() {
-    final expression = _hasReturnValue ? _expressionController.text.trim() : null;
+    setState(() {
+      _attemptedSubmit = true;
+      _validationError = null;
+    });
+
+    // Se la funzione non è void, l'espressione è obbligatoria
+    if (!_isVoidFunction && _expressionController.text.trim().isEmpty) {
+      return; // Blocca l'invio
+    }
+
+    // REQUISITO: Esegui la validazione dell'espressione
+    if (!_isVoidFunction && !_validateExpression(_expressionController.text.trim())) {
+      return; // Blocca l'invio se ci sono variabili non valide
+    }
+
+    final expression = !_isVoidFunction ? _expressionController.text.trim() : null;
 
     Navigator.of(context).pop({
       'returnExpression': expression,
@@ -72,40 +119,49 @@ class _ReturnNodeDialogState extends State<_ReturnNodeDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Il nodo Return termina l\'esecuzione del sottoprogramma e '
-              'restituisce il controllo al chiamante.',
-              style: TextStyle(fontSize: 13),
-            ),
+            if (_isVoidFunction)
+              const Text(
+                'Questo sottoprogramma è di tipo "void", quindi il nodo Return non restituirà alcun valore.',
+                style: TextStyle(fontSize: 13),
+              )
+            else
+              Text(
+                'Questo sottoprogramma deve restituire un valore di tipo "${widget.signature!.returnType.toUpperCase()}".',
+                style: const TextStyle(fontSize: 13),
+              ),
             const SizedBox(height: 16),
 
-            Checkbox(
-              checked: _hasReturnValue,
-              onChanged: (value) {
-                setState(() {
-                  _hasReturnValue = value ?? false;
-                  if (!_hasReturnValue) {
-                    _expressionController.clear();
-                  }
-                });
-              },
-              content: const Text('Restituisci un valore'),
-            ),
-
-            if (_hasReturnValue) ...[
-              const SizedBox(height: 12),
+            if (!_isVoidFunction) ...[
               InfoLabel(
-                label: 'Espressione di ritorno',
+                label: 'Espressione di ritorno *',
                 child: TextBox(
                   controller: _expressionController,
                   placeholder: 'es. risultato, a + b, count * 2',
                   autofocus: true,
+                  onChanged: (_) => setState(() {
+                    _attemptedSubmit = false;
+                    _validationError = null;
+                  }),
                 ),
               ),
-              const SizedBox(height: 8),
-
+              if (_attemptedSubmit && _expressionController.text.trim().isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    'Questo campo è obbligatorio per una funzione non-void.',
+                    style: TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ),
+              if (_validationError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    _validationError!,
+                    style: TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ),
+              const SizedBox(height: 16),
               if (widget.availableVariables.isNotEmpty) ...[
-                const SizedBox(height: 8),
                 Text(
                   'Variabili disponibili:',
                   style: TextStyle(
@@ -154,16 +210,6 @@ class _ReturnNodeDialogState extends State<_ReturnNodeDialog> {
                   }).toList(),
                 ),
               ],
-            ] else ...[
-              const SizedBox(height: 8),
-              Text(
-                'ℹ️ Per funzioni void, il nodo Return non restituisce alcun valore.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: theme.inactiveColor,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
             ],
           ],
         ),
@@ -181,4 +227,3 @@ class _ReturnNodeDialogState extends State<_ReturnNodeDialog> {
     );
   }
 }
-

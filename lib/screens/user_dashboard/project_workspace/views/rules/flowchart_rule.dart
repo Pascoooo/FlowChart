@@ -19,6 +19,7 @@ class FlowchartValidator {
   final _rules = [
     SingleStartNodeRule(),
     SingleEndNodeRule(),
+    ReturnNodeTerminalRule(), // REQUISITO: Aggiunta regola per nodo Return
     OutgoingConnectionRule(),
     IncomingConnectionRule(),
     DecisionPortUniquenessRule(),
@@ -59,6 +60,24 @@ class SingleEndNodeRule extends FlowchartRule {
         return ValidationResult.failure("Esiste già un nodo 'Fine'.");
       }
     }
+    return ValidationResult.success();
+  }
+}
+
+/// REQUISITO: Il nodo Return è un nodo terminale e non può avere uscite.
+class ReturnNodeTerminalRule extends FlowchartRule {
+  @override
+  ValidationResult validate(FlowchartLoaded state, Object actionContext) {
+    if (actionContext is! FlowchartEdge) return ValidationResult.success();
+
+    final fromNode = state.getNodeById(actionContext.from);
+    if (fromNode == null) return ValidationResult.success();
+
+    if (fromNode.kind == FlowNodeKind.returnNode) {
+      return ValidationResult.failure(
+          "Il nodo 'Return' è un nodo terminale e non può avere connessioni in uscita.");
+    }
+
     return ValidationResult.success();
   }
 }

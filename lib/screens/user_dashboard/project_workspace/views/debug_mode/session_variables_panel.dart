@@ -346,7 +346,11 @@ class SessionVariablesPanel extends StatelessWidget {
         case VariableScope.input:
           return true; // input sempre visibili
         case VariableScope.output:
-          return _encounteredInOutput(varName);
+          // FIX: Una variabile di output deve essere visibile sia quando le viene
+          // assegnato un valore (in un blocco Assegnazione), sia quando viene
+          // usata in un blocco di Output. La logica precedente controllava
+          // solo il secondo caso, causando il bug.
+          return _encounteredInAssignment(varName) || _encounteredInOutput(varName);
         case VariableScope.local:
           return _encounteredInAssignment(varName) || _encounteredInDecision(varName);
       }

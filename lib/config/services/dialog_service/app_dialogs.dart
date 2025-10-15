@@ -134,6 +134,7 @@ class AppDialogs {
   static Future<Map<String, dynamic>?> showNodeCreationDialog({
     required BuildContext context,
     required FlowNodeKind kind,
+    FlowchartSignature? signature, // REQUISITO: Aggiunto per validazione contestuale
     List<MyFile>? files,
     List<VariableDeclaration>? variables,
     Set<String>? existingVariableNames,
@@ -186,7 +187,11 @@ class AppDialogs {
 
       case FlowNodeKind.returnNode:
         // Dialog per configurare il nodo Return (espressione di ritorno)
-        return showReturnNodeDialog(context, availableVariables: variables ?? const []);
+        return showReturnNodeDialog(
+          context,
+          availableVariables: variables ?? const [],
+          signature: signature, // REQUISITO: Passa la signature al dialogo
+        );
     }
   }
 

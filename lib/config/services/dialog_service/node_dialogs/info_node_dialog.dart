@@ -248,6 +248,30 @@ class _NodeDetailsDialog extends StatelessWidget {
   /// 🔍 Build Specific Details based on Node Type
   List<Widget> _buildSpecificDetails(BuildContext context, FluentThemeData theme) {
     switch (node.kind) {
+      case FlowNodeKind.functionHeader:
+        final headerNode = node as FunctionHeaderNode;
+        return [
+          _KeyValueDetail(
+            label: 'Nome Funzione',
+            value: headerNode.functionName,
+            theme: theme,
+            isMonospace: true,
+          ),
+        ];
+
+      case FlowNodeKind.returnNode:
+        final returnNode = node as ReturnNode;
+        return [
+          _BoxedDetail(
+            label: 'Espressione di Ritorno',
+            value: returnNode.returnExpression != null && returnNode.returnExpression!.isNotEmpty
+                ? returnNode.returnExpression!
+                : '(Nessun valore di ritorno)',
+            theme: theme,
+            isCode: true,
+          ),
+        ];
+
       case FlowNodeKind.input:
       // FIX: Aggiornato per usare 'targetVariables' (List<String>) invece di 'declarations'.
         final inputNode = node as InputNode;

@@ -89,12 +89,14 @@ class _NodeWidgetState extends State<NodeWidget> {
 
         // Nodo Start non selezionabile come inizio corpo o reset
         final isStartNode = widget.node.kind == FlowNodeKind.start;
+        // REQUISITO: Anche il FunctionHeader non è selezionabile per il reset
+        final isHeaderNode = widget.node.kind == FlowNodeKind.functionHeader;
 
         // Valida il target in base alla modalità
         final bool isThisNodeAValidTarget = isDoWhileBodySelection
             ? (!isThisNodeTheSource && !isStartNode && allowedAncestors.contains(widget.node.id))
             : (isResetSelection
-                ? (!isStartNode) // per reset: qualsiasi nodo tranne Start
+                ? (!isStartNode && !isHeaderNode) // per reset: qualsiasi nodo tranne Start e FunctionHeader
                 : (state.isLeafNode(widget.node.id) && !isThisNodeTheSource));
 
         final bool isThisNodeSelectedForConnector =
@@ -312,6 +314,7 @@ class _NodeWidgetState extends State<NodeWidget> {
         // NON mostrare mai handle per 'true' (corpo): si seleziona tramite dialog
         return handles;
       case FlowNodeKind.end:
+      case FlowNodeKind.returnNode: // REQUISITO: Anche il ReturnNode è terminale
         return [];
       default:
         return state.canAddOutgoingConnection(widget.node.id)

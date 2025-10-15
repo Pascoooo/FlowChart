@@ -9,7 +9,6 @@ import 'console_models.dart';
 import 'console_entry_widget.dart';
 import 'debug_engine.dart';
 
-/// 🖥️ Console Interattiva stile Terminale per il Debug Mode
 class DebugConsole extends StatefulWidget {
   final FlowNode currentNode;
   final String flowchartId;
@@ -44,7 +43,6 @@ class _DebugConsoleState extends State<DebugConsole> {
     super.initState();
     _initializeEngine();
 
-    // Auto-focus sull'input
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
     });
@@ -54,26 +52,23 @@ class _DebugConsoleState extends State<DebugConsole> {
   void didUpdateWidget(covariant DebugConsole oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Se il nodo è cambiato, reinizializza
     if (widget.currentNode.id != oldWidget.currentNode.id) {
       _initializeEngine();
     }
   }
 
   void _initializeEngine() {
-    // Determina se siamo in un do-while e se è una rivalutazione
     final bloc = context.read<FlowchartBloc>();
     final state = bloc.state;
     bool isReentry = false;
 
     if (state is FlowchartLoaded && widget.currentNode is DoWhileNode) {
-      // Se l'arrivo avviene tramite un arco 'loop' (dal nodo precedente a questo), è rivalutazione
       final currentIndex = state.debugIndex;
       if (currentIndex > 0 && state.debugPath.length > currentIndex) {
         final prevId = state.debugPath[currentIndex - 1];
         final currId = widget.currentNode.id;
         final arrivedViaLoop = state.flowchart.edges.any(
-          (e) => e.from == prevId && e.to == currId && e.port == 'loop',
+              (e) => e.from == prevId && e.to == currId && e.port == 'loop',
         );
         isReentry = arrivedViaLoop;
       } else {
@@ -81,7 +76,6 @@ class _DebugConsoleState extends State<DebugConsole> {
       }
     }
 
-    // 🆕 NUOVO: Determina se siamo in un sottoprogramma
     bool isInSubprogram = false;
     if (state is FlowchartLoaded) {
       isInSubprogram = state.callStack.depth > 0;
@@ -95,42 +89,28 @@ class _DebugConsoleState extends State<DebugConsole> {
       onHistoryUpdate: _handleHistoryUpdate,
       onCommandExecuted: widget.onCommandExecuted,
       onDebugExit: () {
-        // Esci dalla modalità debug
         context.read<FlowchartBloc>().add(const DebugExit());
       },
       onDebugNext: () {
-        // 🆕 NUOVO: Se siamo su un EndNode in un sottoprogramma, ritorna dal sottoprogramma
-        if (widget.currentNode is EndNode && isInSubprogram) {
-          _handleReturnFromSubprogram();
-          return;
-        }
-        // Altrimenti, avanza al prossimo nodo
         context.read<FlowchartBloc>().add(const DebugNextNode());
       },
       onDebugPrev: () {
-        // Torna al nodo precedente
         context.read<FlowchartBloc>().add(const DebugPrevNode());
       },
-      // NEW: dopo valutazione Decision registra il risultato ma NON naviga
       onDecisionEvaluated: (String nodeId, bool result) {
         context.read<FlowchartBloc>().add(DebugDecisionEvaluated(nodeId, result));
       },
-      // NEW: passa il flag per distinguere prima entrata vs rivalutazione
       isDoWhileReentry: isReentry,
-      // 🆕 NUOVO: callback per entrare nel sottoprogramma
       onStepIntoSubprogram: (ProcessNode node) {
         context.read<FlowchartBloc>().add(DebugStepIntoSubprogram(node));
       },
-      // 🆕 NUOVO: callback per tornare dal sottoprogramma
       onReturnFromSubprogram: ({dynamic returnValue}) {
         _handleReturnFromSubprogram(returnValue: returnValue);
       },
-      // 🆕 NUOVO: indica se siamo in un sottoprogramma
       isInSubprogram: isInSubprogram,
     );
   }
 
-  // 🆕 NUOVO: Gestisce il ritorno dal sottoprogramma
   Future<void> _handleReturnFromSubprogram({dynamic returnValue}) async {
     final bloc = context.read<FlowchartBloc>();
     final state = bloc.state;
@@ -138,12 +118,10 @@ class _DebugConsoleState extends State<DebugConsole> {
     if (state is! FlowchartLoaded || state.callStack.isEmpty) return;
 
     try {
-      // 1. Recupera il valore di ritorno dalle variabili di sessione (se presente)
       final sessionVars = await widget.projectRepo.getDebugVariables(
         projectId: widget.flowchartId,
       );
 
-      // Cerca la variabile OUTPUT che rappresenta il valore di ritorno
       final returnVar = widget.allVariables
           .where((v) => v.scope == VariableScope.output)
           .firstOrNull;
@@ -153,20 +131,17 @@ class _DebugConsoleState extends State<DebugConsole> {
         finalReturnValue = sessionVars[returnVar.name];
       }
 
-      // 2. Recupera il nodo ProcessNode chiamante dal frame corrente
       final currentFrame = state.callStack.current;
       if (currentFrame?.callerNodeId == null) return;
 
-      // 3. Trova il ProcessNode chiamante per ottenere la variabile target del risultato
       final callerFlowchart = state.projectFlowcharts.values.firstWhere(
-        (f) => f.nodes.any((n) => n.id == currentFrame!.callerNodeId),
+            (f) => f.nodes.any((n) => n.id == currentFrame!.callerNodeId),
         orElse: () => state.flowchart,
       );
 
       final callerNode = callerFlowchart.nodes
           .firstWhere((n) => n.id == currentFrame!.callerNodeId);
 
-      // 4. Se il chiamante è un ProcessNode con resultTarget, salva il valore di ritorno
       if (callerNode is ProcessNode &&
           callerNode.resultTarget != null &&
           callerNode.resultTarget!.trim().isNotEmpty &&
@@ -174,14 +149,12 @@ class _DebugConsoleState extends State<DebugConsole> {
 
         final resultVar = callerNode.resultTarget!.trim();
 
-        // Salva il valore di ritorno nella variabile target del chiamante
         await widget.projectRepo.updateDebugVariables(
           projectId: callerFlowchart.flowchartId,
           variables: {resultVar: finalReturnValue},
         );
       }
 
-      // 5. Triggera l'evento di ritorno dal sottoprogramma
       bloc.add(DebugReturnFromSubprogram(returnValue: finalReturnValue));
 
     } catch (e) {
@@ -201,9 +174,7 @@ class _DebugConsoleState extends State<DebugConsole> {
   void _handleInput(String input) {
     final trimmedInput = input.trim();
 
-    // Impedisci l'invio di input vuoto
     if (trimmedInput.isEmpty) {
-      // Mantieni il focus anche se l'input è vuoto
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _focusNode.requestFocus();
@@ -215,7 +186,6 @@ class _DebugConsoleState extends State<DebugConsole> {
     _inputController.clear();
     _engine.handleInput(trimmedInput);
 
-    // Rifocalizza l'input dopo l'esecuzione del comando
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _focusNode.requestFocus();
@@ -269,7 +239,6 @@ class _DebugConsoleState extends State<DebugConsole> {
     );
   }
 
-  /// Header della console con bottoni di navigazione
   Widget _buildHeader(FluentThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -299,7 +268,6 @@ class _DebugConsoleState extends State<DebugConsole> {
             ),
           ),
           const Spacer(),
-          // Bottoni di navigazione
           IconButton(
             icon: const Icon(FluentIcons.chevron_left, size: 14),
             onPressed: () {
@@ -340,7 +308,6 @@ class _DebugConsoleState extends State<DebugConsole> {
     );
   }
 
-  /// Area di output (storico)
   Widget _buildHistoryArea(FluentThemeData theme) {
     return Expanded(
       child: ListView.builder(
@@ -354,7 +321,6 @@ class _DebugConsoleState extends State<DebugConsole> {
     );
   }
 
-  /// Area di input (SEMPRE ABILITATA per permettere comandi)
   Widget _buildInputArea(FluentThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -386,7 +352,7 @@ class _DebugConsoleState extends State<DebugConsole> {
               placeholder: _isWaitingForInput
                   ? 'Inserisci valore...'
                   : 'Usa "help" per visualizzare i comandi disponibili',
-              enabled: true, // SEMPRE abilitato per permettere comandi
+              enabled: true,
               style: const TextStyle(
                 fontFamily: 'Consolas',
                 fontSize: 13,
@@ -396,7 +362,7 @@ class _DebugConsoleState extends State<DebugConsole> {
           ),
           const SizedBox(width: 8),
           FilledButton(
-            onPressed: () => _handleInput(_inputController.text), // SEMPRE abilitato
+            onPressed: () => _handleInput(_inputController.text),
             child: const Text('Invio'),
           ),
         ],

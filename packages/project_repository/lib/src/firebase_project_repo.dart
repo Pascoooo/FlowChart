@@ -7,8 +7,6 @@ import 'package:project_repository/src/services/firestore_storage_service.dart';
 import 'package:project_repository/src/services/rtdb_session_service.dart';
 
 
-/// Implementazione del ProjectRepository che coordina i servizi di storage
-/// (Firestore) e di sessione live (RTDB).
 class FirebaseProjectRepo implements ProjectRepo {
   final String uid;
   final FirestoreStorageService _storage;
@@ -93,28 +91,21 @@ class FirebaseProjectRepo implements ProjectRepo {
     return null;
   }
 
-  /// **METODO CHIAVE AGGIORNATO**
-  /// Controlla se ci sono differenze strutturali (aggiunta/rimozione di nodi)
-  /// tra due versioni JSON di un flowchart, usando il nuovo modello dati.
   bool _haveStructuralDifferences(String rtdbContent, String firestoreContent) {
     try {
       final rtdbData = jsonDecode(rtdbContent);
       final firestoreData = jsonDecode(firestoreContent);
 
-      // Legge la lista di 'nodes' invece di 'shapes'.
       final List<dynamic> rtdbNodes = rtdbData['nodes'] ?? [];
       final List<dynamic> firestoreNodes = firestoreData['nodes'] ?? [];
 
       if (rtdbNodes.length != firestoreNodes.length) return true;
 
-      // Crea un "fingerprint" per ogni nodo basato su ID e 'kind'.
       final rtdbFingerprints = rtdbNodes.map((n) => '${n['id']}:${n['kind']}').toSet();
       final firestoreFingerprints = firestoreNodes.map((n) => '${n['id']}:${n['kind']}').toSet();
 
-      // Se i set di fingerprint non sono identici, la struttura è cambiata.
       return !rtdbFingerprints.containsAll(firestoreFingerprints);
     } catch (e) {
-      // Se il parsing fallisce, considerala una differenza strutturale per sicurezza.
       return true;
     }
   }
@@ -228,9 +219,15 @@ class FirebaseProjectRepo implements ProjectRepo {
     return _storage.getPublicProjectWithFiles(projectId);
   }
 
+  // ==========================================================
+  // ✨ SEZIONE DEBUG MODE MODIFICATA ✨
+  // ==========================================================
+
+  // NOTA: Nei metodi di debug, `projectId` si riferisce all'ID del *flowchart*
+  // per mantenere le sessioni di variabili separate.
+
   @override
   Future<void> startDebugSession({required String projectId, required Flowchart flowchart}) async {
-    // Avvia la sessione con tabella variabili vuota ma salva l'elenco delle variabili dichiarate
     final declared = <String, Map<String, dynamic>>{
       for (final v in flowchart.variables)
         v.name: {
@@ -238,13 +235,13 @@ class FirebaseProjectRepo implements ProjectRepo {
           'scope': v.scope.name,
         }
     };
+    // Inizializza la sessione per questo flowchart specifico
     return _session.initializeDebugSession(projectId, {}, declaredVariables: declared);
   }
 
 
   @override
   Future<void> updateDebugVariables({required String projectId, required Map<String, dynamic> variables}) async {
-    // Valida che ogni variabile esista tra quelle dichiarate e che il tipo sia compatibile
     final declared = await _session.getDeclaredVariables(projectId);
 
     for (final entry in variables.entries) {
@@ -252,7 +249,7 @@ class FirebaseProjectRepo implements ProjectRepo {
       final value = entry.value;
 
       if (!declared.containsKey(name)) {
-        throw StateError('Variabile "$name" non dichiarata nella workarea');
+        throw StateError('Variabile "$name" non dichiarata nel flowchart in esecuzione.');
       }
 
       final dataType = (declared[name]!['dataType'] as String?)?.toLowerCase() ?? 'string';
@@ -261,11 +258,12 @@ class FirebaseProjectRepo implements ProjectRepo {
       }
     }
 
+    // Aggiorna le variabili per questo flowchart specifico
     await _session.updateDebugVariables(projectId, variables);
   }
 
   bool _isTypeCompatible(String dataType, dynamic value) {
-    if (value == null) return true; // consenti null come placeholder
+    if (value == null) return true;
     switch (dataType) {
       case 'string':
         return value is String;
@@ -275,56 +273,43 @@ class FirebaseProjectRepo implements ProjectRepo {
       case 'double':
       case 'number':
       case 'float':
-        return value is num; // consente sia int sia double
+        return value is num;
       case 'bool':
       case 'boolean':
         return value is bool;
       default:
-        return true; // tipi custom non sono strettamente verificabili qui
+        return true;
     }
   }
 
   @override
   Future<void> clearDebugVariables({required String projectId}) async {
+    // Pulisce le variabili per questo flowchart specifico
     await _session.clearDebugSession(projectId);
   }
 
   @override
   Future<void> advanceDebugStep({required String projectId, required FlowNode? currentNode}) async {
-    if (currentNode == null) return;
-
-    // Non creare più placeholder per Input/Output/Assignment: la logica e gli errori
-    // vengono gestiti nel DebugEngine. Qui non facciamo side-effect se non necessario.
-    if (currentNode is InputNode) {
-      return;
-    } else if (currentNode is OutputNode) {
-      return;
-    } else if (currentNode is AssignmentNode) {
-      return;
-    } else if (currentNode is DecisionNode ||
-        currentNode is WhileNode ||
-        currentNode is DoWhileNode) {
-      return;
-    }
-
-    // Nessun aggiornamento di default
+    // Questa logica ora è gestita interamente nel DebugEngine/FlowchartBloc.
+    // Il repository non ha più bisogno di eseguire logica di business.
     return;
   }
 
-
   @override
   Future<Map<String, dynamic>> getDebugVariables({required String projectId}) {
+    // Recupera le variabili per questo flowchart specifico
     return _session.getCurrentDebugVariables(projectId);
   }
 
-
   @override
   Future<void> endDebugSession({required String projectId}) async {
+    // Pulisce la sessione di debug per questo flowchart specifico
     await _session.clearDebugSession(projectId);
   }
 
   @override
   Stream<Map<String, dynamic>> watchDebugVariables({required String projectId}) {
+    // Osserva le variabili per questo flowchart specifico
     return _session.watchDebugVariables(projectId);
   }
 }

@@ -5,11 +5,14 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 /// Dialog per creare una nuova funzione con la sua firma completa.
 /// La firma include: nome, tipo di ritorno e parametri.
 /// Dopo la creazione, solo il nome sarà modificabile.
-Future<FunctionSignatureData?> showCreateFunctionDialog(BuildContext context) {
+Future<FunctionSignatureData?> showCreateFunctionDialog(
+  BuildContext context, {
+  required Set<String> existingFileNames,
+}) {
   return showDialog<FunctionSignatureData>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => const _CreateFunctionDialog(),
+    builder: (_) => _CreateFunctionDialog(existingFileNames: existingFileNames),
   );
 }
 
@@ -26,17 +29,18 @@ class FunctionSignatureData {
 }
 
 class _CreateFunctionDialog extends StatefulWidget {
-  const _CreateFunctionDialog();
+  final Set<String> existingFileNames;
+  const _CreateFunctionDialog({required this.existingFileNames});
 
   @override
   State<_CreateFunctionDialog> createState() => _CreateFunctionDialogState();
 }
 
 class _CreateFunctionDialogState extends State<_CreateFunctionDialog> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   String _returnType = 'void';
   final List<_ParamEntry> _parameters = [];
-  bool _attemptedSubmit = false;
 
   @override
   void dispose() {
@@ -66,26 +70,10 @@ class _CreateFunctionDialogState extends State<_CreateFunctionDialog> {
     });
   }
 
-  bool _validateInputs() {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) return false;
-
-    // Valida che tutti i parametri abbiano nome e tipo
-    for (var param in _parameters) {
-      if (param.nameController.text.trim().isEmpty) return false;
-    }
-
-    // Controlla duplicati nei nomi dei parametri
-    final paramNames = _parameters.map((p) => p.nameController.text.trim()).toList();
-    if (paramNames.toSet().length != paramNames.length) return false;
-
-    return true;
-  }
-
   void _onConfirm() {
-    setState(() => _attemptedSubmit = true);
-
-    if (!_validateInputs()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
     final name = _nameController.text.trim();
     final parameters = _parameters
@@ -105,88 +93,108 @@ class _CreateFunctionDialogState extends State<_CreateFunctionDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final errorColor = Colors.red.defaultBrushFor(theme.brightness);
 
     return ContentDialog(
       constraints: const BoxConstraints(maxWidth: 700, maxHeight: 650),
       title: _buildHeader(context),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildSectionLabel(context, 'Nome Sottoprogramma', isRequired: true),
-            const SizedBox(height: 8),
-            Text(
-              'Questo sarà l\'identificativo della funzione. Potrà essere modificato in seguito.',
-              style: theme.typography.caption,
-            ),
-            const SizedBox(height: 12),
-            TextBox(
-              controller: _nameController,
-              placeholder: 'Es. CalcolaArea, ConvertTemperatura...',
-              onChanged: (_) => setState(() {}),
-            ),
-            if (_attemptedSubmit && _nameController.text.trim().isEmpty)
-              _buildErrorMessage(context, 'Il nome della funzione è obbligatorio', errorColor),
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 20),
-            _buildSectionLabel(context, 'Tipo di Ritorno', isRequired: true),
-            const SizedBox(height: 8),
-            Text(
-              'Il tipo di dato restituito dalla funzione. NON potrà essere modificato dopo la creazione.',
-              style: theme.typography.caption,
-            ),
-            const SizedBox(height: 12),
-            ComboBox<String>(
-              isExpanded: true,
-              value: _returnType,
-              items: _availableDataTypes
-                  .map((type) => ComboBoxItem(
-                        value: type,
-                        child: Text(type.toUpperCase()),
-                      ))
-                  .toList(),
-              onChanged: (val) => setState(() => _returnType = val ?? 'void'),
-            ),
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSectionLabel(context, 'Parametri'),
-                ),
-                Button(
-                  onPressed: _addParameter,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      FaIcon(FontAwesomeIcons.plus, size: 14),
-                      SizedBox(width: 8),
-                      Text('Aggiungi Parametro'),
-                    ],
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildSectionLabel(context, 'Nome Sottoprogramma', isRequired: true),
+              const SizedBox(height: 8),
+              Text(
+                'Questo sarà l\'identificativo della funzione. Potrà essere modificato in seguito.',
+                style: theme.typography.caption,
+              ),
+              const SizedBox(height: 12),
+              TextFormBox(
+                controller: _nameController,
+                placeholder: 'Es. CalcolaArea, ConvertTemperatura...',
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                validator: (text) {
+                  final name = text?.trim() ?? '';
+                  if (name.isEmpty) {
+                    return 'Il nome non può essere vuoto.';
+                  }
+                  if (widget.existingFileNames.contains(name.toLowerCase())) {
+                    return 'Un file con questo nome esiste già.';
+                  }
+                  if (name.toLowerCase() == 'main') {
+                    return 'Il nome "main" è riservato.';
+                  }
+                  // REQUISITO: Aggiunto controllo per i numeri
+                  if (RegExp(r'[0-9]').hasMatch(name)) {
+                    return 'Il nome non può contenere numeri.';
+                  }
+                  if (RegExp(r'[^a-zA-Z]').hasMatch(name)) {
+                    return 'Sono ammesse solo lettere.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 20),
+              _buildSectionLabel(context, 'Tipo di Ritorno', isRequired: true),
+              const SizedBox(height: 8),
+              Text(
+                'Il tipo di dato restituito dalla funzione. NON potrà essere modificato dopo la creazione.',
+                style: theme.typography.caption,
+              ),
+              const SizedBox(height: 12),
+              ComboBox<String>(
+                isExpanded: true,
+                value: _returnType,
+                items: _availableDataTypes
+                    .map((type) => ComboBoxItem(
+                          value: type,
+                          child: Text(type.toUpperCase()),
+                        ))
+                    .toList(),
+                onChanged: (val) => setState(() => _returnType = val ?? 'void'),
+              ),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSectionLabel(context, 'Parametri'),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Definisci i parametri che la funzione riceverà. La lista NON potrà essere modificata dopo la creazione.',
-              style: theme.typography.caption,
-            ),
-            const SizedBox(height: 16),
-            if (_parameters.isEmpty)
-              _buildEmptyParametersState(context)
-            else
-              ..._parameters.asMap().entries.map((entry) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _buildParameterItem(context, entry.key, entry.value, errorColor),
-                );
-              }),
-          ],
+                  Button(
+                    onPressed: _addParameter,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        FaIcon(FontAwesomeIcons.plus, size: 14),
+                        SizedBox(width: 8),
+                        Text('Aggiungi Parametro'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Definisci i parametri che la funzione riceverà. La lista NON potrà essere modificata dopo la creazione.',
+                style: theme.typography.caption,
+              ),
+              const SizedBox(height: 16),
+              if (_parameters.isEmpty)
+                _buildEmptyParametersState(context)
+              else
+                ..._parameters.asMap().entries.map((entry) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildParameterItem(context, entry.key, entry.value),
+                  );
+                }),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -314,25 +322,15 @@ class _CreateFunctionDialogState extends State<_CreateFunctionDialog> {
     );
   }
 
-  Widget _buildParameterItem(BuildContext context, int index, _ParamEntry param, Color errorColor) {
+  Widget _buildParameterItem(BuildContext context, int index, _ParamEntry param) {
     final theme = FluentTheme.of(context);
-
-    // Controlla duplicati
-    final paramNames = _parameters.map((p) => p.nameController.text.trim()).toList();
-    final currentName = param.nameController.text.trim();
-    final hasDuplicate = currentName.isNotEmpty &&
-                        paramNames.where((name) => name == currentName).length > 1;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: theme.resources.cardBackgroundFillColorDefault,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: hasDuplicate && _attemptedSubmit
-              ? errorColor
-              : theme.resources.cardStrokeColorDefault,
-        ),
+        border: Border.all(color: theme.resources.cardStrokeColorDefault),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,22 +343,48 @@ class _CreateFunctionDialogState extends State<_CreateFunctionDialog> {
               ),
               const Spacer(),
               IconButton(
-                icon: FaIcon(FontAwesomeIcons.trash, size: 16, color: errorColor),
+                icon: FaIcon(FontAwesomeIcons.trash, size: 16, color: Colors.red),
                 onPressed: () => _removeParameter(index),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 flex: 2,
                 child: InfoLabel(
                   label: 'Nome',
-                  child: TextBox(
+                  child: TextFormBox(
                     controller: param.nameController,
                     placeholder: 'Es. valore, temperatura...',
-                    onChanged: (_) => setState(() {}),
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    validator: (text) {
+                      final name = text?.trim() ?? '';
+                      if (name.isEmpty) {
+                        return 'Obbligatorio.';
+                      }
+                      // REQUISITI di validazione per i parametri
+                      if (RegExp(r'^[0-9]').hasMatch(name)) {
+                        return 'Non può iniziare con un numero.';
+                      }
+                      if (RegExp(r'^[0-9]+$').hasMatch(name)) {
+                        return 'Non può essere solo numerico.';
+                      }
+                      if (!RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$').hasMatch(name)) {
+                        return 'Formato non valido.';
+                      }
+                      // Controlla duplicati
+                      final otherParamNames = _parameters
+                          .where((p) => p != param)
+                          .map((p) => p.nameController.text.trim().toLowerCase())
+                          .toSet();
+                      if (otherParamNames.contains(name.toLowerCase())) {
+                        return 'Nome duplicato.';
+                      }
+                      return null;
+                    },
                   ),
                 ),
               ),
@@ -385,10 +409,6 @@ class _CreateFunctionDialogState extends State<_CreateFunctionDialog> {
               ),
             ],
           ),
-          if (_attemptedSubmit && param.nameController.text.trim().isEmpty)
-            _buildErrorMessage(context, 'Il nome del parametro è obbligatorio', errorColor),
-          if (_attemptedSubmit && hasDuplicate)
-            _buildErrorMessage(context, 'Nome parametro duplicato', errorColor),
         ],
       ),
     );

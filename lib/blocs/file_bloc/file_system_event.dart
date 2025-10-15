@@ -82,3 +82,14 @@ class EndDebugSession extends FileSystemEvent {
   @override
   List<Object> get props => [projectId];
 }
+
+
+class UpdateFileContentInCache extends FileSystemEvent {
+  final String fileId;
+  final String newContent;
+
+  const UpdateFileContentInCache({required this.fileId, required this.newContent});
+
+  @override
+  List<Object> get props => [fileId, newContent];
+}

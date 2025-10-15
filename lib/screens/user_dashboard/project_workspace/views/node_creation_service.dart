@@ -138,13 +138,21 @@ class NodeCreationService {
         break;
     }
 
-    // Apri il dialog di configurazione del nodo
-    return await AppDialogs.showNodeCreationDialog(
+    // Apre il dialogo di creazione/modifica e attende i dati di ritorno.
+    final nodeData = await AppDialogs.showNodeCreationDialog(
       context: context,
       kind: kind,
+      signature: flowState.flowchart.signature, // REQUISITO: Passa la signature
       files: filesForProcess,
       variables: variablesForDialog,
     );
+
+    // REQUISITO: Se il dialogo ha creato una nuova variabile, aggiungila al flowchart
+    if (nodeData != null && nodeData['newVariable'] != null) {
+      context.read<FlowchartBloc>().add(AddGlobalVariable(nodeData['newVariable']));
+    }
+
+    return nodeData;
   }
 
   /// Verifica se esiste già un nodo End e chiede conferma per collegarvisi.

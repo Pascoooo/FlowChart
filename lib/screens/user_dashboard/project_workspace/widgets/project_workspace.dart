@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:collection/collection.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
@@ -8,7 +10,6 @@ import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widget
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
-import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:universal_html/html.dart' as html;
 import '../../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../../blocs/auth_bloc/authentication_event.dart';
@@ -56,7 +57,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
   Timer? _debounce;
   StreamSubscription? _rtdbSubscription;
-  String? _lastRtdbContent;
   String? _currentFileId;
 
   @override
@@ -96,6 +96,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     _debounce?.cancel();
     _rtdbSubscription?.cancel();
     _slideInController.dispose();
+    context.read<FlowchartBloc>().add(ClearFlowchartCache());
     super.dispose();
   }
 
@@ -189,9 +190,28 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
     final flowchartBloc = context.read<FlowchartBloc>();
     final fileSystemBloc = context.read<FileSystemBloc>();
+    final fileSystemState = fileSystemBloc.state;
     final flowchartState = flowchartBloc.state;
 
-    if (flowchartState is FlowchartLoaded) {
+    if (fileSystemState is FileSystemLoaded && flowchartState is FlowchartLoaded) {
+
+      final Map<String, Flowchart> refreshedFlowcharts = {};
+      for (final file in fileSystemState.files) {
+        try {
+          if (file.content.trim().isNotEmpty) {
+            final entity = FlowchartEntity.fromDocument(jsonDecode(file.content));
+            final flowchart = Flowchart.fromEntity(entity);
+            refreshedFlowcharts[flowchart.name] = flowchart;
+          }
+        } catch (e) {
+          debugPrint('Could not re-parse file ${file.name} for debug sync: $e');
+        }
+      }
+
+      if (refreshedFlowcharts.isNotEmpty) {
+        flowchartBloc.add(LoadProjectFlowcharts(refreshedFlowcharts));
+      }
+
       fileSystemBloc.add(StartDebugSession(flowchart: flowchartState.flowchart));
       flowchartBloc.add(const DebugFlowchart());
     }
@@ -203,7 +223,11 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       padding: EdgeInsets.zero,
       content: MultiBlocProvider(
         providers: [
-          BlocProvider<FlowchartBloc>(create: (context) => FlowchartBloc()),
+          BlocProvider<FlowchartBloc>(
+            create: (context) => FlowchartBloc(
+              projectRepository: context.read<ProjectBloc>().projectRepository,
+            ),
+          ),
           BlocProvider<FileSystemBloc>(
             key: ValueKey('filesystem-${widget.selectedProject.projectId}'),
             create: (context) => FileSystemBloc(
@@ -221,29 +245,26 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                   final Map<String, Flowchart> projectFlowcharts = {};
                   for (final file in state.files) {
                     try {
-                      final entity = FlowchartEntity.fromDocument(
-                          jsonDecode(file.content));
-                      final flowchart = Flowchart.fromEntity(entity);
-                      projectFlowcharts[flowchart.flowchartId] = flowchart;
+                      if (file.content.trim().isNotEmpty) {
+                        final entity = FlowchartEntity.fromDocument(jsonDecode(file.content));
+                        final flowchart = Flowchart.fromEntity(entity);
+                        projectFlowcharts[flowchart.name] = flowchart;
+                      }
                     } catch (e) {
-                      debugPrint(
-                          'Could not parse file ${file.name} to flowchart: $e');
+                      debugPrint('Could not parse file ${file.name} for debug context: $e');
                     }
                   }
                   if (projectFlowcharts.isNotEmpty) {
-                    context
-                        .read<FlowchartBloc>()
-                        .add(LoadProjectFlowcharts(projectFlowcharts));
+                    context.read<FlowchartBloc>().add(LoadProjectFlowcharts(projectFlowcharts));
                   }
                 }
               },
             ),
+
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (prev, curr) {
                 if (prev is FlowchartLoaded && curr is FlowchartLoaded) {
-                  return prev.isDebugMode != curr.isDebugMode ||
-                      prev.debugIndex != curr.debugIndex ||
-                      prev.selectedNodeId != curr.selectedNodeId;
+                  return prev.isDebugMode != curr.isDebugMode || prev.debugIndex != curr.debugIndex;
                 }
                 return false;
               },
@@ -251,11 +272,10 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 if (state is! FlowchartLoaded) return;
                 final fileSystemBloc = context.read<FileSystemBloc>();
                 final projectRepo = context.read<ProjectBloc>().projectRepository;
-                final flowchart = state.flowchart;
 
                 if (!state.isDebugMode) {
-                  fileSystemBloc.add(EndDebugSession(projectId: flowchart.flowchartId));
-                  projectRepo.clearDebugVariables(projectId: flowchart.flowchartId);
+                  fileSystemBloc.add(EndDebugSession(projectId: state.flowchart.flowchartId));
+                  projectRepo.clearDebugVariables(projectId: state.flowchart.flowchartId);
 
                   if (_preDebugShowGrid != null) {
                     setState(() {
@@ -267,7 +287,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                   fileSystemBloc.add(ComputeDebugStep(
                     index: state.debugIndex,
                     debugPath: state.debugPath,
-                    flowchart: flowchart,
+                    flowchart: state.flowchart,
                   ));
                 }
               },
@@ -277,14 +297,15 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
               listener: (context, state) {
                 if (state.driveExportStatus == DriveExportStatus.success) {
                   BannerService.showSuccess(context, "Diagramma esportato con successo su Google Drive!");
-                  context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
                 } else if (state.driveExportStatus == DriveExportStatus.failure) {
                   BannerService.showError(context, state.errorMessage ?? "Esportazione fallita.");
-                  context.read<AuthenticationBloc>().add(const AuthenticationErrorCleared());
+                }
+                if(state.driveExportStatus != DriveExportStatus.initial){
                   context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
                 }
               },
             ),
+
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (previous, current) {
                 if (previous is FlowchartLoaded && current is FlowchartLoaded) {
@@ -295,15 +316,11 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
               listener: (context, state) {
                 if (state is FlowchartLoaded && _currentFileId != null && !widget.isReadOnly) {
                   final jsonContent = state.toJson();
-                  if (jsonContent.trim().isEmpty || FlowchartLoaded.tryParse(jsonContent) == null) {
-                    return;
-                  }
-                  if (jsonContent == _lastRtdbContent) return;
+                  if (jsonContent.trim().isEmpty) return;
 
                   _debounce?.cancel();
                   _debounce = Timer(const Duration(milliseconds: 400), () {
                     if (mounted) {
-                      _lastRtdbContent = jsonContent;
                       context.read<ProjectBloc>().projectRepository.updateLiveFileContent(
                         widget.selectedProject.projectId,
                         _currentFileId!,
@@ -314,6 +331,10 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
               },
             ),
+
+            // ==========================================================
+            // ✨ LISTENER CORRETTO E AGGIORNATO PER IL CAMBIO FILE
+            // ==========================================================
             BlocListener<FileSystemBloc, FileSystemState>(
               listener: (context, state) async {
                 if (state is FileSystemError) {
@@ -322,6 +343,30 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
 
                 if (state is FileSystemLoaded) {
+                  // PRIMA AZIONE: Salva le modifiche in sospeso del file PRECEDENTE
+                  if (_currentFileId != null && _currentFileId != state.activeFileId) {
+                    _debounce?.cancel();
+                    final flowchartState = context.read<FlowchartBloc>().state;
+                    if (flowchartState is FlowchartLoaded && !widget.isReadOnly) {
+                      final jsonContent = flowchartState.toJson();
+                      if (jsonContent.trim().isNotEmpty) {
+                        // 1. Salva su Realtime DB
+                        await context.read<ProjectBloc>().projectRepository.updateLiveFileContent(
+                          widget.selectedProject.projectId,
+                          _currentFileId!,
+                          jsonContent,
+                        );
+
+                        // 2. Notifica il FileSystemBloc per aggiornare la sua cache interna
+                        context.read<FileSystemBloc>().add(UpdateFileContentInCache(
+                          fileId: _currentFileId!,
+                          newContent: jsonContent,
+                        ));
+                      }
+                    }
+                  }
+
+                  // SECONDA AZIONE: Procedi a caricare il NUOVO file
                   if (_currentFileId != state.activeFileId) {
                     _currentFileId = state.activeFileId;
                     await _rtdbSubscription?.cancel();
@@ -336,65 +381,37 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                     }
 
                     if (state.activeFileId != null) {
-                      final activeFile = state.files.firstWhere((f) => f.fileId == state.activeFileId);
-                      if (widget.isReadOnly) {
-                        final parsed = FlowchartLoaded.tryParse(activeFile.content);
-                        if (parsed != null) {
-                          final currentFcState = context.read<FlowchartBloc>().state;
-                          final hasCurrent = currentFcState is FlowchartLoaded &&
-                              (currentFcState.flowchart.nodes.isNotEmpty || currentFcState.flowchart.variables.isNotEmpty);
-                          final isIncomingEmpty = parsed.flowchart.nodes.isEmpty && parsed.flowchart.variables.isEmpty;
-                          if (hasCurrent && isIncomingEmpty) {
-                            return;
-                          }
-                          context.read<FlowchartBloc>().add(LoadFlowchart(
-                            jsonContent: activeFile.content,
-                            fileName: activeFile.name,
-                          ));
-                        }
-                      } else {
-                        _rtdbSubscription = context
-                            .read<ProjectBloc>()
-                            .projectRepository
-                            .liveFileContent(widget.selectedProject.projectId,
-                            activeFile.fileId)
-                            .listen((liveContent) {
-                          if (!mounted) return;
+                      final activeFile = state.files.firstWhereOrNull((f) => f.fileId == state.activeFileId);
+                      if (activeFile == null) return;
 
-                          // =======================================================
-                          // ✨ INIZIO BLOCCO DI CODICE CORRETTO ✨
-                          // =======================================================
+                      if (widget.isReadOnly) {
+                        context.read<FlowchartBloc>().add(LoadFlowchart(
+                          fileId: activeFile.fileId,
+                          jsonContent: activeFile.content,
+                          fileName: activeFile.name,
+                        ));
+                      } else {
+                        _rtdbSubscription = context.read<ProjectBloc>().projectRepository.liveFileContent(widget.selectedProject.projectId, activeFile.fileId).listen((liveContent) {
+                          if (!mounted || liveContent == null || liveContent.trim().isEmpty) return;
+
                           final flowchartBloc = context.read<FlowchartBloc>();
                           final currentFcState = flowchartBloc.state;
 
-                          // Ignora gli aggiornamenti RTDB se siamo in modalità debug
-                          if (currentFcState is FlowchartLoaded &&
-                              currentFcState.isDebugMode) {
-                            return;
-                          }
-                          // =======================================================
-                          // ✨ FINE BLOCCO DI CODICE CORRETTO ✨
-                          // =======================================================
-
-                          if (liveContent == null || liveContent.trim().isEmpty)
-                            return;
-                          final parsed = FlowchartLoaded.tryParse(liveContent);
-                          if (parsed == null) return;
-
-                          final hasCurrent = currentFcState is FlowchartLoaded &&
-                              (currentFcState.flowchart.nodes.isNotEmpty ||
-                                  currentFcState
-                                      .flowchart.variables.isNotEmpty);
-                          final isIncomingEmpty =
-                              parsed.flowchart.nodes.isEmpty &&
-                                  parsed.flowchart.variables.isEmpty;
-                          if (hasCurrent && isIncomingEmpty) {
-                            return;
+                          if (currentFcState is FlowchartLoaded) {
+                            try {
+                              final currentJson = currentFcState.toJson();
+                              if (const DeepCollectionEquality().equals(jsonDecode(liveContent), jsonDecode(currentJson))) {
+                                return;
+                              }
+                            } catch (_) {}
                           }
 
-                          final contentToLoad = liveContent;
+                          if (currentFcState is FlowchartLoaded && currentFcState.isDebugMode) return;
+                          if (FlowchartLoaded.tryParse(liveContent) == null) return;
+
                           flowchartBloc.add(LoadFlowchart(
-                            jsonContent: contentToLoad,
+                            fileId: activeFile.fileId,
+                            jsonContent: liveContent,
                             fileName: activeFile.name,
                           ));
                         });
@@ -404,6 +421,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 }
               },
             ),
+
             BlocListener<FlowchartBloc, FlowchartState>(
               listenWhen: (prev, curr) => curr is ShowNodeCreationDialog,
               listener: (context, state) async {
@@ -417,18 +435,9 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
                   final ctx = _workareaKey.currentContext;
                   BoxConstraints canvasConstraints;
-                  if (ctx != null) {
-                    final renderObject = ctx.findRenderObject();
-                    if (renderObject is RenderBox && renderObject.hasSize) {
-                      final size = renderObject.size;
-                      canvasConstraints = BoxConstraints.tightFor(
-                        width: size.width,
-                        height: size.height,
-                      );
-                    } else {
-                      final size = MediaQuery.sizeOf(context);
-                      canvasConstraints = BoxConstraints.loose(size);
-                    }
+                  if (ctx != null && ctx.findRenderObject() is RenderBox) {
+                    final renderBox = ctx.findRenderObject() as RenderBox;
+                    canvasConstraints = BoxConstraints.tight(renderBox.size);
                   } else {
                     final size = MediaQuery.sizeOf(context);
                     canvasConstraints = BoxConstraints.loose(size);

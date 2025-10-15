@@ -45,7 +45,6 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     super.initState();
   }
 
-  // Estrae la firma dalla funzione selezionata
   Future<void> _loadSignature(MyFile file) async {
     try {
       final content = jsonDecode(file.content);
@@ -66,7 +65,6 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
           _resultVariableName = null;
         });
       } else {
-        // Funzione legacy senza firma
         setState(() {
           _selectedSignature = const FlowchartSignature();
           _argumentVariables.clear();
@@ -89,31 +87,16 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     _loadSignature(file);
   }
 
-  // Filtra variabili per tipo compatibile
   List<VariableDeclaration> _getVariablesOfType(String targetType) {
-    final filtered = widget.availableVariables
+    return widget.availableVariables
         .where((v) => _isTypeCompatible(v.dataType, targetType))
         .toList();
-
-    debugPrint('=== FILTRO VARIABILI ===');
-    debugPrint('Target type: $targetType');
-    debugPrint('Variabili disponibili totali: ${widget.availableVariables.length}');
-    for (var v in widget.availableVariables) {
-      debugPrint('  - ${v.name} (${v.dataType}) - scope: ${v.scope}');
-    }
-    debugPrint('Variabili filtrate: ${filtered.length}');
-    for (var v in filtered) {
-      debugPrint('  - ${v.name} (${v.dataType})');
-    }
-
-    return filtered;
   }
 
   bool _isTypeCompatible(String varType, String targetType) {
     final vt = varType.trim().toLowerCase();
     final tt = targetType.trim().toLowerCase();
     if (vt == tt) return true;
-    // Conversione implicita consentita: int -> double
     if (tt == 'double' && vt == 'int') return true;
     return false;
   }
@@ -129,24 +112,22 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
 
     if (_selectedFile == null) return;
 
-    // Valida che tutti i parametri richiesti siano assegnati
     if (_selectedSignature != null) {
       for (int i = 0; i < _selectedSignature!.parameters.length; i++) {
         if (_argumentVariables[i] == null || _argumentVariables[i]!.isEmpty) {
-          return; // Mostra errore
+          return;
         }
       }
 
-      // Valida che se c'è un return type != void, sia selezionata una variabile risultato
       if (_selectedSignature!.returnType != 'void' &&
           (_resultVariableName == null || _resultVariableName!.isEmpty)) {
-        return; // Mostra errore
+        return;
       }
     }
 
     Navigator.of(context).pop({
       'text': _autoLabel(),
-      'flowchartToCall': _selectedFile!.fileId,
+      'flowchartToCall': _selectedFile!.name,
       'arguments': _argumentVariables.where((v) => v != null).toList(),
       'resultTarget': _resultVariableName,
     });
@@ -157,7 +138,6 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     final theme = FluentTheme.of(context);
     final errorColor = Colors.red.defaultBrushFor(theme.brightness);
 
-    // Verifica se ci sono funzioni disponibili (escludendo main)
     final availableFunctions = widget.files.where((f) => f.name.toLowerCase() != 'main').toList();
     final hasFunctions = availableFunctions.isNotEmpty;
 
@@ -232,11 +212,12 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
                   value: _resultVariableName,
                   items: _getVariablesOfType(_selectedSignature!.returnType)
                       .map((v) => ComboBoxItem(
-                            value: v.name,
-                            child: _buildVariableItem(context, v),
-                          ))
-                      .toList(),
-                  onChanged: (val) => setState(() => _resultVariableName = val),
+                    value: v.name,
+                    child: _buildVariableItem(context, v),
+                  )).toList(),
+                  onChanged: (value) {
+                    setState(() => _resultVariableName = value);
+                  },
                   placeholder: const Text('Seleziona una variabile'),
                 ),
               ),
@@ -415,11 +396,11 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
   }
 
   Widget _buildParameterItem(
-    BuildContext context,
-    int index,
-    FunctionParam param,
-    Color errorColor,
-  ) {
+      BuildContext context,
+      int index,
+      FunctionParam param,
+      Color errorColor,
+      ) {
     final theme = FluentTheme.of(context);
     final compatibleVars = _getVariablesOfType(param.type);
 
@@ -461,9 +442,9 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
             value: _argumentVariables[index],
             items: compatibleVars
                 .map((v) => ComboBoxItem(
-                      value: v.name,
-                      child: _buildVariableItem(context, v),
-                    ))
+              value: v.name,
+              child: _buildVariableItem(context, v),
+            ))
                 .toList(),
             onChanged: (value) {
               setState(() => _argumentVariables[index] = value);

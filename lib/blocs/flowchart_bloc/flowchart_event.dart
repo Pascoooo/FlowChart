@@ -9,13 +9,17 @@ abstract class FlowchartEvent extends Equatable {
 }
 
 class LoadFlowchart extends FlowchartEvent {
+  final String fileId;
   final String jsonContent;
   final String fileName;
 
-  const LoadFlowchart({required this.jsonContent, required this.fileName});
+  const LoadFlowchart(
+      {required this.fileId,
+      required this.jsonContent,
+      required this.fileName});
 
   @override
-  List<Object?> get props => [jsonContent, fileName];
+  List<Object?> get props => [fileId, jsonContent, fileName];
 }
 
 class AddNode extends FlowchartEvent {
@@ -127,9 +131,9 @@ class Redo extends FlowchartEvent {
   const Redo();
 }
 
-class ClearHistory extends FlowchartEvent {
-  const ClearHistory();
-}
+class ClearHistory extends FlowchartEvent {}
+
+class ClearFlowchartCache extends FlowchartEvent {}
 
 class DebugFlowchart extends FlowchartEvent {
   const DebugFlowchart();

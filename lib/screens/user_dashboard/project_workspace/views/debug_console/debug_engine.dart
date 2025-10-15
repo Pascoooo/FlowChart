@@ -4,7 +4,6 @@ import 'console_models.dart';
 import '../../../../../config/services/expression_parser.dart';
 import 'commands/commands.dart';
 
-/// Engine che gestisce la logica di debug per i nodi del flowchart
 class DebugEngine {
   final FlowNode currentNode;
   final String flowchartId;
@@ -15,15 +14,10 @@ class DebugEngine {
   final VoidCallback onDebugExit;
   final VoidCallback? onDebugNext;
   final VoidCallback? onDebugPrev;
-  // NEW: notify decision result to the outside (Bloc) with nodeId
   final void Function(String nodeId, bool result)? onDecisionEvaluated;
-  // NEW: indica se stiamo entrando nel do-while per la prima volta (true) o rivalutando (false)
   final bool isDoWhileReentry;
-  // 🆕 NUOVO: callback per entrare in un sottoprogramma
   final void Function(ProcessNode)? onStepIntoSubprogram;
-  // 🆕 NUOVO: callback per tornare dal sottoprogramma con il valore di ritorno
   final void Function({dynamic returnValue})? onReturnFromSubprogram;
-  // 🆕 NUOVO: indica se siamo in un sottoprogramma (call stack non vuoto)
   final bool isInSubprogram;
 
   final List<ConsoleEntry> _history = [];
@@ -44,39 +38,20 @@ class DebugEngine {
     this.onDebugNext,
     this.onDebugPrev,
     this.onDecisionEvaluated,
-    this.isDoWhileReentry = false, // NEW: default false = prima entrata
-    this.onStepIntoSubprogram, // 🆕 NUOVO
-    this.onReturnFromSubprogram, // 🆕 NUOVO
-    this.isInSubprogram = false, // 🆕 NUOVO
+    this.isDoWhileReentry = false,
+    this.onStepIntoSubprogram,
+    this.onReturnFromSubprogram,
+    this.isInSubprogram = false,
   }) {
-    // 🆕 NUOVO: Wrapper per onDebugNext che gestisce ProcessNode
-    VoidCallback? wrappedOnNext;
-    if (onDebugNext != null) {
-      wrappedOnNext = () {
-        // Se siamo su un ProcessNode con un sottoprogramma configurato, triggera step-into
-        if (currentNode is ProcessNode) {
-          final processNode = currentNode as ProcessNode;
-          if (processNode.flowchartToCall.isNotEmpty && onStepIntoSubprogram != null) {
-            // Chiama il callback per entrare nel sottoprogramma
-            onStepIntoSubprogram!(processNode);
-            return; // Non chiamare onDebugNext normale
-          }
-        }
-        // Altrimenti, procedi normalmente
-        onDebugNext!();
-      };
-    }
-
+    // Il wrapper è stato rimosso. La logica è ora centralizzata nel BLoC.
     _commandRegistry = CommandRegistry(
-      onNext: wrappedOnNext,
+      onNext: onDebugNext, // Usa direttamente la callback passata
       onPrev: onDebugPrev,
     );
 
-    // Inizializza il nodo in base al tipo (chiamata asincrona)
     _initializeNodeByType();
   }
 
-  /// Inizializza il nodo in base al tipo e stampa i messaggi appropriati
   Future<void> _initializeNodeByType() async {
     if (currentNode is StartNode) {
       _initializeStartNode();
@@ -87,20 +62,14 @@ class DebugEngine {
     } else if (currentNode is AssignmentNode) {
       await _initializeAssignmentNode(currentNode as AssignmentNode);
     } else if (currentNode is OutputNode) {
-      // delega a finalize
       await _initializeOutputNode(currentNode as OutputNode);
     } else if (currentNode is ProcessNode) {
-      // NEW: gestione completa del nodo di processo (chiamata a sottoprogramma)
       await _initializeProcessNode(currentNode as ProcessNode);
     } else if (currentNode is DecisionNode) {
-      // Valuta subito la condizione del nodo Decision
       await _evaluateDecisionNode(currentNode as DecisionNode);
     } else if (currentNode is WhileNode) {
-      // Valuta subito la condizione del ciclo pre-condizionale (while)
       await _evaluateWhileNode(currentNode as WhileNode);
     } else if (currentNode is DoWhileNode) {
-      // Valuta subito la condizione del ciclo post-condizionale (do-while)
-      // Uniformiamo la logica a Decision: true/false determinano il ramo
       await _evaluateDoWhileNode(currentNode as DoWhileNode);
     } else {
       _initializeGenericNode();
@@ -108,26 +77,20 @@ class DebugEngine {
     _notifyUpdate();
   }
 
-  /// Inizializza il nodo START
   void _initializeStartNode() {
     _addInfoMessage('Esecuzione avviata');
     _state = ConsoleState.completed;
-    // Non auto-avanzare: l'utente decide il passo successivo
   }
 
-  /// Inizializza il nodo END
   void _initializeEndNode() async {
     _addSuccessMessage('Esecuzione terminata');
 
-    // 🆕 NUOVO: Se siamo in un sottoprogramma, recupera il valore di ritorno
     if (isInSubprogram && onReturnFromSubprogram != null) {
       try {
-        // Recupera il valore della variabile di ritorno (se prevista)
         final sessionVars = await projectRepo.getDebugVariables(
           projectId: flowchartId,
         );
 
-        // Cerca una variabile dichiarata come OUTPUT (che rappresenta il valore di ritorno)
         final returnVar = allVariables.where((v) => v.scope == VariableScope.output).firstOrNull;
 
         dynamic returnValue;
@@ -151,28 +114,25 @@ class DebugEngine {
     _showCurrentPrompt('Scrivi "next" per continuare');
   }
 
-  /// Inizializza il nodo INPUT
   Future<void> _initializeInputNode(InputNode node) async {
     try {
       final sessionVars = await projectRepo.getDebugVariables(
         projectId: flowchartId,
       );
 
-      // Verifica che tutte le variabili di input siano dichiarate nel flowchart
       final inputVarNames = node.targetVariables;
       final undeclared = inputVarNames.where(
-        (v) => !allVariables.any((decl) => decl.name == v)
+              (v) => !allVariables.any((decl) => decl.name == v)
       ).toList();
 
       if (undeclared.isNotEmpty) {
         _addErrorMessage(
-          'ERRORE: Le seguenti variabili non sono dichiarate nel flowchart: ${undeclared.join(', ')}'
+            'ERRORE: Le seguenti variabili non sono dichiarate nel flowchart: ${undeclared.join(', ')}'
         );
         _state = ConsoleState.error;
         return;
       }
 
-      // Crea le variabili mancanti nella tabella di debug con valori placeholder
       final toCreate = <String, dynamic>{};
       for (final varName in inputVarNames) {
         if (!sessionVars.containsKey(varName)) {
@@ -181,7 +141,6 @@ class DebugEngine {
         }
       }
 
-      // Se ci sono variabili da creare, creale nella tabella
       if (toCreate.isNotEmpty) {
         await projectRepo.updateDebugVariables(
           projectId: flowchartId,
@@ -189,7 +148,6 @@ class DebugEngine {
         );
       }
 
-      // Costruisci il messaggio con solo i nomi delle variabili (senza valori)
       final varList = inputVarNames.join(', ');
 
       _addInfoMessage('Acquisiti in input: $varList');
@@ -200,7 +158,6 @@ class DebugEngine {
     }
   }
 
-  /// Restituisce un valore iniziale appropriato per il tipo di dato specificato
   dynamic _getInitialValueForType(String dataType) {
     final type = dataType.toLowerCase();
     switch (type) {
@@ -220,17 +177,14 @@ class DebugEngine {
     }
   }
 
-  // Getters
   List<ConsoleEntry> get history => List.unmodifiable(_history);
   ConsoleState get state => _state;
   String? get currentPrompt => _currentPrompt;
   bool get isWaitingForInput => _state == ConsoleState.waitingForInput;
 
-  /// Gestisce l'input dell'utente
   Future<void> handleInput(String input) async {
     final trimmedInput = input.trim();
 
-    // Controlla se è un comando (inizia con / oppure è un comando noto)
     if (trimmedInput.startsWith('/') || _isCommand(trimmedInput)) {
       await _handleCommand(trimmedInput.startsWith('/')
           ? trimmedInput.substring(1)
@@ -238,7 +192,6 @@ class DebugEngine {
       return;
     }
 
-    // Se non è in attesa di input, ignora
     if (!isWaitingForInput) {
       _addErrorMessage('Non in attesa di input. Usa "help" per vedere i comandi disponibili.');
       _notifyUpdate();
@@ -254,20 +207,17 @@ class DebugEngine {
       return;
     }
 
-    // Gestione specifica per AssignmentNode
     if (currentNode is AssignmentNode) {
       await _handleAssignmentInput(trimmedInput);
       return;
     }
 
-    // Gestione per altri nodi (Decision, ecc.) - modalità sequenziale
     if (_currentVariable == null) {
       _addErrorMessage('Errore: nessuna variabile corrente impostata');
       _notifyUpdate();
       return;
     }
 
-    // Consenti di saltare mantenendo il valore corrente
     if (trimmedInput.toLowerCase() == 'next') {
       _addInfoMessage('Mantengo il valore corrente per $_currentVariable');
       await _promptNextVariable();
@@ -293,7 +243,6 @@ class DebugEngine {
         return;
       }
 
-      // Verifica che la variabile target esista nelle variabili di sessione
       if (!sessionVars.containsKey(_currentVariable!)) {
         _addErrorMessage(
           'ERRORE RUNTIME: La variabile "$_currentVariable" non è presente nelle variabili di sessione',
@@ -305,7 +254,6 @@ class DebugEngine {
         return;
       }
 
-      // Converti nel tipo corretto
       final varDecl = allVariables.firstWhere(
             (v) => v.name == _currentVariable!,
         orElse: () => VariableDeclaration(
@@ -317,7 +265,6 @@ class DebugEngine {
 
       final convertedValue = _convertToType(resolved.value, varDecl.dataType);
 
-      // Salva la variabile immediatamente
       await projectRepo.updateDebugVariables(
         projectId: flowchartId,
         variables: {_currentVariable!: convertedValue},
@@ -325,7 +272,6 @@ class DebugEngine {
 
       _addSuccessMessage('$_currentVariable = $convertedValue (salvato)');
 
-      // Passa alla prossima variabile
       await _promptNextVariable();
     } catch (e) {
       _addErrorMessage('Errore: ${e.toString()}');
@@ -336,13 +282,11 @@ class DebugEngine {
     _notifyUpdate();
   }
 
-  /// Verifica se l'input è un comando conosciuto
   bool _isCommand(String input) {
     final commandName = input.split(RegExp(r'\s+')).first.toLowerCase();
     return _commandRegistry.findCommand(commandName) != null;
   }
 
-  /// Gestisce l'esecuzione di un comando
   Future<void> _handleCommand(String commandInput) async {
     _addUserInput('/$commandInput');
 
@@ -370,7 +314,6 @@ class DebugEngine {
     _notifyUpdate();
   }
 
-  /// Inizializza per un nodo Assignment
   Future<void> _initializeAssignmentNode(AssignmentNode node) async {
     try {
       final sessionVars = await projectRepo.getDebugVariables(
@@ -379,7 +322,6 @@ class DebugEngine {
 
       final targets = node.assignments.map((a) => a.target).toList();
 
-      // Verifica che tutte le variabili di destinazione siano DICHIARATE nella workarea
       final notDeclared = <String>[];
       for (final t in targets) {
         final exists = allVariables.any((v) => v.name == t);
@@ -394,7 +336,6 @@ class DebugEngine {
         return;
       }
 
-      // Separa variabili per scope
       final inputVars = <String>[];
       final outputAndLocalVars = <String>[];
 
@@ -407,7 +348,6 @@ class DebugEngine {
         }
       }
 
-      // Verifica che le variabili INPUT esistano già (devono passare per un nodo Input prima)
       final missingInputVars = inputVars.where((v) => !sessionVars.containsKey(v)).toList();
 
       if (missingInputVars.isNotEmpty) {
@@ -420,14 +360,8 @@ class DebugEngine {
         return;
       }
 
-      // Non creare più automaticamente variabili OUTPUT/LOCAL mancanti
-      // Se un assegnamento proverà ad aggiornare variabili non presenti, il repository
-      // creerà l'entry solo se la variabile è dichiarata e il tipo è compatibile.
-
-      // Applica le assegnazioni definite nel flowchart (se presenti)
       bool hasAssignmentError = false;
 
-      // Pass 1: Assegnazioni dirette (senza riferimenti)
       for (final assignment in node.assignments) {
         final target = assignment.target;
         final expr = assignment.expression.trim();
@@ -457,7 +391,6 @@ class DebugEngine {
         }
       }
 
-      // Pass 2: Assegnazioni con espressioni/dipendenze
       final updatedVars = await projectRepo.getDebugVariables(
         projectId: flowchartId,
       );
@@ -505,18 +438,15 @@ class DebugEngine {
     _notifyUpdate();
   }
 
-  /// Gestisce l'input specifico per AssignmentNode (modalità libera)
   Future<void> _handleAssignmentInput(String input) async {
     final node = currentNode as AssignmentNode;
     final targets = node.assignments.map((a) => a.target).toList();
 
-    // Se digita "next", procedi al nodo successivo
     if (input.toLowerCase() == 'next') {
       await _finalizeAssignmentNode();
       return;
     }
 
-    // Parsing formato: nomeVariabile = valore/espressione
     final match = RegExp(r'^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$').firstMatch(input);
     if (match == null) {
       _addErrorMessage('Formato non valido. Usa es.: nome = 123 oppure nome = {x} + 2');
@@ -554,9 +484,8 @@ class DebugEngine {
         return;
       }
 
-      // Converti nel tipo corretto
       final varDecl = allVariables.firstWhere(
-        (v) => v.name == varName,
+            (v) => v.name == varName,
         orElse: () => VariableDeclaration(
           name: varName,
           dataType: 'string',
@@ -569,7 +498,6 @@ class DebugEngine {
         varDecl.dataType,
       );
 
-      // Salva la variabile
       await projectRepo.updateDebugVariables(
         projectId: flowchartId,
         variables: {varName: convertedValue},
@@ -587,13 +515,11 @@ class DebugEngine {
     _notifyUpdate();
   }
 
-  /// Mostra il prompt standard per AssignmentNode
   void _showAssignmentPrompt() {
     _addSystemMessage('');
     _addInfoMessage('Scrivi un\'assegnazione nella forma: nome = valore oppure nome = espressione (puoi usare {variabile}). Scrivi "next" per continuare');
   }
 
-  /// Finalizza il blocco Assignment e procedi
   Future<void> _finalizeAssignmentNode() async {
     _state = ConsoleState.processing;
     _notifyUpdate();
@@ -621,53 +547,41 @@ class DebugEngine {
     }
 
     _state = ConsoleState.completed;
-    // Non auto-avanzare: richiedi esplicitamente Next
     _showCurrentPrompt('Scrivi "next" per continuare');
     _notifyUpdate();
   }
 
-  /// Nodo generico: stampa informazioni minime e completa subito
   void _initializeGenericNode() {
     _addInfoMessage('Nodo non interattivo: procedo al successivo');
     _state = ConsoleState.completed;
-    // Non auto-avanzare, lasciamo il controllo all'utente
     _showCurrentPrompt('Scrivi "next" per continuare');
   }
 
-  /// Fallback per avanzare quando viene richiesto il "prossimo" senza coda variabili
   Future<void> _promptNextVariable() async {
-    // Completa il nodo corrente ma non chiama onCommandExecuted qui.
     _state = ConsoleState.completed;
-    // L'avanzamento vero e proprio è demandato al comando /next (CommandRegistry)
   }
 
-  /// Renderizza il messaggio di Output sostituendo i placeholder {var}
   Future<void> _finalizeOutputNode(OutputNode node) async {
     final sessionVars = await projectRepo.getDebugVariables(
       projectId: flowchartId,
     );
 
-    // Verifica che tutte le variabili richieste abbiano un valore valido
-    for (final vName in node.variables) {
-      final v = sessionVars[vName];
-      if (v == null || (v is String && v.isEmpty)) {
-        throw StateError('Variabile "$vName" non ha un valore assegnato');
+    for (final v in node.variables) {
+      if (!sessionVars.containsKey(v.name) || sessionVars[v.name] == null) {
+        throw StateError('Variabile "${v.name}" non ha un valore assegnato');
       }
     }
 
     String rendered = node.template;
-    for (final vName in node.variables) {
-      final v = sessionVars[vName];
-      rendered = rendered.replaceAll('{$vName}', v.toString());
+    for (final v in node.variables) {
+      rendered = rendered.replaceAll('{${v.name}}', sessionVars[v.name].toString());
     }
 
     _addOutputMessage(rendered);
     _state = ConsoleState.completed;
-    // Non auto-avanzare
     _showCurrentPrompt('Scrivi "next" per continuare');
   }
 
-  /// Inizializza un nodo Output (wrapper senza auto-avanzamento)
   Future<void> _initializeOutputNode(OutputNode node) async {
     try {
       await _finalizeOutputNode(node);
@@ -677,7 +591,6 @@ class DebugEngine {
     }
   }
 
-  // ========== Metodi di utilità / logging ==========
   void _addSystemMessage(String text) {
     _history.add(ConsoleEntry(type: ConsoleEntryType.system, text: text));
   }
@@ -732,11 +645,9 @@ class DebugEngine {
       if (s == 'false' || s == '0') return false;
       throw FormatException('Valore booleano non valido: $value');
     }
-    // default: string
     return value?.toString();
   }
 
-  // ========== Valutazione condizioni ==========
   Future<void> _evaluateDecisionNode(DecisionNode node) async {
     try {
       final sessionVars = await projectRepo.getDebugVariables(projectId: flowchartId);
@@ -744,7 +655,6 @@ class DebugEngine {
       _addInfoMessage('Decision: condizione = ${result ? 'TRUE' : 'FALSE'}');
       _state = ConsoleState.completed;
       onDecisionEvaluated?.call(node.id, result);
-      // Non auto-avanzare: attendi azione utente (Next)
       _showCurrentPrompt('Scrivi "next" per continuare');
     } catch (e) {
       _addErrorMessage('Errore valutazione Decision: ${e.toString()}');
@@ -767,7 +677,6 @@ class DebugEngine {
   }
 
   Future<void> _evaluateDoWhileNode(DoWhileNode node) async {
-    // Valuta SEMPRE la condizione quando si arriva al nodo do-while
     try {
       final sessionVars = await projectRepo.getDebugVariables(projectId: flowchartId);
       final result = _evaluateClauses(node.clauses, node.logicalJoin, sessionVars);
@@ -786,9 +695,6 @@ class DebugEngine {
 
     bool evalClause(ConditionClause c) {
       dynamic left = sessionVars[c.leftOperand];
-      if (!c.isRightLiteral && !sessionVars.containsKey(c.rightOperand)) {
-        // Se il destro è variabile ma non esiste, trattiamo come null
-      }
       dynamic right;
       if (c.isRightLiteral) {
         right = _parseLiteral(c.rightOperand);
@@ -797,7 +703,6 @@ class DebugEngine {
       }
       switch (c.operator) {
         case '==':
-          return _compareEq(left, right);
         case '=':
           return _compareEq(left, right);
         case '!=':
@@ -850,21 +755,16 @@ class DebugEngine {
     if (s.toLowerCase() == 'false') return false;
     final n = num.tryParse(s);
     if (n != null) return n;
-    return s; // fallback stringa
+    return s;
   }
 
-  // ======================================================
-  // NEW: Gestione del nodo di PROCESSO (chiamata sottoprogramma)
-  // ======================================================
   Future<void> _initializeProcessNode(ProcessNode node) async {
     try {
       final sessionVars = await projectRepo.getDebugVariables(projectId: flowchartId);
 
-      // 1) Informazioni sulla chiamata
       final callName = (node.flowchartToCall.isNotEmpty) ? node.flowchartToCall : '(nessuna funzione configurata)';
       _addInfoMessage('Processo: ${callName}');
 
-      // 2) Valuta e mostra gli argomenti (se presenti)
       if (node.arguments.isNotEmpty) {
         final argValues = <dynamic>[];
         bool argsOk = true;
@@ -885,7 +785,6 @@ class DebugEngine {
         }
       }
 
-      // 3) 🆕 NUOVO: Se c'è una funzione configurata, triggera lo step-into automatico
       if (node.flowchartToCall.isNotEmpty) {
         _addInfoMessage('Premi "next" per entrare nel sottoprogramma "${callName}"');
         _state = ConsoleState.completed;
@@ -893,15 +792,9 @@ class DebugEngine {
         return;
       }
 
-      // 4) Gestione del risultato della chiamata (se previsto) - SOLO se non entriamo nel sottoprogramma
       if (node.resultTarget != null && node.resultTarget!.trim().isNotEmpty) {
         final resultVar = node.resultTarget!.trim();
 
-        // Verifica dichiarazione
-        final decl = allVariables.firstWhere(
-          (v) => v.name == resultVar,
-          orElse: () => VariableDeclaration(name: resultVar, dataType: 'string', scope: VariableScope.local),
-        );
         final isDeclared = allVariables.any((v) => v.name == resultVar);
         if (!isDeclared) {
           _addErrorMessage('Variabile di risultato "$resultVar" non dichiarata nella workarea');
@@ -909,8 +802,8 @@ class DebugEngine {
           return;
         }
 
-        // Assicura l'esistenza nelle variabili di sessione (se manca, crea un placeholder)
         if (!sessionVars.containsKey(resultVar)) {
+          final decl = allVariables.firstWhere((v) => v.name == resultVar);
           final initial = _getInitialValueForType(decl.dataType);
           await projectRepo.updateDebugVariables(
             projectId: flowchartId,
@@ -919,12 +812,8 @@ class DebugEngine {
         }
 
         _addInfoMessage('Il risultato sarà assegnato automaticamente a "$resultVar" al ritorno dal sottoprogramma');
-        _state = ConsoleState.completed;
-        _showCurrentPrompt('Scrivi "next" per continuare');
-        return;
       }
 
-      // 5) Se non c'è resultTarget, completa semplicemente la chiamata informativa
       _state = ConsoleState.completed;
       _showCurrentPrompt('Scrivi "next" per continuare');
     } catch (e) {

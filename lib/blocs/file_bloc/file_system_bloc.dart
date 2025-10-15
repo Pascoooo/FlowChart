@@ -24,6 +24,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<StartDebugSession>(_onStartDebugSession);
     on<ComputeDebugStep>(_onComputeDebugStep);
     on<EndDebugSession>(_onEndDebugSession);
+    on<UpdateFileContentInCache>(_onUpdateFileContentInCache);
   }
 
 
@@ -166,7 +167,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
             .map((p) => VariableDeclaration(
           name: p.name,
           dataType: p.type,
-          scope: VariableScope.input,
+          scope: VariableScope.local, // REQUISITO: I parametri sono variabili locali
         ))
             .toList();
 
@@ -251,4 +252,22 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     }
   }
 
+
+  void _onUpdateFileContentInCache(
+      UpdateFileContentInCache event, Emitter<FileSystemState> emit) {
+    if (state is! FileSystemLoaded) return;
+    final currentState = state as FileSystemLoaded;
+
+    final updatedFiles = currentState.files.map((file) {
+      if (file.fileId == event.fileId) {
+        // Assumendo che MyFile abbia un metodo copyWith. Se non ce l'ha, è essenziale aggiungerlo.
+        return file.copyWith(content: event.newContent);
+      }
+      return file;
+    }).toList();
+
+    // Emetti il nuovo stato con la lista dei file aggiornata, in modo silenzioso
+    emit(currentState.copyWith(files: updatedFiles));
+  }
 }
+

@@ -285,17 +285,23 @@ class _AdvancedTopBar extends StatelessWidget {
                     }
 
                     final hasEndNode = flowchartState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
-                    final isPlayEnabled = state.activeFileId != null && hasEndNode;
+                    // REQUISITO: Il debug può partire solo da 'main', non dai sottoprogrammi.
+                    final isPlayEnabled = flowchartState.flowchart.isMain && hasEndNode;
 
                     final nodes = flowchartState.flowchart.nodes;
-                    final bool hasOnlyStartNode = nodes.length == 1 && nodes.first.kind == FlowNodeKind.start;
-                    final bool isResetEnabled = !hasOnlyStartNode;
+                    // REQUISITO: Logica di reset differenziata per main e sottoprogrammi
+                    final bool hasOnlyStartOrHeader = nodes.length == 1 &&
+                        (nodes.first.kind == FlowNodeKind.start || nodes.first.kind == FlowNodeKind.functionHeader);
+                    final bool isResetEnabled = !hasOnlyStartOrHeader;
 
                     final selectedId = flowchartState.selectedNodeId;
                     FlowNode? selectedNode = selectedId != null ? flowchartState.getNodeById(selectedId) : null;
 
                     bool isDeletionEnabled = false;
-                    if (selectedNode != null && selectedNode.kind != FlowNodeKind.start) {
+                    // REQUISITO: Non si può eliminare il nodo Start o FunctionHeader
+                    if (selectedNode != null &&
+                        selectedNode.kind != FlowNodeKind.start &&
+                        selectedNode.kind != FlowNodeKind.functionHeader) {
                       if (selectedNode.kind == FlowNodeKind.doWhileLoop) {
                         final outs = flowchartState.getOutgoingEdges(selectedNode.id);
                         final hasFalse = outs.any((e) => e.port == 'false');

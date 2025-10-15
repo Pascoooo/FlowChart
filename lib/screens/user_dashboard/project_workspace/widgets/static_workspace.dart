@@ -1,3 +1,5 @@
+// lib/screens/user_dashboard/project_workspace/widgets/static_workspace.dart
+
 import 'package:file_repository/file_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show Icons;
@@ -11,7 +13,6 @@ import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
 import '../views/workarea.dart';
 
-/// Un workspace semplificato e statico per la visualizzazione di progetti condivisi.
 class StaticProjectWorkspace extends StatefulWidget {
   final MyProject project;
   final List<MyFile> files;
@@ -33,7 +34,11 @@ class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
   void initState() {
     super.initState();
     if (widget.files.isNotEmpty) {
-      _activeFileId = widget.files.first.fileId;
+      final mainFile = widget.files.firstWhere(
+            (file) => file.name == 'main',
+        orElse: () => widget.files.first,
+      );
+      _activeFileId = mainFile.fileId;
     }
   }
 
@@ -41,15 +46,17 @@ class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
   Widget build(BuildContext context) {
     final activeFile = widget.files.firstWhere(
           (file) => file.fileId == _activeFileId,
-      orElse: () => MyFile.empty,
+      orElse: () => widget.files.isNotEmpty ? widget.files.first : MyFile.empty,
     );
 
     return BlocProvider<FlowchartBloc>(
       key: ValueKey(_activeFileId),
-      create: (context) => FlowchartBloc()
+      create: (context) => FlowchartBloc(
+          projectRepository: context.read<ProjectBloc>().projectRepository)
         ..add(LoadFlowchart(
           jsonContent: activeFile.content,
           fileName: activeFile.name,
+          fileId: activeFile.fileId,
         )),
       child: Row(
         children: [
@@ -72,15 +79,13 @@ class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
                     fileName: activeFile.name,
                   ),
                   const SizedBox(height: 16),
-                  Expanded(
+                  Expanded( // FIX: Rimosso 'const' da qui
                     child: WorkArea(
-                      repaintKey:
-                      GlobalKey(),
+                      repaintKey: GlobalKey(),
                       showGrid: true,
                       isReadOnly: true,
                       allowDragInReadOnly: true,
-                      onToggleGrid:
-                          () {},
+                      onToggleGrid: () {}, // FIX: Sostituito null con una funzione vuota
                     ),
                   ),
                 ],
@@ -92,8 +97,6 @@ class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
     );
   }
 }
-
-// --- WIDGET INTERNI E SEMPLIFICATI PER LA VISTA STATICA ---
 
 class _StaticSidebar extends StatelessWidget {
   final List<MyFile> files;
@@ -124,7 +127,7 @@ class _StaticSidebar extends StatelessWidget {
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded),
               onPressed: () =>
-                  context.read<ProjectBloc>().add(const LeaveProject()),
+              context.read<ProjectBloc>().add(const LeaveProject()),
             ),
             title: Text('Progetto Condiviso', style: theme.typography.bodyStrong),
           ),
@@ -142,7 +145,8 @@ class _StaticSidebar extends StatelessWidget {
                 return ListTile(
                   leading: Icon(
                     FontAwesomeIcons.fileCode,
-                    color: isSelected ? theme.accentColor : null,
+                    // FIX: Sostituito disabledColor con inactiveColor
+                    color: isSelected ? theme.accentColor : theme.inactiveColor,
                   ),
                   title: Text(
                     file.name,

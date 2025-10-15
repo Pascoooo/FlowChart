@@ -323,21 +323,39 @@ class _WorkAreaState extends State<WorkArea>
     }
   }
 
-  // Reset totale delle variabili dichiarate
+  // Reset totale delle variabili dichiarate, escludendo i parametri di funzione
   Future<void> _handleResetAllVariables() async {
     final flowchartBloc = context.read<FlowchartBloc>();
     final flowchartState = flowchartBloc.state;
     if (flowchartState is! FlowchartLoaded) return;
 
+    // Se il flowchart è 'main', non ci sono parametri da proteggere.
+    // Altrimenti, proteggi i parametri della firma della funzione.
+    final isMain = flowchartState.flowchart.name == 'main';
+    final protectedNames = isMain
+        ? <String>{}
+        : flowchartState.flowchart.signature.parameters
+            .map((p) => p.name)
+            .toSet();
+
+    final String title =
+        isMain ? 'Reset Tutte le Variabili' : 'Reset Variabili di Lavoro';
+    final String message = isMain
+        ? 'Questa azione rimuoverà tutte le variabili dichiarate. Procedere?'
+        : 'Questa azione rimuoverà tutte le variabili create dall\'utente, lasciando solo i parametri della funzione. Procedere?';
+
     final confirmed = await AppDialogs.showConfirmationDialog(
       context,
-      title: 'Reset Variabili',
-      message: 'Questa azione rimuoverà tutte le variabili dichiarate. Procedere?',
+      title: title,
+      message: message,
       isDestructive: true,
     );
 
     if (confirmed == true && mounted) {
-      flowchartBloc.add(const UpdateGlobalVariables([]));
+      final variablesToKeep = flowchartState.flowchart.variables
+          .where((v) => protectedNames.contains(v.name))
+          .toList();
+      flowchartBloc.add(UpdateGlobalVariables(variablesToKeep));
     }
   }
 
@@ -420,7 +438,7 @@ class _WorkAreaState extends State<WorkArea>
 
           // Carica il contenuto del file nel FlowchartBloc
           context.read<FlowchartBloc>().add(
-                LoadFlowchart(jsonContent: file.content, fileName: file.name),
+                LoadFlowchart(jsonContent: file.content, fileName: file.name, fileId: file.fileId)
               );
         }
       },
@@ -447,8 +465,15 @@ class _WorkAreaState extends State<WorkArea>
                           ? state.flowchart.variables
                           : <VariableDeclaration>[];
 
+                      final protectedVariableNames = (state is FlowchartLoaded)
+                          ? state.flowchart.signature.parameters
+                              .map((p) => p.name)
+                              .toSet()
+                          : <String>{};
+
                       return _VariablesPanel(
                         variables: variables,
+                        protectedVariableNames: protectedVariableNames,
                         onAddVariable: _handleAddVariable,
                         onEditVariable: _handleEditVariable,
                         onDeleteVariable: _handleDeleteVariable,
@@ -535,6 +560,7 @@ class _WorkAreaContent extends StatelessWidget {
 
 class _VariablesPanel extends StatelessWidget {
   final List<VariableDeclaration> variables;
+  final Set<String> protectedVariableNames;
   final void Function(VariableScope) onAddVariable;
   final void Function(VariableDeclaration) onEditVariable;
   final void Function(VariableDeclaration) onDeleteVariable;
@@ -542,6 +568,7 @@ class _VariablesPanel extends StatelessWidget {
 
   const _VariablesPanel({
     required this.variables,
+    required this.protectedVariableNames,
     required this.onAddVariable,
     required this.onEditVariable,
     required this.onDeleteVariable,
@@ -610,6 +637,7 @@ class _VariablesPanel extends StatelessWidget {
           _VariableCategory(
             title: 'Input',
             variables: inputVars,
+            protectedVariableNames: protectedVariableNames,
             onAdd: () => onAddVariable(VariableScope.input),
             onEdit: onEditVariable,
             onDelete: onDeleteVariable,
@@ -624,6 +652,7 @@ class _VariablesPanel extends StatelessWidget {
           _VariableCategory(
             title: 'Output',
             variables: outputVars,
+            protectedVariableNames: protectedVariableNames,
             onAdd: () => onAddVariable(VariableScope.output),
             onEdit: onEditVariable,
             onDelete: onDeleteVariable,
@@ -638,6 +667,7 @@ class _VariablesPanel extends StatelessWidget {
           _VariableCategory(
             title: 'Di Lavoro',
             variables: localVars,
+            protectedVariableNames: protectedVariableNames,
             onAdd: () => onAddVariable(VariableScope.local),
             onEdit: onEditVariable,
             onDelete: onDeleteVariable,
@@ -651,6 +681,7 @@ class _VariablesPanel extends StatelessWidget {
 class _VariableCategory extends StatelessWidget {
   final String title;
   final List<VariableDeclaration> variables;
+  final Set<String> protectedVariableNames;
   final VoidCallback onAdd;
   final void Function(VariableDeclaration) onEdit;
   final void Function(VariableDeclaration) onDelete;
@@ -658,6 +689,7 @@ class _VariableCategory extends StatelessWidget {
   const _VariableCategory({
     required this.title,
     required this.variables,
+    required this.protectedVariableNames,
     required this.onAdd,
     required this.onEdit,
     required this.onDelete,
@@ -691,11 +723,15 @@ class _VariableCategory extends StatelessWidget {
             padding: const EdgeInsets.only(top: 8.0, left: 4.0, right: 4.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: variables.map((variable) => _VariableDisplay(
-                variable: variable,
-                onEdit: () => onEdit(variable),
-                onDelete: () => onDelete(variable),
-              )).toList(),
+              children: variables
+                  .map((variable) => _VariableDisplay(
+                        variable: variable,
+                        isProtected:
+                            protectedVariableNames.contains(variable.name),
+                        onEdit: () => onEdit(variable),
+                        onDelete: () => onDelete(variable),
+                      ))
+                  .toList(),
             ),
           )
         else
@@ -710,11 +746,13 @@ class _VariableCategory extends StatelessWidget {
 
 class _VariableDisplay extends StatelessWidget {
   final VariableDeclaration variable;
+  final bool isProtected;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _VariableDisplay({
     required this.variable,
+    required this.isProtected,
     required this.onEdit,
     required this.onDelete,
   });
@@ -724,10 +762,16 @@ class _VariableDisplay extends StatelessWidget {
     final theme = FluentTheme.of(context);
     final flyoutController = FlyoutController();
 
-    return Padding(
+    final content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 3.0),
       child: Row(
         children: [
+          if (isProtected)
+            Padding(
+              padding: const EdgeInsets.only(right: 6.0),
+              child: Icon(FluentIcons.lock,
+                  size: 12, color: theme.resources.textFillColorSecondary),
+            ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
@@ -736,12 +780,14 @@ class _VariableDisplay extends StatelessWidget {
             ),
             child: Text(
               variable.dataType,
-              style: theme.typography.caption?.copyWith(fontWeight: FontWeight.w600, color: theme.accentColor),
+              style: theme.typography.caption
+                  ?.copyWith(fontWeight: FontWeight.w600, color: theme.accentColor),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(variable.name, style: theme.typography.body, overflow: TextOverflow.ellipsis),
+            child: Text(variable.name,
+                style: theme.typography.body, overflow: TextOverflow.ellipsis),
           ),
           FlyoutTarget(
             controller: flyoutController,
@@ -756,18 +802,23 @@ class _VariableDisplay extends StatelessWidget {
                         MenuFlyoutItem(
                           leading: const Icon(FluentIcons.edit),
                           text: const Text('Modifica'),
-                          onPressed: () {
-                            Navigator.pop(flyoutContext);
-                            onEdit();
-                          },
+                          onPressed: isProtected
+                              ? null
+                              : () {
+                                  Navigator.pop(flyoutContext);
+                                  onEdit();
+                                },
                         ),
                         MenuFlyoutItem(
                           leading: Icon(FluentIcons.delete, color: Colors.red),
-                          text: Text('Elimina', style: TextStyle(color: Colors.red)),
-                          onPressed: () {
-                            Navigator.pop(flyoutContext);
-                            onDelete();
-                          },
+                          text: Text('Elimina',
+                              style: TextStyle(color: Colors.red)),
+                          onPressed: isProtected
+                              ? null
+                              : () {
+                                  Navigator.pop(flyoutContext);
+                                  onDelete();
+                                },
                         ),
                       ],
                     );
@@ -779,6 +830,16 @@ class _VariableDisplay extends StatelessWidget {
         ],
       ),
     );
+
+    if (isProtected) {
+      return Tooltip(
+        message:
+            'Questa variabile è un parametro della funzione e non può essere modificata o eliminata.',
+        child: content,
+      );
+    }
+
+    return content;
   }
 }
 

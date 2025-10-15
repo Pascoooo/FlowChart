@@ -286,6 +286,15 @@ class FileListItem extends StatelessWidget {
         validator: (v) {
           final value = (v ?? "").trim();
           if (value.isEmpty) return 'Il nome non può essere vuoto';
+
+          // REQUISITO: Solo caratteri alfabetici, no numeri
+          if (RegExp(r'[0-9]').hasMatch(value)) {
+            return 'Il nome non può contenere numeri.';
+          }
+          if (RegExp(r'[^a-zA-Z]').hasMatch(value)) {
+            return 'Sono ammesse solo lettere.';
+          }
+
           final state = context.read<FileSystemBloc>().state;
           if (state is FileSystemLoaded) {
             final exists = state.files.any(
@@ -448,27 +457,22 @@ class CreateFileButton extends StatelessWidget {
   const CreateFileButton({super.key, required this.projectId});
 
   void _showCreateFileDialog(BuildContext context, String projectId) async {
-    // Mostra il dialog per definire la firma della funzione
-    final functionSignature = await showCreateFunctionDialog(context);
+    final state = context.read<FileSystemBloc>().state;
+    if (state is! FileSystemLoaded) return;
+
+    // REQUISITO: Passa i nomi dei file esistenti al dialogo per la validazione
+    final functionSignature = await showCreateFunctionDialog(
+      context,
+      existingFileNames: state.files.map((f) => f.name).toSet(),
+    );
 
     if (functionSignature == null) return;
 
     final fileName = functionSignature.name.trim().toLowerCase();
     if (fileName.isEmpty) return;
 
-    // Valida che il nome non sia già usato
-    final state = context.read<FileSystemBloc>().state;
-    if (state is FileSystemLoaded) {
-      final exists = state.files.any((f) => f.name.toLowerCase() == fileName);
-      if (exists) {
-        await AppDialogs.showInfoDialog(
-          context,
-          title: 'Errore',
-          message: 'Esiste già un file con questo nome.',
-        );
-        return;
-      }
-    }
+    // La validazione del nome duplicato ora è gestita direttamente nel dialog,
+    // quindi la logica di controllo qui non è più necessaria.
 
     // Crea la firma del flowchart
     final signature = FlowchartSignature(

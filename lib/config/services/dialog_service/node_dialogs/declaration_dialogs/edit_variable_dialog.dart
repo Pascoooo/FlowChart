@@ -46,14 +46,21 @@ class _EditVariableDialogState extends State<EditVariableDialog> {
   /// Restituisce `true` se il form è valido.
   bool _validateForm() {
     final name = _nameController.text.trim();
-    final idRe = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');
+    final startsWithNumber = RegExp(r'^[0-9]');
+    final isOnlyNumbers = RegExp(r'^[0-9]+$');
+    final isValidIdentifier = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');
 
     setState(() {
       if (name.isEmpty) {
         _nameError = 'Il nome è obbligatorio.';
-      } else if (!idRe.hasMatch(name)) {
-        _nameError = 'Il nome ha un formato non valido (es: my_var).';
-      } else if (name != widget.variableToEdit.name && widget.existingVariableNames.contains(name)) {
+      } else if (startsWithNumber.hasMatch(name)) {
+        _nameError = 'Il nome non può iniziare con un numero.';
+      } else if (isOnlyNumbers.hasMatch(name)) {
+        _nameError = 'Il nome non può essere composto solo da numeri.';
+      } else if (!isValidIdentifier.hasMatch(name)) {
+        _nameError = 'Formato non valido (es: my_var, var1).';
+      } else if (name != widget.variableToEdit.name &&
+          widget.existingVariableNames.contains(name)) {
         // Controlla la duplicazione solo se il nome è diverso da quello originale
         _nameError = 'Questo nome è già utilizzato.';
       } else {
