@@ -19,9 +19,10 @@ class FlowchartValidator {
   final _rules = [
     SingleStartNodeRule(),
     SingleEndNodeRule(),
-    ReturnNodeTerminalRule(), // REQUISITO: Aggiunta regola per nodo Return
+    ReturnNodeTerminalRule(),
     OutgoingConnectionRule(),
     IncomingConnectionRule(),
+    NoEndInsideWhileBodyRule(),
     DecisionPortUniquenessRule(),
   ];
 
@@ -165,6 +166,35 @@ class DecisionPortUniquenessRule extends FlowchartRule {
           : (newPort == 'false' ? "falso" : newPort);
       return ValidationResult.failure(
           "Il ramo '$label' è già collegato per questo nodo.");
+    }
+
+    return ValidationResult.success();
+  }
+}
+
+/// 🚫 Regola: vieta collegare/creare un nodo Fine dall'interno del corpo di un ciclo while (pre-condizionale)
+class NoEndInsideWhileBodyRule extends FlowchartRule {
+  @override
+  ValidationResult validate(FlowchartLoaded state, Object actionContext) {
+    // Applica solo a nuove connessioni (creazione nodo o link) rappresentate da FlowchartEdge
+    if (actionContext is! FlowchartEdge) return ValidationResult.success();
+
+    final toNode = state.getNodeById(actionContext.to);
+    final fromNode = state.getNodeById(actionContext.from);
+    if (toNode == null || fromNode == null) return ValidationResult.success();
+
+    if (toNode.kind != FlowNodeKind.end) return ValidationResult.success();
+
+    final parentLoopId = state.getParentLoopNodeId(fromNode.id);
+    if (parentLoopId == null) return ValidationResult.success();
+
+    final loopNode = state.getNodeById(parentLoopId);
+    if (loopNode == null) return ValidationResult.success();
+
+    if (loopNode.kind == FlowNodeKind.whileLoop) {
+      return ValidationResult.failure(
+        "Non puoi inserire 'Fine' dentro il corpo di un while. Usa la chiusura del ciclo (fine ciclo).",
+      );
     }
 
     return ValidationResult.success();

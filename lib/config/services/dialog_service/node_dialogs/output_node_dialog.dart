@@ -64,16 +64,36 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
     final currentText = _messageController.text;
     final selection = _messageController.selection;
 
+    // Gestisci selezione non valida (-1) o invertita e clamp agli estremi
+    int start = selection.start;
+    int end = selection.end;
+
+    if (start < 0 || end < 0) {
+      // Nessuna selezione/caret non posizionato: inserisci alla fine
+      start = currentText.length;
+      end = currentText.length;
+    }
+
+    if (start > end) {
+      final tmp = start; start = end; end = tmp;
+    }
+
+    // Clamp agli estremi per evitare RangeError
+    if (start < 0) start = 0;
+    if (end < 0) end = 0;
+    if (start > currentText.length) start = currentText.length;
+    if (end > currentText.length) end = currentText.length;
+
     final newText = currentText.replaceRange(
-      selection.start,
-      selection.end,
+      start,
+      end,
       textToInsert,
     );
 
     _messageController.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(
-        offset: selection.start + textToInsert.length,
+        offset: start + textToInsert.length,
       ),
     );
   }

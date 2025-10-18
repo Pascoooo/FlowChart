@@ -8,6 +8,7 @@ import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
+import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/dialog_service/service_dialog.dart';
 import 'flowchart_canvas.dart';
@@ -323,42 +324,6 @@ class _WorkAreaState extends State<WorkArea>
     }
   }
 
-  // Reset totale delle variabili dichiarate, escludendo i parametri di funzione
-  Future<void> _handleResetAllVariables() async {
-    final flowchartBloc = context.read<FlowchartBloc>();
-    final flowchartState = flowchartBloc.state;
-    if (flowchartState is! FlowchartLoaded) return;
-
-    // Se il flowchart è 'main', non ci sono parametri da proteggere.
-    // Altrimenti, proteggi i parametri della firma della funzione.
-    final isMain = flowchartState.flowchart.name == 'main';
-    final protectedNames = isMain
-        ? <String>{}
-        : flowchartState.flowchart.signature.parameters
-            .map((p) => p.name)
-            .toSet();
-
-    final String title =
-        isMain ? 'Reset Tutte le Variabili' : 'Reset Variabili di Lavoro';
-    final String message = isMain
-        ? 'Questa azione rimuoverà tutte le variabili dichiarate. Procedere?'
-        : 'Questa azione rimuoverà tutte le variabili create dall\'utente, lasciando solo i parametri della funzione. Procedere?';
-
-    final confirmed = await AppDialogs.showConfirmationDialog(
-      context,
-      title: title,
-      message: message,
-      isDestructive: true,
-    );
-
-    if (confirmed == true && mounted) {
-      final variablesToKeep = flowchartState.flowchart.variables
-          .where((v) => protectedNames.contains(v.name))
-          .toList();
-      flowchartBloc.add(UpdateGlobalVariables(variablesToKeep));
-    }
-  }
-
   // Parser semplice di espressioni booleane legacy in elenco di clausole
   List<ConditionClause> _parseClausesFromExpression(String text) {
     final clauses = <ConditionClause>[];
@@ -420,13 +385,20 @@ class _WorkAreaState extends State<WorkArea>
     // Avvolge il canvas con un listener sul FileSystemBloc per caricare il contenuto del file attivo
     return BlocListener<FileSystemBloc, FileSystemState>(
       listenWhen: (prev, curr) {
-        // Ascolta cambiamenti dell'activeFileId o modifica della lista file
+        // Ascolta SOLO il cambio dell'activeFileId, evita reload su salvataggi (lista file)
         if (prev is FileSystemLoaded && curr is FileSystemLoaded) {
-          return prev.activeFileId != curr.activeFileId || prev.files != curr.files;
+          return prev.activeFileId != curr.activeFileId;
         }
         return curr is FileSystemLoaded;
       },
       listener: (context, state) {
+        // NUOVO: Non ricaricare il flowchart mentre siamo in debug per evitare di perdere lo stato in memoria
+        final dbg = context.read<DebugBloc>().state;
+        final isInDebug = dbg is DebugInProgress || dbg is DebugAwaitingInput || dbg is DebugError || dbg is DebugCompleted;
+        if (isInDebug) {
+          return; // ignora aggiornamenti del filesystem durante il debug
+        }
+
         if (state is FileSystemLoaded) {
           final activeId = state.activeFileId;
           if (activeId == null) return;
@@ -436,7 +408,7 @@ class _WorkAreaState extends State<WorkArea>
           );
           if (file == MyFile.empty) return;
 
-          // Carica il contenuto del file nel FlowchartBloc
+          // Carica il contenuto del file nel FlowchartBloc SOLO al cambio file
           context.read<FlowchartBloc>().add(
                 LoadFlowchart(jsonContent: file.content, fileName: file.name, fileId: file.fileId)
               );
@@ -477,7 +449,6 @@ class _WorkAreaState extends State<WorkArea>
                         onAddVariable: _handleAddVariable,
                         onEditVariable: _handleEditVariable,
                         onDeleteVariable: _handleDeleteVariable,
-                        onResetAllVariables: _handleResetAllVariables,
                       );
                     },
                   ),
@@ -545,7 +516,7 @@ class _WorkAreaContent extends StatelessWidget {
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -564,7 +535,6 @@ class _VariablesPanel extends StatelessWidget {
   final void Function(VariableScope) onAddVariable;
   final void Function(VariableDeclaration) onEditVariable;
   final void Function(VariableDeclaration) onDeleteVariable;
-  final VoidCallback onResetAllVariables;
 
   const _VariablesPanel({
     required this.variables,
@@ -572,7 +542,6 @@ class _VariablesPanel extends StatelessWidget {
     required this.onAddVariable,
     required this.onEditVariable,
     required this.onDeleteVariable,
-    required this.onResetAllVariables,
   });
 
   @override
@@ -602,30 +571,10 @@ class _VariablesPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: Text('Variabili',
-                    style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.w600)),
-              ),
-              Button(
-                onPressed: onResetAllVariables,
-                style: ButtonStyle(
-                  padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
-                  backgroundColor: WidgetStateProperty.all(Colors.red.withOpacity(0.08)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(FluentIcons.refresh, size: 14),
-                    SizedBox(width: 6),
-                    Text('Resetta tutte'),
-                  ],
-                ),
-              ),
-            ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+            child: Text('Variabili',
+                style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.w600)),
           ),
           Divider(
             style: DividerThemeData(
@@ -775,7 +724,7 @@ class _VariableDisplay extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: theme.accentColor.withOpacity(0.2),
+              color: theme.accentColor.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
@@ -858,7 +807,7 @@ class _InfoRulesButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),

@@ -1,11 +1,12 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
-import '../../../../blocs/project_bloc/project_bloc.dart';
-import 'debug_console.dart';
-import 'debug_mode/debug_mode.dart';
+import 'debug_console/debug_console_widget.dart';
+import 'debug_mode/debug_step_info_card.dart';
+import 'debug_mode/session_variables_panel.dart';
 import 'workarea.dart';
 
 /// 🐛 Debug Mode View - Modalità di debug con validazione runtime
@@ -34,6 +35,9 @@ class _DebugModeViewState extends State<DebugModeView>
   double _rightPanelWidth = 0.4;
   bool _isDraggingHorizontalDivider = false;
 
+  // ✅ NUOVO: Salva lo stato della griglia all'ingresso e lo ripristina all'uscita
+  bool _gridStateOnEnter = false;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +45,9 @@ class _DebugModeViewState extends State<DebugModeView>
         vsync: this, duration: const Duration(milliseconds: 300))
       ..forward();
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+
+    // Salva lo stato iniziale della griglia
+    _gridStateOnEnter = widget.showGrid;
   }
 
   @override
@@ -53,171 +60,290 @@ class _DebugModeViewState extends State<DebugModeView>
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
 
-    return FadeTransition(
-      opacity: _fade,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final totalWidth = constraints.maxWidth;
-          final rightWidth = totalWidth * _rightPanelWidth;
-          final leftWidth = totalWidth - rightWidth - 8;
+    return BlocListener<DebugBloc, DebugState>(
+      // ✅ FIXED: Selezione automatica del nodo corrente quando si avanza/retrocede
+      listener: (context, state) {
+        // NUOVO: sincronizza il flag di debug nel FlowchartBloc
+        final flowchartBloc = context.read<FlowchartBloc>();
+        if (state is DebugInProgress || state is DebugAwaitingInput) {
+          flowchartBloc.add(const SetDebugMode(true));
+        } else if (state is DebugInitial || state is DebugCompleted) {
+          flowchartBloc.add(const SetDebugMode(false));
+        }
 
-          return Row(
-            children: [
-              // Colonna sinistra - WorkArea + Console
-              SizedBox(
-                width: leftWidth,
-                child: Column(
-                  children: [
-                    // WorkArea sopra
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: WorkArea(
-                              repaintKey: widget.workareaKey,
-                              showGrid: widget.showGrid,
-                              onToggleGrid: widget.onToggleGrid,
-                              isReadOnly: true,
-                              allowDragInReadOnly: false,
+        // 🔄 NUOVO: quando entri/esci da un sottoprogramma, carica il flowchart corrente del DebugBloc nel canvas
+        if (state is DebugInProgress) {
+          final fcState = flowchartBloc.state;
+          // Aggiorna il flowchart mostrato se differente
+          if (fcState is FlowchartLoaded && fcState.flowchart.flowchartId != state.currentFlowchart.flowchartId) {
+            flowchartBloc.add(UpdateFlowchart(state.currentFlowchart));
+          }
+
+          // Calcola l'ID da selezionare: se currentIndex < 0, seleziona il primo del path (entry del callee)
+          String selectionId = '';
+          if (state.session.currentIndex >= 0) {
+            selectionId = state.currentNodeId;
+          } else {
+            if (state.session.debugPath.isNotEmpty) {
+              selectionId = state.session.debugPath.first;
+            }
+          }
+          if (selectionId.isNotEmpty) {
+            final refreshed = flowchartBloc.state;
+            if (refreshed is FlowchartLoaded && refreshed.selectedNodeId != selectionId) {
+              debugPrint('🎯 Auto-selezione: $selectionId');
+              flowchartBloc.add(SelectNode(selectionId));
+            }
+          }
+        } else if (state is DebugAwaitingInput) {
+          final fcState = flowchartBloc.state;
+          if (fcState is FlowchartLoaded && fcState.flowchart.flowchartId != state.currentFlowchart.flowchartId) {
+            flowchartBloc.add(UpdateFlowchart(state.currentFlowchart));
+          }
+
+          // Calcola l'ID da selezionare anche in attesa input
+          String selectionId = '';
+          if (state.session.currentIndex >= 0) {
+            selectionId = state.currentNodeId;
+          } else {
+            if (state.session.debugPath.isNotEmpty) {
+              selectionId = state.session.debugPath.first;
+            }
+          }
+          if (selectionId.isNotEmpty) {
+            final refreshed = flowchartBloc.state;
+            if (refreshed is FlowchartLoaded && refreshed.selectedNodeId != selectionId) {
+              debugPrint('🎯 Auto-selezione (await): $selectionId');
+              flowchartBloc.add(SelectNode(selectionId));
+            }
+          }
+        } else if (state is DebugInitial || state is DebugCompleted) {
+          // Ripristina lo stato della griglia quando si esce dalla modalità debug (sia con stop che con completamento)
+          if (widget.showGrid != _gridStateOnEnter) {
+            widget.onToggleGrid();
+          }
+        }
+      },
+      child: FadeTransition(
+        opacity: _fade,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final totalWidth = constraints.maxWidth;
+            final rightWidth = totalWidth * _rightPanelWidth;
+            final leftWidth = totalWidth - rightWidth - 8;
+
+            return Row(
+              children: [
+                // Colonna sinistra - WorkArea + Console
+                SizedBox(
+                  width: leftWidth,
+                  child: Column(
+                    children: [
+                      // WorkArea sopra
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: WorkArea(
+                                repaintKey: widget.workareaKey,
+                                showGrid: widget.showGrid,
+                                onToggleGrid: widget.onToggleGrid,
+                                isReadOnly: true,
+                                allowDragInReadOnly: false,
+                              ),
                             ),
-                          ),
 
-                          // Top Left - Step Info Card
-                          const Positioned(
-                            top: 24,
-                            left: 24,
-                            child: DebugStepInfoCard(),
-                          ),
-                        ],
+                            // Top Left - Step Info Card
+                            const Positioned(
+                              top: 24,
+                              left: 24,
+                              child: DebugStepInfoCard(),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
 
-                    // Divisore verticale ridimensionabile
-                    MouseRegion(
-                      cursor: SystemMouseCursors.resizeUpDown,
-                      child: GestureDetector(
-                        onVerticalDragUpdate: (details) {
-                          setState(() {
-                            _consoleHeight = (_consoleHeight - details.delta.dy).clamp(150.0, 500.0);
-                          });
-                        },
-                        onVerticalDragStart: (_) {
-                          setState(() => _isDraggingDivider = true);
-                        },
-                        onVerticalDragEnd: (_) {
-                          setState(() => _isDraggingDivider = false);
-                        },
-                        child: Container(
-                          height: 8,
-                          color: _isDraggingDivider
-                              ? theme.accentColor.withValues(alpha: 0.3)
-                              : theme.resources.dividerStrokeColorDefault,
-                          child: Center(
-                            child: Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: theme.resources.textFillColorTertiary,
-                                borderRadius: BorderRadius.circular(2),
+                      // Divisore verticale ridimensionabile
+                      MouseRegion(
+                        cursor: SystemMouseCursors.resizeUpDown,
+                        child: GestureDetector(
+                          onVerticalDragUpdate: (details) {
+                            setState(() {
+                              _consoleHeight = (_consoleHeight - details.delta.dy).clamp(150.0, 500.0);
+                            });
+                          },
+                          onVerticalDragStart: (_) {
+                            setState(() => _isDraggingDivider = true);
+                          },
+                          onVerticalDragEnd: (_) {
+                            setState(() => _isDraggingDivider = false);
+                          },
+                          child: Container(
+                            height: 8,
+                            color: _isDraggingDivider
+                                ? theme.accentColor.withValues(alpha: 0.3)
+                                : theme.resources.dividerStrokeColorDefault,
+                            child: Center(
+                              child: Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: theme.resources.textFillColorTertiary,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
 
-                    // Console interattiva sotto (SEMPRE DISPONIBILE per navigazione e comandi)
-                    BlocBuilder<FlowchartBloc, FlowchartState>(
-                      builder: (context, state) {
-                        if (state is! FlowchartLoaded || !state.isDebugMode) {
-                          return const SizedBox.shrink();
-                        }
+                      // Console interattiva sotto (SEMPRE DISPONIBILE per navigazione e comandi)
+                      BlocBuilder<DebugBloc, DebugState>(
+                        builder: (context, debugState) {
+                          // ✅ Mostra la console in tutti gli stati di debug
+                          final showConsole = debugState is DebugInProgress ||
+                              debugState is DebugAwaitingInput ||
+                              debugState is DebugError ||
+                              debugState is DebugCompleted;
+                          if (!showConsole) {
+                            return const SizedBox.shrink();
+                          }
 
-                        final currentNodeId = state.selectedNodeId;
-                        if (currentNodeId == null) return const SizedBox.shrink();
+                          // Se siamo in stato DebugCompleted, mostra un messaggio
+                          if (debugState is DebugCompleted) {
+                            return SizedBox(
+                              height: _consoleHeight,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: theme.resources.layerFillColorDefault,
+                                ),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        FluentIcons.completed,
+                                        size: 48,
+                                        color: theme.accentColor,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        debugState.message,
+                                        style: theme.typography.subtitle?.copyWith(
+                                          color: theme.accentColor,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 24),
+                                      FilledButton(
+                                        onPressed: () {
+                                          context.read<DebugBloc>().add(const DebugStop());
+                                        },
+                                        child: const Text('Chiudi Debug'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
 
-                        final currentNode = state.getNodeById(currentNodeId);
-                        if (currentNode == null) return const SizedBox.shrink();
+                          // Ottieni il flowchart corrente dal FlowchartBloc
+                          final flowchartState = context.read<FlowchartBloc>().state;
+                          if (flowchartState is! FlowchartLoaded) {
+                            return const SizedBox.shrink();
+                          }
 
-                        // Console SEMPRE visibile per permettere navigazione con comandi
-                        return SizedBox(
-                          height: _consoleHeight,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: theme.resources.layerFillColorDefault,
+                          // In caso di errore, mostra comunque la console senza richiedere il nodo corrente.
+                          if (debugState is DebugError) {
+                            return SizedBox(
+                              height: _consoleHeight,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: theme.resources.layerFillColorDefault,
+                                ),
+                                child: const DebugConsole(),
+                              ),
+                            );
+                          }
+
+                          // Per InProgress/AwaitingInput: usa il nodo corrente per inizializzare la console
+                          String? currentNodeId;
+                          if (debugState is DebugInProgress) {
+                            currentNodeId = debugState.currentNodeId;
+                          } else if (debugState is DebugAwaitingInput) {
+                            currentNodeId = debugState.currentNodeId;
+                          }
+
+                          // Mostra SEMPRE la console anche se currentNodeId è vuoto (es. appena entrati in sottoprogramma con index -1)
+                          return SizedBox(
+                            height: _consoleHeight,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: theme.resources.layerFillColorDefault,
+                              ),
+                              child: const DebugConsole(),
                             ),
-                            child: DebugConsole(
-                              currentNode: currentNode,
-                              flowchartId: state.flowchart.flowchartId,
-                              projectRepo: context.read<ProjectBloc>().projectRepository,
-                              allVariables: state.flowchart.variables,
-                              onCommandExecuted: () {
-                                // Avanza automaticamente dopo la valutazione di nodi decisionali/ciclo
-                                context.read<FlowchartBloc>().add(const DebugNextNode());
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
 
-              // Divisore orizzontale ridimensionabile
-              MouseRegion(
-                cursor: SystemMouseCursors.resizeLeftRight,
-                child: GestureDetector(
-                  onHorizontalDragUpdate: (details) {
-                    setState(() {
-                      final delta = details.delta.dx / totalWidth;
-                      _rightPanelWidth = (_rightPanelWidth - delta).clamp(0.2, 0.6);
-                    });
-                  },
-                  onHorizontalDragStart: (_) {
-                    setState(() => _isDraggingHorizontalDivider = true);
-                  },
-                  onHorizontalDragEnd: (_) {
-                    setState(() => _isDraggingHorizontalDivider = false);
-                  },
-                  child: Container(
-                    width: 8,
-                    color: _isDraggingHorizontalDivider
-                        ? theme.accentColor.withValues(alpha: 0.3)
-                        : theme.resources.dividerStrokeColorDefault,
-                    child: Center(
-                      child: Container(
-                        width: 4,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: theme.resources.textFillColorTertiary,
-                          borderRadius: BorderRadius.circular(2),
+                // Divisore orizzontale ridimensionabile
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeLeftRight,
+                  child: GestureDetector(
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        final delta = details.delta.dx / totalWidth;
+                        _rightPanelWidth = (_rightPanelWidth - delta).clamp(0.2, 0.6);
+                      });
+                    },
+                    onHorizontalDragStart: (_) {
+                      setState(() => _isDraggingHorizontalDivider = true);
+                    },
+                    onHorizontalDragEnd: (_) {
+                      setState(() => _isDraggingHorizontalDivider = false);
+                    },
+                    child: Container(
+                      width: 8,
+                      color: _isDraggingHorizontalDivider
+                          ? theme.accentColor.withValues(alpha: 0.3)
+                          : theme.resources.dividerStrokeColorDefault,
+                      child: Center(
+                        child: Container(
+                          width: 4,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: theme.resources.textFillColorTertiary,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-              // Colonna destra - Variabili di Sessione
-              SizedBox(
-                width: rightWidth,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: theme.resources.layerFillColorAlt,
-                  ),
-                  child: const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: SessionVariablesPanel(),
+                // Colonna destra - Variabili di Sessione
+                SizedBox(
+                  width: rightWidth,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: theme.resources.layerFillColorAlt,
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: SessionVariablesPanel(),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
-

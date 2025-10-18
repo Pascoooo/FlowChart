@@ -1,190 +1,173 @@
+// ============================================================================
+// 🎨 DEBUG CONSOLE - UI COMPONENT (Presentation Only)
+// ============================================================================
+//
+// RESPONSABILITÀ:
+// ✅ Mostrare la console di debug
+// ✅ Raccogliere input utente
+// ✅ Ascoltare stati del DebugBloc
+// ❌ NON esegue logica di business
+// ❌ NON accede al repository
+// ❌ NON gestisce variabili direttamente
+//
+// ============================================================================
+
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
-import '../../../../../blocs/flowchart_bloc/flowchart_event.dart';
-import '../../../../../blocs/flowchart_bloc/flowchart_state.dart';
+import '../../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 import 'console_models.dart';
 import 'console_entry_widget.dart';
-import 'debug_engine.dart';
+import 'debug_engine.dart'; // ✅ Ora usa la versione pulita
 
 class DebugConsole extends StatefulWidget {
-  final FlowNode currentNode;
-  final String flowchartId;
-  final dynamic projectRepo;
-  final List<VariableDeclaration> allVariables;
-  final VoidCallback onCommandExecuted;
-
-  const DebugConsole({
-    super.key,
-    required this.currentNode,
-    required this.flowchartId,
-    required this.projectRepo,
-    required this.allVariables,
-    required this.onCommandExecuted,
-  });
+  const DebugConsole({super.key});
 
   @override
   State<DebugConsole> createState() => _DebugConsoleState();
 }
 
 class _DebugConsoleState extends State<DebugConsole> {
-  late DebugEngine _engine;
+  DebugEngine? _engine;
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
 
   List<ConsoleEntry> _history = [];
-  bool _isWaitingForInput = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeEngine();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
+      _initializeEngine();
     });
   }
 
-  @override
-  void didUpdateWidget(covariant DebugConsole oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (widget.currentNode.id != oldWidget.currentNode.id) {
-      _initializeEngine();
-    }
-  }
-
   void _initializeEngine() {
-    final bloc = context.read<FlowchartBloc>();
-    final state = bloc.state;
+    final debugState = context.read<DebugBloc>().state;
+
+    // Consenti inizializzazione sia in DebugInProgress che in DebugAwaitingInput
+    if (debugState is! DebugInProgress && debugState is! DebugAwaitingInput) {
+      debugPrint('⚠️ Impossibile inizializzare console: non in debug');
+      return;
+    }
+
+    // Determina il nodo corrente e il flowchart corrente
+    final session = (debugState is DebugInProgress)
+        ? debugState.session
+        : (debugState as DebugAwaitingInput).session;
+
+    // FIX: se l'indice è negativo, attendi il primo Next
+    if (session.currentIndex < 0) {
+      debugPrint('⏳ Console in attesa: indice corrente = -1 (premi Next)');
+      return;
+    }
+
+    final flowchart = (debugState is DebugInProgress)
+        ? debugState.currentFlowchart
+        : (debugState as DebugAwaitingInput).currentFlowchart;
+
+    if (session.currentIndex >= session.debugPath.length) {
+      debugPrint('⚠️ Indice fuori range');
+      return;
+    }
+
+    final nodeId = session.debugPath[session.currentIndex];
+    final currentNode = flowchart.nodes.firstWhere(
+      (n) => n.id == nodeId,
+      orElse: () => throw StateError('Nodo non trovato: $nodeId'),
+    );
+
+    // Determina se siamo in un do-while re-entry
     bool isReentry = false;
-
-    if (state is FlowchartLoaded && widget.currentNode is DoWhileNode) {
-      final currentIndex = state.debugIndex;
-      if (currentIndex > 0 && state.debugPath.length > currentIndex) {
-        final prevId = state.debugPath[currentIndex - 1];
-        final currId = widget.currentNode.id;
-        final arrivedViaLoop = state.flowchart.edges.any(
-              (e) => e.from == prevId && e.to == currId && e.port == 'loop',
-        );
-        isReentry = arrivedViaLoop;
-      } else {
-        isReentry = false;
-      }
+    if (currentNode is DoWhileNode) {
+      isReentry = session.currentIndex > 0;
     }
 
-    bool isInSubprogram = false;
-    if (state is FlowchartLoaded) {
-      isInSubprogram = state.callStack.depth > 0;
-    }
+    // Determina se siamo in un sottoprogramma
+    final isInSubprogram = (debugState is DebugInProgress)
+        ? debugState.callStack.isNotEmpty
+        : false; // opzionale per AwaitingInput
 
     _engine = DebugEngine(
-      currentNode: widget.currentNode,
-      flowchartId: widget.flowchartId,
-      projectRepo: widget.projectRepo,
-      allVariables: widget.allVariables,
+      currentNode: currentNode,
       onHistoryUpdate: _handleHistoryUpdate,
-      onCommandExecuted: widget.onCommandExecuted,
-      onDebugExit: () {
-        context.read<FlowchartBloc>().add(const DebugExit());
+      onDebugNext: () => context.read<DebugBloc>().add(const DebugNext()),
+      onDebugPrev: () => context.read<DebugBloc>().add(const DebugPrevious()),
+      onDebugStop: () => context.read<DebugBloc>().add(const DebugStop()),
+      onVariablesUpdate: (vars) {
+        context.read<DebugBloc>().add(DebugUpdateVariables(vars));
       },
-      onDebugNext: () {
-        context.read<FlowchartBloc>().add(const DebugNextNode());
+      getVariables: () {
+        final s = context.read<DebugBloc>().state;
+        if (s is DebugInProgress) return s.session.variables;
+        if (s is DebugAwaitingInput) return s.session.variables;
+        return <String, dynamic>{};
       },
-      onDebugPrev: () {
-        context.read<FlowchartBloc>().add(const DebugPrevNode());
-      },
-      onDecisionEvaluated: (String nodeId, bool result) {
-        context.read<FlowchartBloc>().add(DebugDecisionEvaluated(nodeId, result));
-      },
+      allowedAssignmentTargets: currentNode is AssignmentNode
+          ? (currentNode).assignments.map((a) => a.target).toSet()
+          : null,
       isDoWhileReentry: isReentry,
-      onStepIntoSubprogram: (ProcessNode node) {
-        context.read<FlowchartBloc>().add(DebugStepIntoSubprogram(node));
-      },
-      onReturnFromSubprogram: ({dynamic returnValue}) {
-        _handleReturnFromSubprogram(returnValue: returnValue);
-      },
       isInSubprogram: isInSubprogram,
+      allVariables: flowchart.variables, // ✅ per type-check
+      // 🆕 Guardie runtime: consultano lo stato corrente del DebugBloc al momento dell'esecuzione del comando
+      canNext: () {
+        final s = context.read<DebugBloc>().state;
+        if (s is DebugError && s.isBlocking) return false;
+        if (s is DebugInProgress && s.isProcessing) return false;
+        if (s is DebugAwaitingInput) {
+          // Consenti Next solo se tutte le assegnazioni runtime sono state completate
+          final session = s.session;
+          if (session.currentIndex >= session.debugPath.length || session.currentIndex < 0) return false;
+          final nodeId = session.debugPath[session.currentIndex];
+          final node = s.currentFlowchart.nodes.firstWhere(
+            (n) => n.id == nodeId,
+            orElse: () => throw StateError('Nodo non trovato: $nodeId'),
+          );
+          if (node is AssignmentNode) {
+            final vars = session.variables;
+            final hasPending = node.assignments.any((a) {
+              final expr = a.expression.trim();
+              if (expr.isNotEmpty) return false; // non è runtime assignment
+              final name = a.target.trim();
+              final hasValue = vars.containsKey(name) && vars[name] != null;
+              return !hasValue; // pending se manca valore
+            });
+            return !hasPending; // Next consentito solo se nessun pending
+          }
+          // Per altri nodi in AwaitingInput (eventuali): mantieni Next disabilitato
+          return false;
+        }
+        return true;
+      },
+      canPrev: () {
+        final s = context.read<DebugBloc>().state;
+        if (s is DebugAwaitingInput) return false; // non tornare indietro mentre si attende input su questo nodo
+        if (s is DebugInProgress) {
+          if (s.isProcessing) return false;
+          if (s.session.currentIndex <= 0) return false; // 🔒 Prev disabilitato su Start o prima
+        }
+        return true;
+      },
     );
-  }
-
-  Future<void> _handleReturnFromSubprogram({dynamic returnValue}) async {
-    final bloc = context.read<FlowchartBloc>();
-    final state = bloc.state;
-
-    if (state is! FlowchartLoaded || state.callStack.isEmpty) return;
-
-    try {
-      final sessionVars = await widget.projectRepo.getDebugVariables(
-        projectId: widget.flowchartId,
-      );
-
-      final returnVar = widget.allVariables
-          .where((v) => v.scope == VariableScope.output)
-          .firstOrNull;
-
-      dynamic finalReturnValue = returnValue;
-      if (returnVar != null && sessionVars.containsKey(returnVar.name)) {
-        finalReturnValue = sessionVars[returnVar.name];
-      }
-
-      final currentFrame = state.callStack.current;
-      if (currentFrame?.callerNodeId == null) return;
-
-      final callerFlowchart = state.projectFlowcharts.values.firstWhere(
-            (f) => f.nodes.any((n) => n.id == currentFrame!.callerNodeId),
-        orElse: () => state.flowchart,
-      );
-
-      final callerNode = callerFlowchart.nodes
-          .firstWhere((n) => n.id == currentFrame!.callerNodeId);
-
-      if (callerNode is ProcessNode &&
-          callerNode.resultTarget != null &&
-          callerNode.resultTarget!.trim().isNotEmpty &&
-          finalReturnValue != null) {
-
-        final resultVar = callerNode.resultTarget!.trim();
-
-        await widget.projectRepo.updateDebugVariables(
-          projectId: callerFlowchart.flowchartId,
-          variables: {resultVar: finalReturnValue},
-        );
-      }
-
-      bloc.add(DebugReturnFromSubprogram(returnValue: finalReturnValue));
-
-    } catch (e) {
-      debugPrint('⚠️ Errore nel ritorno dal sottoprogramma: $e');
-    }
   }
 
   void _handleHistoryUpdate(List<ConsoleEntry> history) {
     if (!mounted) return;
     setState(() {
       _history = history;
-      _isWaitingForInput = _engine.isWaitingForInput;
     });
     _scrollToBottom();
   }
 
   void _handleInput(String input) {
     final trimmedInput = input.trim();
-
-    if (trimmedInput.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _focusNode.requestFocus();
-        }
-      });
-      return;
-    }
+    if (trimmedInput.isEmpty) return;
 
     _inputController.clear();
-    _engine.handleInput(trimmedInput);
+    _engine?.handleInput(trimmedInput);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -198,7 +181,7 @@ class _DebugConsoleState extends State<DebugConsole> {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
@@ -217,29 +200,127 @@ class _DebugConsoleState extends State<DebugConsole> {
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.brightness == Brightness.dark
-            ? const Color(0xFF1E1E1E)
-            : const Color(0xFFF3F3F3),
-        border: Border(
-          top: BorderSide(
-            color: theme.resources.dividerStrokeColorDefault,
-            width: 1,
+    // Ascolta i cambiamenti dello stato del DebugBloc
+    return BlocListener<DebugBloc, DebugState>(
+      listener: (context, state) {
+        if (state is DebugInProgress) {
+          // Quando cambia il nodo corrente, reinizializza l'engine
+          final session = state.session;
+          if (session.currentIndex >= 0 && session.currentIndex < session.debugPath.length) {
+            final nodeId = session.debugPath[session.currentIndex];
+            FlowNode? currentNode;
+            try {
+              currentNode = state.currentFlowchart.nodes.firstWhere(
+                (n) => n.id == nodeId,
+              );
+            } catch (_) {
+              currentNode = null;
+            }
+
+            if (currentNode == null) {
+              // Può succedere temporaneamente dopo un Return: aggiorna engine senza crash
+              debugPrint('⚠️ Nodo $nodeId non trovato nel flowchart corrente, reinizializzo engine');
+              _initializeEngine();
+            } else {
+              // Se il nodo è cambiato, reinizializza
+              if (_engine?.currentNode.id != currentNode.id) {
+                _initializeEngine();
+              }
+            }
+          }
+
+          // 🆕 Propaga il risultato dell'ultimo step nella console
+          if (state.lastMessage != null || (state.lastUpdatedVariables != null && state.lastUpdatedVariables!.isNotEmpty)) {
+            _engine?.showExecutionResult(
+              success: !(state.lastMessageIsError),
+              message: state.lastMessage,
+              updatedVariables: state.lastUpdatedVariables,
+            );
+          }
+        } else if (state is DebugAwaitingInput) {
+          // In attesa input su nodo (es. Assignment): assicurati che la console sia inizializzata per questo nodo
+          final session = state.session;
+          if (session.currentIndex >= 0 && session.currentIndex < session.debugPath.length) {
+            final nodeId = session.debugPath[session.currentIndex];
+            if (_engine?.currentNode.id != nodeId) {
+              _initializeEngine();
+            }
+          }
+        } else if (state is DebugError) {
+          // Stampa SEMPRE l'errore in console (sfondo rosso)
+          _engine?.showError(state.message);
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.brightness == Brightness.dark
+              ? const Color(0xFF1E1E1E)
+              : const Color(0xFFF3F3F3),
+          border: Border(
+            top: BorderSide(
+              color: theme.resources.dividerStrokeColorDefault,
+              width: 1,
+            ),
           ),
         ),
-      ),
-      child: Column(
-        children: [
-          _buildHeader(theme),
-          _buildHistoryArea(theme),
-          _buildInputArea(theme),
-        ],
+        child: Column(
+          children: [
+            // Header reattivo: disabilita Next su errore bloccante
+            BlocBuilder<DebugBloc, DebugState>(
+              builder: (context, dbgState) {
+                bool disableNext = false;
+                bool disablePrev = false;
+                if (dbgState is DebugError && dbgState.isBlocking) {
+                  disableNext = true;
+                  disablePrev = true;
+                } else if (dbgState is DebugAwaitingInput) {
+                  // Abilita Next SOLO se tutte le assegnazioni runtime sono state completate
+                  final session = dbgState.session;
+                  if (session.currentIndex >= 0 && session.currentIndex < session.debugPath.length) {
+                    final nodeId = session.debugPath[session.currentIndex];
+                    final node = dbgState.currentFlowchart.nodes.firstWhere(
+                      (n) => n.id == nodeId,
+                      orElse: () => throw StateError('Nodo non trovato: $nodeId'),
+                    );
+                    if (node is AssignmentNode) {
+                      final vars = session.variables;
+                      final hasPending = node.assignments.any((a) {
+                        final expr = a.expression.trim();
+                        if (expr.isNotEmpty) return false;
+                        final name = a.target.trim();
+                        final hasValue = vars.containsKey(name) && vars[name] != null;
+                        return !hasValue;
+                      });
+                      disableNext = hasPending;
+                    } else {
+                      disableNext = true; // altri casi di AwaitingInput
+                    }
+                  } else {
+                    disableNext = true;
+                  }
+                  disablePrev = true; // Prev disabilitato in attesa input
+                } else if (dbgState is DebugInProgress) {
+                  if (dbgState.isProcessing) {
+                    disableNext = true; // elaborazione in corso: Next disabilitato
+                    disablePrev = true; // Prev disabilitato durante elaborazione
+                  }
+                  // 🔒 Prev disabilitato su indice <= 0 (Start o prima)
+                  if (dbgState.session.currentIndex <= 0) {
+                    disablePrev = true;
+                  }
+                }
+                return _buildHeader(theme, disableNextNext: disableNext, disablePrevPrev: disablePrev);
+              },
+            ),
+            _buildHistoryArea(theme),
+            _buildInputArea(theme),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildHeader(FluentThemeData theme) {
+  Widget _buildHeader(FluentThemeData theme, {bool disableNextNext = false, bool disablePrevPrev = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -270,8 +351,8 @@ class _DebugConsoleState extends State<DebugConsole> {
           const Spacer(),
           IconButton(
             icon: const Icon(FluentIcons.chevron_left, size: 14),
-            onPressed: () {
-              context.read<FlowchartBloc>().add(const DebugPrevNode());
+            onPressed: disablePrevPrev ? null : () {
+              context.read<DebugBloc>().add(const DebugPrevious());
             },
             style: ButtonStyle(
               padding: WidgetStateProperty.all(const EdgeInsets.all(6)),
@@ -280,8 +361,8 @@ class _DebugConsoleState extends State<DebugConsole> {
           const SizedBox(width: 4),
           IconButton(
             icon: const Icon(FluentIcons.chevron_right, size: 14),
-            onPressed: () {
-              context.read<FlowchartBloc>().add(const DebugNextNode());
+            onPressed: disableNextNext ? null : () {
+              context.read<DebugBloc>().add(const DebugNext());
             },
             style: ButtonStyle(
               padding: WidgetStateProperty.all(const EdgeInsets.all(6)),
@@ -291,7 +372,7 @@ class _DebugConsoleState extends State<DebugConsole> {
           IconButton(
             icon: const Icon(FluentIcons.chrome_close, size: 14),
             onPressed: () {
-              context.read<FlowchartBloc>().add(const DebugExit());
+              context.read<DebugBloc>().add(const DebugStop());
             },
             style: ButtonStyle(
               padding: WidgetStateProperty.all(const EdgeInsets.all(6)),
@@ -349,9 +430,7 @@ class _DebugConsoleState extends State<DebugConsole> {
             child: TextBox(
               controller: _inputController,
               focusNode: _focusNode,
-              placeholder: _isWaitingForInput
-                  ? 'Inserisci valore...'
-                  : 'Usa "help" per visualizzare i comandi disponibili',
+              placeholder: 'Usa "help" per visualizzare i comandi disponibili',
               enabled: true,
               style: const TextStyle(
                 fontFamily: 'Consolas',

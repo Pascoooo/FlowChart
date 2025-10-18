@@ -1,8 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
-import '../../../../../blocs/flowchart_bloc/flowchart_state.dart';
+import '../../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 
 /// 📊 Step Info Card - Mostra il progresso corrente del debug
 class DebugStepInfoCard extends StatelessWidget {
@@ -12,9 +11,9 @@ class DebugStepInfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
 
-    return BlocBuilder<FlowchartBloc, FlowchartState>(
+    return BlocBuilder<DebugBloc, DebugState>(
       builder: (context, state) {
-        if (state is FlowchartLoaded && state.isDebugMode) {
+        if (state is DebugInProgress) {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -42,7 +41,7 @@ class DebugStepInfoCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'Step ${state.debugIndex + 1} / ${state.debugPath.length}',
+                  'Step ${state.session.currentIndex + 1} / ${state.session.debugPath.length}',
                   style: TextStyle(
                     color: theme.brightness == Brightness.light
                         ? Colors.white

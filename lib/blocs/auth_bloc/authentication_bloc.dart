@@ -3,6 +3,7 @@ import 'package:bloc/bloc.dart';
 import 'package:user_repository/user_repository.dart';
 import 'authentication_event.dart';
 import 'authentication_state.dart';
+import 'package:project_repository/project_repository.dart';
 
 class AuthenticationBloc
     extends Bloc<AuthenticationEvent, AuthenticationState> {
@@ -60,6 +61,15 @@ class AuthenticationBloc
       Emitter<AuthenticationState> emit) async {
     emit(state.copyWith(isLoading: true, errorMessage: null));
     try {
+      final uid = state.user.userId;
+      if (uid.isNotEmpty) {
+        try {
+          final rtdbService = RtdbSessionService(uid: uid);
+          await rtdbService.clearAllSessions();
+        } catch (_) {
+        }
+      }
+
       await _userRepository.signOut();
     } catch (e) {
       final errorMessage = e is AuthenticationException ? e.message : 'Errore durante il logout.';

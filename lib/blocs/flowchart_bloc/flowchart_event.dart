@@ -135,22 +135,6 @@ class ClearHistory extends FlowchartEvent {}
 
 class ClearFlowchartCache extends FlowchartEvent {}
 
-class DebugFlowchart extends FlowchartEvent {
-  const DebugFlowchart();
-}
-
-class DebugNextNode extends FlowchartEvent {
-  const DebugNextNode();
-}
-
-class DebugPrevNode extends FlowchartEvent {
-  const DebugPrevNode();
-}
-
-class DebugExit extends FlowchartEvent {
-  const DebugExit();
-}
-
 class ResetCanvasAndVariables extends FlowchartEvent {
   const ResetCanvasAndVariables();
 }
@@ -215,18 +199,15 @@ class StartResetFromNodeSelection extends FlowchartEvent {
   const StartResetFromNodeSelection();
 }
 
-class DebugBranchSelected extends FlowchartEvent {
-  final bool result; // true -> ramo 'true', false -> ramo 'false'
-  const DebugBranchSelected(this.result);
-}
+// 🟠 FIX MAGGIORE #7: Evento per gestire il debug mode
+/// Imposta o disattiva la modalità debug per bloccare l'editing
+class SetDebugMode extends FlowchartEvent {
+  final bool isDebugMode;
 
-class DebugDecisionEvaluated extends FlowchartEvent {
-  final String nodeId;
-  final bool result; // true/false outcome evaluated at this decision node
-  const DebugDecisionEvaluated(this.nodeId, this.result);
+  const SetDebugMode(this.isDebugMode);
 
   @override
-  List<Object?> get props => [nodeId, result];
+  List<Object> get props => [isDebugMode];
 }
 
 /// Evento per chiudere un ciclo creando un arco di ritorno al nodo loop
@@ -277,25 +258,6 @@ class LoadProjectFlowcharts extends FlowchartEvent {
   List<Object?> get props => [flowcharts];
 }
 
-/// 🆕 NUOVO: Entra nel sottoprogramma chiamato (step into)
-class DebugStepIntoSubprogram extends FlowchartEvent {
-  final ProcessNode callNode;
-
-  const DebugStepIntoSubprogram(this.callNode);
-
-  @override
-  List<Object?> get props => [callNode];
-}
-
-/// 🆕 NUOVO: Ritorna dal sottoprogramma al chiamante
-class DebugReturnFromSubprogram extends FlowchartEvent {
-  final dynamic returnValue;
-
-  const DebugReturnFromSubprogram({this.returnValue});
-
-  @override
-  List<Object?> get props => [returnValue];
-}
 
 class ResetFromNode extends FlowchartEvent {
   final String nodeId;

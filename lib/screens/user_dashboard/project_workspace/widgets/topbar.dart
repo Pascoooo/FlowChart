@@ -267,13 +267,32 @@ class _AdvancedTopBar extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: onEdit),
-                      const SizedBox(width: 8),
-                      IconButton(icon: const Icon(Icons.download, size: 20), onPressed: onExport),
-                    ],
+                  BlocBuilder<FlowchartBloc, FlowchartState>(
+                    builder: (context, flowchartState) {
+                      final bool disableUI = flowchartState is FlowchartLoaded && flowchartState.isConnectorModeActive;
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedOpacity(
+                            opacity: disableUI ? 0.4 : 1.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              icon: const Icon(Icons.edit, size: 20),
+                              onPressed: disableUI ? null : onEdit,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          AnimatedOpacity(
+                            opacity: disableUI ? 0.4 : 1.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              icon: const Icon(Icons.download, size: 20),
+                              onPressed: disableUI ? null : onExport,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -284,15 +303,17 @@ class _AdvancedTopBar extends StatelessWidget {
                       return const SizedBox.shrink();
                     }
 
+                    final bool disableUI = flowchartState.isConnectorModeActive;
+
                     final hasEndNode = flowchartState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
                     // REQUISITO: Il debug può partire solo da 'main', non dai sottoprogrammi.
-                    final isPlayEnabled = flowchartState.flowchart.isMain && hasEndNode;
+                    final isPlayEnabled = flowchartState.flowchart.isMain && hasEndNode && !disableUI;
 
                     final nodes = flowchartState.flowchart.nodes;
                     // REQUISITO: Logica di reset differenziata per main e sottoprogrammi
                     final bool hasOnlyStartOrHeader = nodes.length == 1 &&
                         (nodes.first.kind == FlowNodeKind.start || nodes.first.kind == FlowNodeKind.functionHeader);
-                    final bool isResetEnabled = !hasOnlyStartOrHeader;
+                    final bool isResetEnabled = !hasOnlyStartOrHeader && !disableUI;
 
                     final selectedId = flowchartState.selectedNodeId;
                     FlowNode? selectedNode = selectedId != null ? flowchartState.getNodeById(selectedId) : null;
@@ -311,8 +332,9 @@ class _AdvancedTopBar extends StatelessWidget {
                         isDeletionEnabled = flowchartState.getOutgoingEdges(selectedNode.id).isEmpty;
                       }
                     }
+                    isDeletionEnabled = isDeletionEnabled && !disableUI;
 
-                    return Row(
+                    final centerRow = Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Tooltip(
@@ -329,7 +351,15 @@ class _AdvancedTopBar extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const UndoRedoControls(),
+                        // Disabilita gli undo/redo quando in modalità connettore/reset
+                        AnimatedOpacity(
+                          opacity: disableUI ? 0.4 : 1.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: AbsorbPointer(
+                            absorbing: disableUI,
+                            child: const UndoRedoControls(),
+                          ),
+                        ),
                         const SizedBox(width: 8),
                         Tooltip(
                           message: 'Resetta flowchart',
@@ -367,6 +397,11 @@ class _AdvancedTopBar extends StatelessWidget {
                           ),
                         ),
                       ],
+                    );
+
+                    return AbsorbPointer(
+                      absorbing: disableUI,
+                      child: centerRow,
                     );
                   },
                 ),

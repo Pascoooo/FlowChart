@@ -931,4 +931,53 @@ class GenericDialogs {
       },
     );
   }
+
+  /// Dialog per avvisare l'utente della disattivazione della griglia
+  static Future<Map<String, dynamic>?> showGridWarningDialog(BuildContext context) async {
+    final theme = FluentTheme.of(context);
+    bool dontShowAgain = false;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => ContentDialog(
+          title: const Row(
+            children: [
+              Icon(FluentIcons.info, size: 20),
+              SizedBox(width: 8),
+              Text('Modalità Debug'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'La griglia verrà disattivata automaticamente per una migliore visibilità durante il debug. '
+                'Verrà ripristinata al termine della sessione di debug.',
+              ),
+              const SizedBox(height: 16),
+              Checkbox(
+                checked: dontShowAgain,
+                onChanged: (value) => setState(() => dontShowAgain = value ?? false),
+                content: const Text('Non mostrare più questo messaggio'),
+              ),
+            ],
+          ),
+          actions: [
+            Button(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Annulla'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, {
+                'dontShowAgain': dontShowAgain,
+              }),
+              child: const Text('Continua'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

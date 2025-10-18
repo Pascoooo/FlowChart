@@ -21,9 +21,9 @@ class GridPainter extends CustomPainter {
     final isDark = theme.brightness == Brightness.dark;
     return GridPainter(
       minorColor: (isDark ? Colors.white : Colors.black)
-          .withOpacity(isDark ? 0.14 : 0.10),
+          .withValues(alpha: isDark ? 0.14 : 0.10),
       majorColor: (isDark ? Colors.white : Colors.black)
-          .withOpacity(isDark ? 0.30 : 0.18),
+          .withValues(alpha: isDark ? 0.30 : 0.18),
     );
   }
 
@@ -103,7 +103,7 @@ class ConnectionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = (theme.typography.body?.color ?? Colors.black).withOpacity(0.5)
+      ..color = (theme.typography.body?.color ?? Colors.black).withValues(alpha: 0.5)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -159,8 +159,26 @@ class ConnectionPainter extends CustomPainter {
           endPoint = _getIntersectionPointWithRect(startPoint, endCenter, toNode);
         }
 
-        // ✨ NUOVO: per il do-while ramo 'true' disegna un percorso ortogonale sul lato sinistro
-        if (fromNode.kind == FlowNodeKind.doWhileLoop && (edge.port == 'true' || edge.port == 'doWhileStart')) {
+        // ✨ NUOVO: per gli archi di chiusura ciclo ('loop') disegna una L dal centro del blocco alla punta sinistra del rombo
+        if (edge.port == 'loop' && (toNode.kind == FlowNodeKind.whileLoop || toNode.kind == FlowNodeKind.doWhileLoop)) {
+          // Partenza dal centro del blocco finale
+          final startCenter = Offset(
+              fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height / 2);
+          // Punta sinistra del rombo del ciclo
+          final leftTip = Offset(toNode.x, toNode.y + toNode.height / 2);
+          // Clearance verso sinistra per instradare la L senza sovrapporsi
+          const clearance = 24.0;
+          final viaX = min(startCenter.dx, leftTip.dx) - clearance;
+          final points = <Offset>[
+            startCenter,
+            Offset(viaX, startCenter.dy), // orizzontale verso sinistra dalla metà del blocco
+            Offset(viaX, leftTip.dy),     // verticale fino all'altezza della punta sinistra del rombo
+            leftTip,                      // entra nella punta sinistra del rombo
+          ];
+          _drawOrthogonalArrow(canvas, paint, points);
+        }
+        // ✨ per il do-while ramo 'true' disegna un percorso ortogonale sul lato sinistro
+        else if (fromNode.kind == FlowNodeKind.doWhileLoop && (edge.port == 'true' || edge.port == 'doWhileStart')) {
           // Spigolo sinistro del rombo do-while
           final startLeft = Offset(fromNode.x, fromNode.y + fromNode.height / 2);
           // Lato sinistro del blocco di inizio corpo
@@ -291,7 +309,7 @@ class ConnectionPainter extends CustomPainter {
     canvas.drawRRect(
       rrect,
       Paint()
-        ..color = theme.inactiveColor.withOpacity(0.5)
+        ..color = theme.inactiveColor.withValues(alpha: 0.5)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0,
     );
@@ -315,7 +333,7 @@ class ConnectionPainter extends CustomPainter {
     )..layout();
 
     const padding = 6.0;
-    const offsetFromNode = 12.0;
+    // const offsetFromNode = 12.0; // rimosso: non usato
     Offset labelPos;
 
     // Posiziona l'etichetta sopra il nodo per l'arco di ritorno
@@ -337,7 +355,7 @@ class ConnectionPainter extends CustomPainter {
     canvas.drawRRect(
       rrect,
       Paint()
-        ..color = theme.inactiveColor.withOpacity(0.5)
+        ..color = theme.inactiveColor.withValues(alpha: 0.5)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0,
     );

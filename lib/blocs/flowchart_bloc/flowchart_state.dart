@@ -28,50 +28,33 @@ class FlowchartActionFailure extends FlowchartState {
 class FlowchartLoaded extends FlowchartState {
   final Flowchart flowchart;
   final String? selectedNodeId;
-  final bool isDebugMode;
-  final List<String> debugPath;
-  final int debugIndex;
 
-  // ⚠️ NUOVO: Traccia se è la prima volta che entriamo in debug (per lo zoom)
-  final bool isDebugJustStarted;
-
-  // ✨ NUOVE PROPRIETÀ PER LA MODALITÀ CONNETTORE
+  // ✨ PROPRIETÀ PER LA MODALITÀ CONNETTORE
   final bool isConnectorModeActive;
-  final String? connectorSourceNodeId; // L'ID del nodo da cui è partita l'azione
-  final Set<String> selectedConnectorNodeIds; // Gli ID dei nodi foglia selezionati
-  final ConnectorPurpose? connectorPurpose; // ✨ NUOVO: scopo della modalità connettore
+  final String? connectorSourceNodeId;
+  final Set<String> selectedConnectorNodeIds;
+  final ConnectorPurpose? connectorPurpose;
 
-  // NEW: Risultati decisione valutati ma non ancora applicati (nodeId -> result)
-  final Map<String, bool> decisionSelections;
-
-  // 🆕 NUOVO: Stack di chiamate per sottoprogrammi
-  final CallStack callStack;
-
-  // 🆕 NUOVO: Tutti i flowchart del progetto (per risolvere le chiamate)
+  // 🆕 Tutti i flowchart del progetto (per riferimenti)
   final Map<String, Flowchart> projectFlowcharts;
+
+  // 🟠 FIX MAGGIORE #7: Flag per bloccare editing durante debug
+  final bool isDebugMode;
 
   static const _uuid = Uuid();
 
   const FlowchartLoaded({
     required this.flowchart,
     this.selectedNodeId,
-    this.isDebugMode = false,
-    this.debugPath = const [],
-    this.debugIndex = 0,
-    this.isDebugJustStarted = false,
-    // ✨ INIZIALIZZA LE NUOVE PROPRIETÀ
     this.isConnectorModeActive = false,
     this.connectorSourceNodeId,
     this.selectedConnectorNodeIds = const {},
-    this.connectorPurpose, // ✨ NUOVO
-    this.decisionSelections = const {}, // NEW default
-    this.callStack = const CallStack(), // 🆕 NUOVO
-    this.projectFlowcharts = const {}, // 🆕 NUOVO
+    this.connectorPurpose,
+    this.projectFlowcharts = const {},
+    this.isDebugMode = false,
   });
 
   factory FlowchartLoaded.empty({String? fileName}) {
-    // Nota: la factory 'empty' non ha bisogno delle nuove proprietà
-    // perché i loro valori di default sono già corretti.
     return FlowchartLoaded(
       flowchart: Flowchart(
         flowchartId: _uuid.v4(),
@@ -310,6 +293,65 @@ class FlowchartLoaded extends FlowchartState {
     return visited;
   }
 
+  /// Restituisce gli ID dei nodi do-while che non hanno ancora il collegamento di inizio corpo ('true' o legacy 'doWhileStart').
+  List<String> unresolvedDoWhileIds() {
+    final ids = <String>[];
+    for (final n in flowchart.nodes) {
+      if (n.kind != FlowNodeKind.doWhileLoop) continue;
+      final hasBody = flowchart.edges.any((e) => e.from == n.id && (e.port == 'true' || e.port == 'doWhileStart'));
+      if (!hasBody) ids.add(n.id);
+    }
+    return ids;
+  }
+
+  /// Verifica se esistono candidati validi per l'inizio del corpo di un do-while.
+  /// Candidati: nodi che possono raggiungere il do-while, esclusi Start e il do-while stesso.
+  bool hasEligibleDoWhileBodyCandidates(String doWhileNodeId) {
+    final candidates = nodesThatCanReach(doWhileNodeId)
+      ..removeWhere((id) {
+        final n = getNodeById(id);
+        return n == null || n.kind == FlowNodeKind.start || id == doWhileNodeId;
+      });
+    return candidates.isNotEmpty;
+  }
+
+  /// Trova l'arco 'true' del while (inizio del corpo), se presente.
+  FlowchartEdge? getWhileTrueEdge(String whileNodeId) {
+    try {
+      return flowchart.edges.firstWhere((e) => e.from == whileNodeId && e.port == 'true');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Calcola i nodi del corpo del while: BFS a partire dall'edge 'true', ignorando archi 'loop'.
+  Set<String> whileBodyNodes(String whileNodeId) {
+    final startEdge = getWhileTrueEdge(whileNodeId);
+    if (startEdge == null) return <String>{};
+
+    final visited = <String>{};
+    final queue = <String>[startEdge.to];
+
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      if (!visited.add(current)) continue;
+
+      for (final e in flowchart.edges) {
+        if (e.from == current && e.port != 'loop') {
+          queue.add(e.to);
+        }
+      }
+    }
+    return visited;
+  }
+
+  /// Verifica se esiste almeno un arco di chiusura del while (port 'loop') da un nodo del corpo verso il while.
+  bool whileHasLoopClosure(String whileNodeId) {
+    final body = whileBodyNodes(whileNodeId);
+    if (body.isEmpty) return false;
+    return flowchart.edges.any((e) => e.port == 'loop' && e.to == whileNodeId && body.contains(e.from));
+  }
+
   factory FlowchartLoaded.fromJson(String jsonString) {
     if (jsonString.isEmpty) {
       return FlowchartLoaded.empty();
@@ -349,40 +391,24 @@ class FlowchartLoaded extends FlowchartState {
   FlowchartLoaded copyWith({
     Flowchart? flowchart,
     String? selectedNodeId,
-    bool clearSelection = false,
-    bool? isDebugMode,
-    List<String>? debugPath,
-    int? debugIndex,
-    bool? isDebugJustStarted,
-    // ✨ GESTISCI LE NUOVE PROPRIETÀ NEL copyWith
     bool? isConnectorModeActive,
     String? connectorSourceNodeId,
     Set<String>? selectedConnectorNodeIds,
-    bool clearConnectorSource = false, // Utility per resettare il sourceId a null
-    Map<String, bool>? decisionSelections,
     ConnectorPurpose? connectorPurpose,
-    CallStack? callStack, // 🆕 NUOVO
-    Map<String, Flowchart>? projectFlowcharts, // 🆕 NUOVO
+    Map<String, Flowchart>? projectFlowcharts,
+    bool? isDebugMode,
+    bool clearSelection = false,
+    bool clearConnectorSource = false,
   }) {
     return FlowchartLoaded(
       flowchart: flowchart ?? this.flowchart,
-      selectedNodeId:
-          clearSelection ? null : (selectedNodeId ?? this.selectedNodeId),
-      isDebugMode: isDebugMode ?? this.isDebugMode,
-      debugPath: debugPath ?? this.debugPath,
-      debugIndex: debugIndex ?? this.debugIndex,
-      isDebugJustStarted: isDebugJustStarted ?? this.isDebugJustStarted,
-      // ✨ GESTISCI LE NUOVE PROPRIETÀ NEL copyWith
+      selectedNodeId: clearSelection ? null : (selectedNodeId ?? this.selectedNodeId),
       isConnectorModeActive: isConnectorModeActive ?? this.isConnectorModeActive,
-      connectorSourceNodeId: clearConnectorSource
-          ? null
-          : (connectorSourceNodeId ?? this.connectorSourceNodeId),
-      selectedConnectorNodeIds:
-          selectedConnectorNodeIds ?? this.selectedConnectorNodeIds,
-      decisionSelections: decisionSelections ?? this.decisionSelections,
+      connectorSourceNodeId: clearConnectorSource ? null : (connectorSourceNodeId ?? this.connectorSourceNodeId),
+      selectedConnectorNodeIds: selectedConnectorNodeIds ?? this.selectedConnectorNodeIds,
       connectorPurpose: connectorPurpose ?? this.connectorPurpose,
-      callStack: callStack ?? this.callStack, // 🆕 NUOVO
-      projectFlowcharts: projectFlowcharts ?? this.projectFlowcharts, // 🆕 NUOVO
+      projectFlowcharts: projectFlowcharts ?? this.projectFlowcharts,
+      isDebugMode: isDebugMode ?? this.isDebugMode,
     );
   }
 
@@ -395,17 +421,12 @@ class FlowchartLoaded extends FlowchartState {
   List<Object?> get props => [
         flowchart,
         selectedNodeId,
-        isDebugMode,
-        debugPath,
-        debugIndex,
-        isDebugJustStarted,
         isConnectorModeActive,
         connectorSourceNodeId,
         selectedConnectorNodeIds,
-        decisionSelections,
         connectorPurpose,
-        callStack, // 🆕 NUOVO
-        projectFlowcharts, // 🆕 NUOVO
+        projectFlowcharts,
+        isDebugMode,
       ];
 }
 
@@ -425,4 +446,3 @@ class ShowNodeCreationDialog extends FlowchartState {
   @override
   List<Object?> get props => [kind, fromNodeId, fromPort, availableVariables];
 }
-

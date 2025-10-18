@@ -55,35 +55,6 @@ class OpenFile extends FileSystemEvent {
   List<Object?> get props => [projectId, fileId];
 }
 
-
-class StartDebugSession extends FileSystemEvent {
-  final Flowchart flowchart;
-  const StartDebugSession({required this.flowchart});
-  @override
-  List<Object> get props => [flowchart];
-}
-
-class ComputeDebugStep extends FileSystemEvent {
-  final int index;
-  final List<String> debugPath;
-  final Flowchart flowchart;
-  const ComputeDebugStep({
-    required this.index,
-    required this.debugPath,
-    required this.flowchart,
-  });
-  @override
-  List<Object> get props => [index, debugPath, flowchart];
-}
-
-class EndDebugSession extends FileSystemEvent {
-  final String projectId;
-  const EndDebugSession({required this.projectId});
-  @override
-  List<Object> get props => [projectId];
-}
-
-
 class UpdateFileContentInCache extends FileSystemEvent {
   final String fileId;
   final String newContent;

@@ -26,7 +26,6 @@ class PrevCommand extends ConsoleCommand {
   }
 }
 
-
 /// Comando NEXT - Avanza al prossimo nodo del debug
 class NextCommand extends ConsoleCommand {
   final VoidCallback onNext;
@@ -47,6 +46,7 @@ class NextCommand extends ConsoleCommand {
 
   @override
   Future<CommandResult> execute(List<String> args, CommandContext context) async {
+    // Prima esegui il nodo corrente, poi avanza
     onNext();
     return const CommandResult.success(message: 'Avanzato al prossimo step');
   }

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:debug_repository/debug_repository.dart';
+import '../../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 import '../../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../../blocs/project_bloc/project_bloc.dart';
@@ -16,9 +18,10 @@ class SessionVariablesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
 
-    return BlocBuilder<FlowchartBloc, FlowchartState>(
-      builder: (context, state) {
-        if (state is! FlowchartLoaded || !state.isDebugMode) {
+    return BlocBuilder<DebugBloc, DebugState>(
+      builder: (context, debugState) {
+        // Mostra il pannello anche quando siamo in attesa input
+        if (debugState is! DebugInProgress && debugState is! DebugAwaitingInput) {
           return Center(
             child: Text(
               'Nessuna sessione di debug attiva',
@@ -29,11 +32,12 @@ class SessionVariablesPanel extends StatelessWidget {
           );
         }
 
-        final currentNodeId = state.selectedNodeId;
-        if (currentNodeId == null) {
+        // Ottieni il flowchart corrente dal FlowchartBloc
+        final flowchartState = context.read<FlowchartBloc>().state;
+        if (flowchartState is! FlowchartLoaded) {
           return Center(
             child: Text(
-              'Nessun nodo selezionato',
+              'Flowchart non caricato',
               style: theme.typography.caption?.copyWith(
                 color: theme.resources.textFillColorSecondary,
               ),
@@ -41,7 +45,15 @@ class SessionVariablesPanel extends StatelessWidget {
           );
         }
 
-        final currentNode = state.getNodeById(currentNodeId);
+        final session = (debugState is DebugInProgress)
+            ? debugState.session
+            : (debugState as DebugAwaitingInput).session;
+
+        final currentNodeId = (debugState is DebugInProgress)
+            ? debugState.currentNodeId
+            : (debugState as DebugAwaitingInput).currentNodeId;
+
+        final currentNode = flowchartState.getNodeById(currentNodeId);
         if (currentNode == null) {
           return Center(
             child: Text(
@@ -53,33 +65,21 @@ class SessionVariablesPanel extends StatelessWidget {
           );
         }
 
-        final projectRepo = context.read<ProjectBloc>().projectRepository;
-
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
-            _buildHeader(context, state, theme),
+            _buildHeader(context, session, theme),
             const SizedBox(height: 16),
 
-            // Lista variabili
+            // Lista variabili - usa le variabili dallo stato del debug
             Expanded(
-              child: StreamBuilder<Map<String, dynamic>>(
-                stream: projectRepo.watchDebugVariables(
-                    projectId: state.flowchart.flowchartId),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting &&
-                      !snapshot.hasData) {
-                    return const Center(child: ProgressRing());
-                  }
-
-                  if (snapshot.hasError) {
-                    return _buildErrorState(theme, snapshot.error.toString());
-                  }
-
-                  final variables = snapshot.data ?? {};
-                  return _buildVariablesList(context, state, variables, currentNode, theme);
-                },
+              child: _buildVariablesList(
+                context,
+                flowchartState,
+                session.variables,
+                currentNode,
+                theme,
               ),
             ),
           ],
@@ -88,7 +88,7 @@ class SessionVariablesPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, FlowchartLoaded state, FluentThemeData theme) {
+  Widget _buildHeader(BuildContext context, DebugSession session, FluentThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -125,7 +125,7 @@ class SessionVariablesPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Step ${state.debugIndex + 1} / ${state.debugPath.length}',
+                  'Step ${session.currentIndex + 1} / ${session.debugPath.length}',
                   style: theme.typography.caption?.copyWith(
                     color: theme.resources.textFillColorSecondary,
                     fontSize: 11,
@@ -139,39 +139,6 @@ class SessionVariablesPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildErrorState(FluentThemeData theme, String error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FaIcon(
-              FontAwesomeIcons.triangleExclamation,
-              size: 32,
-              color: theme.resources.systemFillColorCritical,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Errore caricamento variabili',
-              style: theme.typography.bodyStrong?.copyWith(
-                color: theme.resources.systemFillColorCritical,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              style: theme.typography.caption?.copyWith(
-                color: theme.resources.textFillColorSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildVariablesList(
     BuildContext context,
     FlowchartLoaded state,
@@ -179,8 +146,20 @@ class SessionVariablesPanel extends StatelessWidget {
     FlowNode currentNode,
     FluentThemeData theme,
   ) {
+    // ✨ Unisci dichiarazioni: variabili del flowchart + parametri della signature (come Input)
+    final paramDecls = state.flowchart.signature.parameters
+        .map((p) => VariableDeclaration(name: p.name, dataType: p.type, scope: VariableScope.input))
+        .toList();
+    final allDecls = <VariableDeclaration>[...state.flowchart.variables, ...paramDecls];
+
+    // ✨ Completa la mappa variabili con eventuali parametri mancanti (mostrati come null)
+    final augmentedVars = Map<String, dynamic>.from(variables);
+    for (final p in paramDecls) {
+      augmentedVars.putIfAbsent(p.name, () => null);
+    }
+
     final filteredEntries = _filterVariablesByScope(
-      variables,
+      augmentedVars,
       state,
       currentNode,
     );
@@ -189,10 +168,10 @@ class SessionVariablesPanel extends StatelessWidget {
       return _buildEmptyState(theme);
     }
 
-    // Raggruppa per scope con tipo e valore
-    final inputVars = _getVariablesByScope(filteredEntries, state, VariableScope.input);
-    final outputVars = _getVariablesByScope(filteredEntries, state, VariableScope.output);
-    final localVars = _getVariablesByScope(filteredEntries, state, VariableScope.local);
+    // Raggruppa per scope con tipo e valore usando le dichiarazioni complete
+    final inputVars = _getVariablesByScope(filteredEntries, allDecls, VariableScope.input);
+    final outputVars = _getVariablesByScope(filteredEntries, allDecls, VariableScope.output);
+    final localVars = _getVariablesByScope(filteredEntries, allDecls, VariableScope.local);
 
     return SingleChildScrollView(
       child: Column(
@@ -203,7 +182,7 @@ class SessionVariablesPanel extends StatelessWidget {
               title: 'Input',
               icon: FontAwesomeIcons.arrowRight,
               variables: inputVars,
-              allVariables: state.flowchart.variables,
+              allVariables: allDecls,
               color: Colors.blue,
             ),
             const SizedBox(height: 16),
@@ -213,7 +192,7 @@ class SessionVariablesPanel extends StatelessWidget {
               title: 'Output',
               icon: FontAwesomeIcons.arrowLeft,
               variables: outputVars,
-              allVariables: state.flowchart.variables,
+              allVariables: allDecls,
               color: Colors.green,
             ),
             const SizedBox(height: 16),
@@ -223,7 +202,7 @@ class SessionVariablesPanel extends StatelessWidget {
               title: 'Di Lavoro',
               icon: FontAwesomeIcons.wrench,
               variables: localVars,
-              allVariables: state.flowchart.variables,
+              allVariables: allDecls,
               color: Colors.orange,
             ),
           ],
@@ -263,110 +242,24 @@ class SessionVariablesPanel extends StatelessWidget {
     FlowchartLoaded state,
     FlowNode currentNode,
   ) {
-    final debugIndex = state.debugIndex;
-
-    bool _encounteredInDecision(String varName) {
-      for (int i = 0; i <= debugIndex; i++) {
-        final nodeId = state.debugPath[i];
-        final node = state.getNodeById(nodeId);
-        if (node is DecisionNode) {
-          // Check structured clauses
-          if (node.clauses.isNotEmpty) {
-            final used = node.clauses.any((c) {
-              final leftMatch = c.leftOperand == varName;
-              final rightMatch = !c.isRightLiteral && c.rightOperand == varName;
-              return leftMatch || rightMatch;
-            });
-            if (used) return true;
-          } else {
-            // Legacy string condition
-            final pattern = RegExp(r'\b' + RegExp.escape(varName) + r'\b');
-            if (pattern.hasMatch(node.condition)) return true;
-          }
-        }
-      }
-      // Also consider current node if it's a Decision
-      if (currentNode is DecisionNode) {
-        final node = currentNode as DecisionNode;
-        if (node.clauses.isNotEmpty) {
-          final used = node.clauses.any((c) {
-            final leftMatch = c.leftOperand == varName;
-            final rightMatch = !c.isRightLiteral && c.rightOperand == varName;
-            return leftMatch || rightMatch;
-          });
-          if (used) return true;
-        } else {
-          final pattern = RegExp(r'\b' + RegExp.escape(varName) + r'\b');
-          if (pattern.hasMatch(node.condition)) return true;
-        }
-      }
-      return false;
-    }
-
-    bool _encounteredInAssignment(String varName) {
-      for (int i = 0; i <= debugIndex; i++) {
-        final nodeId = state.debugPath[i];
-        final node = state.getNodeById(nodeId);
-        if (node is AssignmentNode) {
-          if (node.assignments.any((a) => a.target == varName)) return true;
-        }
-      }
-      if (currentNode is AssignmentNode) {
-        final node = currentNode as AssignmentNode;
-        if (node.assignments.any((a) => a.target == varName)) return true;
-      }
-      return false;
-    }
-
-    bool _encounteredInOutput(String varName) {
-      for (int i = 0; i <= debugIndex; i++) {
-        final nodeId = state.debugPath[i];
-        final node = state.getNodeById(nodeId);
-        if (node is OutputNode) {
-          if (node.variables.any((v) => v.name == varName)) return true;
-        }
-      }
-      if (currentNode is OutputNode) {
-        final node = currentNode as OutputNode;
-        if (node.variables.any((v) => v.name == varName)) return true;
-      }
-      return false;
-    }
-
-    return variables.entries.where((entry) {
-      final varName = entry.key;
-      final decl = state.flowchart.variables.firstWhere(
-        (v) => v.name == varName,
-        orElse: () => const VariableDeclaration(name: '_', dataType: 'string'),
-      );
-
-      if (decl.name == '_') return true; // unknown -> show
-
-      switch (decl.scope) {
-        case VariableScope.input:
-          return true; // input sempre visibili
-        case VariableScope.output:
-          // FIX: Una variabile di output deve essere visibile sia quando le viene
-          // assegnato un valore (in un blocco Assegnazione), sia quando viene
-          // usata in un blocco di Output. La logica precedente controllava
-          // solo il secondo caso, causando il bug.
-          return _encounteredInAssignment(varName) || _encounteredInOutput(varName);
-        case VariableScope.local:
-          return _encounteredInAssignment(varName) || _encounteredInDecision(varName);
-      }
-    }).toList();
+    // Semplificato: mostra tutte le variabili che hanno un valore (incluso null per visualizzazione)
+    return variables.entries.toList();
   }
 
   List<MapEntry<String, dynamic>> _getVariablesByScope(
     List<MapEntry<String, dynamic>> entries,
-    FlowchartLoaded state,
+    List<VariableDeclaration> declarations,
     VariableScope scope,
   ) {
     return entries.where((e) {
-      final decl = state.flowchart.variables.firstWhere(
-        (v) => v.name == e.key,
-        orElse: () => const VariableDeclaration(name: '_', dataType: 'string'),
-      );
+      // Cerca dichiarazione nella lista completa (variabili + parametri)
+      VariableDeclaration? decl;
+      try {
+        decl = declarations.firstWhere((v) => v.name == e.key);
+      } catch (_) {
+        decl = null;
+      }
+      if (decl == null) return false;
       return decl.scope == scope;
     }).toList();
   }
@@ -399,12 +292,12 @@ class VariableScopeSection extends StatelessWidget {
         color: theme.resources.cardBackgroundFillColorDefault,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withOpacity(0.3),
+          color: color.withValues(alpha: 0.3),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -419,8 +312,8 @@ class VariableScopeSection extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  color.withOpacity(isDark ? 0.2 : 0.15),
-                  color.withOpacity(isDark ? 0.1 : 0.08),
+                  color.withValues(alpha: isDark ? 0.2 : 0.15),
+                  color.withValues(alpha: isDark ? 0.1 : 0.08),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -431,7 +324,7 @@ class VariableScopeSection extends StatelessWidget {
               ),
               border: Border(
                 bottom: BorderSide(
-                  color: color.withOpacity(0.3),
+                  color: color.withValues(alpha: 0.3),
                   width: 1,
                 ),
               ),
@@ -441,7 +334,7 @@ class VariableScopeSection extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.2),
+                    color: color.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: FaIcon(icon, size: 16, color: color),
@@ -531,7 +424,7 @@ class VariableScopeSection extends StatelessWidget {
             return DebugVariableRow(
               name: entry.key,
               type: varDecl.dataType,
-              value: hasValue ? entry.value.toString() : null,
+              value: hasValue ? entry.value.toString() : 'null',
             );
           }),
         ],

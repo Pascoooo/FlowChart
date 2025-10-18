@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:bloc/bloc.dart';
 import 'package:file_repository/file_repository.dart';
@@ -21,70 +20,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<OpenFile>(_onOpenFile);
     on<DeleteFile>(_onDeleteFile);
     on<RenameFile>(_onRenameFile);
-    on<StartDebugSession>(_onStartDebugSession);
-    on<ComputeDebugStep>(_onComputeDebugStep);
-    on<EndDebugSession>(_onEndDebugSession);
     on<UpdateFileContentInCache>(_onUpdateFileContentInCache);
-  }
-
-
-// --- SEZIONE DEBUG (AGGIORNATA) ---
-
-  Stream<Map<String, dynamic>> debugVariablesStream(String projectId) {
-    return projectRepository.watchDebugVariables(projectId: projectId);
-  }
-
-  Future<void> _onStartDebugSession(
-      StartDebugSession event, Emitter<FileSystemState> emit) async {
-    try {
-      await projectRepository.startDebugSession(
-          projectId: event.flowchart.flowchartId, flowchart: event.flowchart);
-    } catch (e) {
-      debugPrint('Errore durante l\'avvio della sessione di debug: $e');
-    }
-  }
-
-// FIX: Reso più robusto con un try-catch specifico per trovare il nodo.
-  Future<void> _onComputeDebugStep(
-      ComputeDebugStep event, Emitter<FileSystemState> emit) async {
-    try {
-      if (event.index < 0 || event.index >= event.debugPath.length) {
-        debugPrint('Indice di debug fuori dai limiti.');
-        return;
-      }
-      final currentNodeId = event.debugPath[event.index];
-
-      late final FlowNode currentNode;
-
-      try {
-        // Cerca il nodo. Se non lo trova, lancia StateError.
-        currentNode = event.flowchart.nodes.firstWhere(
-              (n) => n.id == currentNodeId,
-        );
-      } on StateError {
-        // Cattura l'errore se il nodo non viene trovato e interrompe l'esecuzione.
-        debugPrint('ERRORE: Nodo di debug non trovato per id: $currentNodeId.');
-        return;
-      }
-
-      // Se il nodo è stato trovato, chiama il repository.
-      await projectRepository.advanceDebugStep(
-        projectId: event.flowchart.flowchartId,
-        currentNode: currentNode,
-      );
-
-    } catch (e) {
-      debugPrint('Errore generico durante il calcolo dello step di debug: $e');
-    }
-  }
-
-  Future<void> _onEndDebugSession(
-      EndDebugSession event, Emitter<FileSystemState> emit) async {
-    try {
-      await projectRepository.endDebugSession(projectId: event.projectId);
-    } catch (e) {
-      debugPrint('Errore durante la terminazione della sessione di debug: $e');
-    }
   }
 
   // --- SEZIONE CRUD (OPERAZIONI SUI FILE) ---
@@ -218,7 +154,10 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     emit(currentState.copyWith(isLoading: true));
     try {
+      // ✅ FIX CRITICO: Prima rimuovi il file dalla sessione RTDB, poi da Firestore
+      // Questo garantisce che quando esci dal workspace, il file eliminato non venga risincronizzato
       await projectRepository.deleteFile(projectId: event.projectId, fileId: event.fileId);
+
       final updatedFiles = currentState.files.where((f) => f.fileId != event.fileId).toList();
       String? nextActiveFileId = currentState.activeFileId;
 
@@ -270,4 +209,3 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     emit(currentState.copyWith(files: updatedFiles));
   }
 }
-

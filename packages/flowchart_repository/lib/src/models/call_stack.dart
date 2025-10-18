@@ -100,21 +100,21 @@ class FunctionCallResult extends Equatable {
   List<Object?> get props => [returnValue, hasValue];
 }
 
-/// Manages the call stack for executing subprograms.
-/// Supports nested calls and tracking the execution flow.
+/// Represents the call stack for nested function calls.
 class CallStack extends Equatable {
   final List<CallStackFrame> frames;
 
   const CallStack({this.frames = const []});
 
-  /// Returns the current frame (top of the stack).
-  CallStackFrame? get current => frames.isEmpty ? null : frames.last;
+  /// Creates an empty call stack
+  factory CallStack.empty() => const CallStack(frames: []);
 
-  /// Returns the depth of the stack.
+  bool get isEmpty => frames.isEmpty;
+  bool get isNotEmpty => frames.isNotEmpty;
   int get depth => frames.length;
 
-  /// Checks if the stack is empty.
-  bool get isEmpty => frames.isEmpty;
+  /// Returns the current frame (top of the stack).
+  CallStackFrame? get current => frames.isEmpty ? null : frames.last;
 
   /// Adds a new frame to the stack (subprogram call).
   CallStack push(CallStackFrame frame) {
@@ -158,11 +158,10 @@ class CallStack extends Equatable {
   };
 
   factory CallStack.fromJson(Map<String, dynamic> json) {
-    final framesList = json['frames'] as List<dynamic>? ?? [];
     return CallStack(
-      frames: framesList
-          .map((f) => CallStackFrame.fromJson(f as Map<String, dynamic>))
-          .toList(),
+      frames: (json['frames'] as List?)
+          ?.map((f) => CallStackFrame.fromJson(f))
+          .toList() ?? [],
     );
   }
 }

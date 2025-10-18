@@ -51,8 +51,7 @@ class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
 
     return BlocProvider<FlowchartBloc>(
       key: ValueKey(_activeFileId),
-      create: (context) => FlowchartBloc(
-          projectRepository: context.read<ProjectBloc>().projectRepository)
+      create: (context) => FlowchartBloc()
         ..add(LoadFlowchart(
           jsonContent: activeFile.content,
           fileName: activeFile.name,
