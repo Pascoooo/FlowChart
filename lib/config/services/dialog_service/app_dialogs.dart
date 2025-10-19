@@ -16,6 +16,7 @@ import 'node_dialogs/input_node_dialog.dart';
 import 'node_dialogs/output_node_dialog.dart';
 import 'node_dialogs/process_node_dialog.dart';
 import 'node_dialogs/assignment_node_dialog.dart';
+import 'node_dialogs/return_node_dialog.dart';
 
 class AppDialogs {
 
@@ -133,6 +134,7 @@ class AppDialogs {
   static Future<Map<String, dynamic>?> showNodeCreationDialog({
     required BuildContext context,
     required FlowNodeKind kind,
+    FlowchartSignature? signature, // REQUISITO: Aggiunto per validazione contestuale
     List<MyFile>? files,
     List<VariableDeclaration>? variables,
     Set<String>? existingVariableNames,
@@ -159,7 +161,9 @@ class AppDialogs {
         );
 
       case FlowNodeKind.decision:
-        // NUOVA REGOLA: Apri il dialog anche se la lista è vuota, senza warning
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
+        // Usa lo stesso dialog per Decision, While e DoWhile (tutti gestiscono condizioni)
         final vars = variables ?? const [];
         final decisionVars = vars
             .map((v) => {'name': v.name, 'type': v.dataType})
@@ -171,6 +175,23 @@ class AppDialogs {
 
       case FlowNodeKind.end:
         return Future.value({'text': 'Fine'});
+
+      case FlowNodeKind.doWhileStart:
+        // Nodo sentinella usato internamente per il corpo del do-while: nessun dialog richiesto
+        return Future.value({'text': 'doWhileStart'});
+
+      case FlowNodeKind.functionHeader:
+        // Il nodo FunctionHeader viene creato automaticamente quando si crea un sottoprogramma
+        // Non dovrebbe essere creabile manualmente dall'utente
+        return Future.value(null);
+
+      case FlowNodeKind.returnNode:
+        // Dialog per configurare il nodo Return (espressione di ritorno)
+        return showReturnNodeDialog(
+          context,
+          availableVariables: variables ?? const [],
+          signature: signature, // REQUISITO: Passa la signature al dialogo
+        );
     }
   }
 

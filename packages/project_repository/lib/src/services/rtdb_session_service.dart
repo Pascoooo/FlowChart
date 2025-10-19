@@ -76,18 +76,28 @@ class RtdbSessionService {
           .update({'name': newName});
 
   /// Aggiunge lo stato di debug alla sessione di lavoro esistente. (dal tuo codice)
-  Future<void> initializeDebugSession(String projectId, Map<String, dynamic> initialVariables) {
-    // Scrive su .../sessions/{uid}/{projectId}/debugState
-    return _rtdbSessionRef.child(projectId).child('debugState').set({
+  Future<void> initializeDebugSession(
+    String projectId,
+    Map<String, dynamic> initialVariables, {
+    Map<String, Map<String, dynamic>> declaredVariables = const {},
+  }) {
+    final debugRef = _rtdbSessionRef.child(projectId).child('debugState');
+    final Map<String, dynamic> payload = {
       'variables': initialVariables,
-      'startedAt': DateTime.now().toIso8601String(),
-    });
+    };
+    if (declaredVariables.isNotEmpty) {
+      payload['declaredVariables'] = declaredVariables;
+    }
+    return debugRef.set(payload);
   }
 
   /// Aggiorna le variabili nello stato di debug della sessione corrente. (dal tuo codice)
   Future<void> updateDebugVariables(String projectId, Map<String, dynamic> newValues) {
-    // Aggiorna .../sessions/{uid}/{projectId}/debugState/variables
-    return _rtdbSessionRef.child(projectId).child('debugState').child('variables').update(newValues);
+    return _rtdbSessionRef
+        .child(projectId)
+        .child('debugState')
+        .child('variables')
+        .update(newValues);
   }
 
   /// Ascolta le modifiche nel nodo delle variabili di debug. (dal tuo codice)
@@ -124,6 +134,21 @@ class RtdbSessionService {
       return Map<String, dynamic>.from(snapshot.value as Map);
     }
 
+    return {};
+  }
+
+  /// Legge le variabili dichiarate salvate nella sessione di debug.
+  Future<Map<String, Map<String, dynamic>>> getDeclaredVariables(String projectId) async {
+    final snapshot = await _rtdbSessionRef
+        .child(projectId)
+        .child('debugState')
+        .child('declaredVariables')
+        .get();
+
+    if (snapshot.exists && snapshot.value != null) {
+      final raw = Map<String, dynamic>.from(snapshot.value as Map);
+      return raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
+    }
     return {};
   }
 }

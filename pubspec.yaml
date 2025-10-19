@@ -23,6 +23,7 @@ dependencies:
   file_picker:
   web_socket_channel:
   url_launcher:
+  uuid:
 
   # == FIREBASE ==
   firebase_core: ^3.1.1
@@ -49,6 +50,8 @@ dependencies:
     path: packages/project_repository
   flowchart_repository:
     path: packages/flowchart_repository
+  debug_repository:
+    path: packages/debug_repository
 
 dev_dependencies:
   flutter_test:
@@ -60,3 +63,4 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
+

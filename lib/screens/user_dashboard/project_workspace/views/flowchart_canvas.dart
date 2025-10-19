@@ -1,11 +1,11 @@
+import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
-import '../../../../config/services/dialog_service/app_dialogs.dart';
+import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 import 'node_widget.dart';
 import 'painters.dart';
 import 'node_creation_service.dart';
@@ -27,348 +27,416 @@ class FlowchartCanvas extends StatelessWidget {
     return BlocListener<FlowchartBloc, FlowchartState>(
       listener: (context, state) {
         if (state is FlowchartActionFailure) {
-          AppDialogs.showInfoDialog(
-            context,
-            title: state.title,
-            message: state.message,
-          );
+          // Log in console invece di mostrare un dialogo
+          debugPrint('Flowchart error: \\n- ${state.title}: ${state.message}');
         }
       },
-      child: BlocBuilder<FlowchartBloc, FlowchartState>(
-        builder: (context, state) {
-          if (state is! FlowchartLoaded) {
-            return const Center(child: ProgressRing());
+      child: BlocListener<DebugBloc, DebugState>(
+        // ✅ NUOVO: Listener per gestire la selezione del nodo iniziale quando parte il debug
+        listener: (context, debugState) {
+          if (debugState is DebugInProgress && debugState.isFirstStep) {
+            // Seleziona automaticamente il nodo iniziale
+            final flowchartBloc = context.read<FlowchartBloc>();
+            final flowchartState = flowchartBloc.state;
+            if (flowchartState is FlowchartLoaded) {
+              final id = debugState.currentNodeId;
+              if (id.isEmpty) return; // Guard: indice -1 non ha nodo corrente
+              debugPrint('🎯 Auto-selezione nodo iniziale: $id');
+              flowchartBloc.add(SelectNode(id));
+            }
           }
+        },
+        child: BlocBuilder<FlowchartBloc, FlowchartState>(
+          builder: (context, state) {
+            if (state is! FlowchartLoaded) {
+              return const Center(child: ProgressRing());
+            }
 
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              // FIX: Condiziono il comportamento del GestureDetector in base alla modalità connettore
-              Widget canvasContent = GestureDetector(
-                // Se siamo in modalità connettore O in debug, NON gestiamo i tap sulla canvas vuota
-                onTap: (state.isConnectorModeActive || state.isDebugMode)
-                    ? null
-                    : () => context.read<FlowchartBloc>().add(const DeselectNode()),
-                behavior: (state.isConnectorModeActive || state.isDebugMode)
-                    ? HitTestBehavior.deferToChild
-                    : HitTestBehavior.translucent,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (showGrid)
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                // FIX: Condiziono il comportamento del GestureDetector in base alla modalità connettore
+                Widget canvasContent = GestureDetector(
+                  // Se siamo in modalità connettore, NON gestiamo i tap sulla canvas vuota
+                  onTap: state.isConnectorModeActive
+                      ? null
+                      : () {
+                          // Evita di deselezionare durante il debug (previene de-zoom)
+                          final dbg = context.read<DebugBloc>().state;
+                          final isInDebugTap = dbg is DebugInProgress ||
+                              dbg is DebugAwaitingInput ||
+                              dbg is DebugError ||
+                              dbg is DebugCompleted;
+                          if (isInDebugTap) return;
+                          context.read<FlowchartBloc>().add(const DeselectNode());
+                        },
+                  behavior: state.isConnectorModeActive
+                      ? HitTestBehavior.deferToChild
+                      : HitTestBehavior.translucent,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (showGrid)
+                        Positioned.fill(
+                          child:
+                          CustomPaint(painter: GridPainter.fromTheme(context)),
+                        ),
                       Positioned.fill(
-                        child:
-                        CustomPaint(painter: GridPainter.fromTheme(context)),
-                      ),
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: ConnectionPainter(
-                          nodes: state.flowchart.nodes,
-                          edges: state.flowchart.edges,
-                          theme: FluentTheme.of(context),
+                        child: CustomPaint(
+                          painter: ConnectionPainter(
+                            nodes: state.flowchart.nodes,
+                            edges: state.flowchart.edges,
+                            theme: FluentTheme.of(context),
+                          ),
                         ),
                       ),
-                    ),
-                    for (final node in state.flowchart.nodes)
-                      NodeWidget(
-                        key: ValueKey(node.id),
-                        node: node,
-                        canvasConstraints: constraints,
-                        isSelected: state.selectedNodeId == node.id &&
-                            !state.isConnectorModeActive,
-                        isReadOnly: isReadOnly,
-                        allowDragInReadOnly: allowDragInReadOnly,
-                      ),
-                  ],
-                ),
-              );
+                      for (final node in state.flowchart.nodes)
+                        NodeWidget(
+                          key: ValueKey(node.id),
+                          node: node,
+                          canvasConstraints: constraints,
+                          isSelected: (!state.isConnectorModeActive && state.selectedNodeId == node.id) ||
+                              (state.isConnectorModeActive && state.connectorSourceNodeId == node.id),
+                          isReadOnly: isReadOnly,
+                          allowDragInReadOnly: allowDragInReadOnly,
+                        ),
 
-              if (state.isDebugMode && state.selectedNodeId != null) {
-                final node = state.getNodeById(state.selectedNodeId!);
-                if (node != null) {
-                  final viewportW = constraints.maxWidth;
-                  final viewportH = constraints.maxHeight;
-                  const double targetScale = 1.8;
+                      // Overlay guida per selezione corpo do-while
+                      if (state.isConnectorModeActive && state.connectorPurpose == ConnectorPurpose.doWhileBody)
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          right: 12,
+                          child:  _DoWhileSelectionBanner(),
+                        ),
 
-                  final double nodeCenterX = node.x + node.width / 2;
-                  final double nodeCenterY =
-                      node.y + (node.height + 42.0) / 2;
-                  final double targetTx =
-                      (viewportW / 2) - nodeCenterX * targetScale;
-                  final double targetTy =
-                      (viewportH / 2) - nodeCenterY * targetScale;
+                      // Overlay guida per modalità Reset da nodo
+                      if (state.isConnectorModeActive && state.connectorPurpose == ConnectorPurpose.resetFromNode)
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          right: 12,
+                          child: const _ResetSelectionBanner(),
+                        ),
 
-                  // ⚠️ MODIFICA: Usa isDebugJustStarted invece di debugIndex == 0
-                  final bool shouldZoom = state.isDebugJustStarted;
+                      // Overlay guida per modalità Connettore normale
+                      if (state.isConnectorModeActive && state.connectorPurpose == ConnectorPurpose.normal)
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          right: 12,
+                          child: _ConnectorModeBanner(canvasConstraints: constraints),
+                        ),
+                    ],
+                  ),
+                );
 
-                  final double initialScale = shouldZoom ? 1.0 : targetScale;
+                // Usa il DebugBloc per verificare se siamo in modalità debug
+                final debugState = context.watch<DebugBloc>().state;
+                final isInDebug = debugState is DebugInProgress ||
+                    debugState is DebugAwaitingInput ||
+                    debugState is DebugError ||
+                    debugState is DebugCompleted;
 
-                  canvasContent = ClipRect(
-                    child: TweenAnimationBuilder<Offset>(
-                      tween: Tween<Offset>(end: Offset(targetTx, targetTy)),
-                      duration: const Duration(milliseconds: 350),
-                      curve: Curves.easeOutCubic,
-                      key: ValueKey('dbg-offset-${state.selectedNodeId}'),
-                      builder: (context, offset, child) {
-                        return Transform.translate(
-                          offset: offset,
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween<double>(
-                                begin: initialScale, end: targetScale),
-                            duration: shouldZoom
-                                ? const Duration(milliseconds: 400)
-                                : Duration.zero,
-                            curve: Curves.easeInOut,
-                            key: ValueKey(
-                                'dbg-scale-${state.flowchart.flowchartId}'),
-                            builder: (context, scale, grandChild) {
-                              return Transform.scale(
-                                scale: scale,
-                                alignment: Alignment.topLeft,
-                                child: grandChild,
-                              );
-                            },
+                // ✅ FIXED: Gestione corretta dello zoom e pan in debug mode
+                if (isInDebug && state.selectedNodeId != null) {
+                  final node = state.getNodeById(state.selectedNodeId!);
+                  if (node != null) {
+                    final viewportW = constraints.maxWidth;
+                    final viewportH = constraints.maxHeight;
+
+                    // Determina se dobbiamo eseguire l'animazione di zoom (solo al primo step)
+                    final shouldAnimateZoom = debugState is DebugInProgress && debugState.isFirstStep;
+                    final targetScale = shouldAnimateZoom ? 1.5 : 1.5; // Mantieni lo stesso zoom
+
+                    final double nodeCenterX = node.x + node.width / 2;
+                    final double nodeCenterY = node.y + node.height / 2;
+                    final double targetTx = (viewportW / 2) - (nodeCenterX * targetScale);
+                    final double targetTy = (viewportH / 2) - (nodeCenterY * targetScale);
+
+                    canvasContent = ClipRect(
+                      child: TweenAnimationBuilder<Matrix4>(
+                        // Rimosso key dinamico che resettava l'animazione tra step
+                        tween: Matrix4Tween(
+                          begin: shouldAnimateZoom
+                              ? Matrix4.identity()
+                              : null, // null => usa valore corrente
+                          end: Matrix4.translationValues(targetTx, targetTy, 0)..scale(targetScale),
+                        ),
+                        duration: shouldAnimateZoom
+                            ? const Duration(milliseconds: 600)
+                            : const Duration(milliseconds: 400),
+                        curve: shouldAnimateZoom ? Curves.easeOutCubic : Curves.easeInOutCubic,
+                        onEnd: () {
+                          if (shouldAnimateZoom) {
+                            debugPrint('✅ Zoom iniziale completato, reset flag isFirstStep');
+                            context.read<DebugBloc>().add(const DebugResetFirstStep());
+                          }
+                        },
+                        builder: (context, transform, child) {
+                          return Transform(
+                            transform: transform,
                             child: child,
-                          ),
-                        );
-                      },
-                      child: canvasContent,
-                    ),
-                  );
+                          );
+                        },
+                        child: canvasContent,
+                      ),
+                    );
+                  }
                 }
-              }
 
-              return Stack(
-                children: [
-                  canvasContent,
-                  if (state.isConnectorModeActive)
-                    _ConnectorOverlay(
-                      state: state,
-                      constraints: constraints,
-                    ),
-                ],
-              );
-            },
-          );
-        },
+                return canvasContent;
+              },
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-class _ConnectorOverlay extends StatelessWidget {
-  final FlowchartLoaded state;
-  final BoxConstraints constraints;
-  final FlyoutController _flyoutController = FlyoutController();
+class _DoWhileSelectionBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.resources.cardStrokeColorDefault),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(FluentIcons.info_solid, color: theme.accentColor, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'Seleziona il blocco che sarà l\'inizio del corpo del ciclo do-while. Suggerimento: clicca su un altro rombo do-while per cambiare sorgente.',
+              style: theme.typography.body,
+            ),
+            const SizedBox(width: 12),
+            Button(
+              onPressed: () {
+                final fcState = context.read<FlowchartBloc>().state;
+                if (fcState is FlowchartLoaded) {
+                  final srcId = fcState.connectorSourceNodeId;
+                  if (srcId != null) {
+                    // Rimuovi il nodo do-while non completato
+                    context.read<FlowchartBloc>().add(RemoveNode(srcId));
+                  }
+                  // Chiudi comunque la modalità selezione
+                  context.read<FlowchartBloc>().add(const CancelConnectorMode());
+                } else {
+                  context.read<FlowchartBloc>().add(const CancelConnectorMode());
+                }
+              },
+              child: const Text('Annulla'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-  _ConnectorOverlay({
-    required this.state,
-    required this.constraints,
-  });
+class _ResetSelectionBanner extends StatelessWidget {
+  const _ResetSelectionBanner();
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.resources.cardStrokeColorDefault),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: BlocBuilder<FlowchartBloc, FlowchartState>(
+          builder: (context, state) {
+            final loaded = state is FlowchartLoaded ? state : null;
+            final selectedCount = loaded?.selectedConnectorNodeIds.length ?? 0;
+            final canConfirm = selectedCount == 1;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(FluentIcons.info_solid, color: theme.accentColor, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  canConfirm
+                      ? 'Premi Conferma per resettare dal nodo selezionato.'
+                      : 'Seleziona un nodo (non Inizio/intestazione) da cui resettare il diagramma.',
+                  style: theme.typography.body,
+                ),
+                const SizedBox(width: 12),
+                Button(
+                  onPressed: () => context.read<FlowchartBloc>().add(const CancelConnectorMode()),
+                  child: const Text('Annulla'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: canConfirm
+                      ? () {
+                          final id = loaded!.selectedConnectorNodeIds.first;
+                          context.read<FlowchartBloc>().add(ResetFromNode(id));
+                        }
+                      : null,
+                  child: const Text('Conferma'),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ConnectorModeBanner extends StatelessWidget {
+  final BoxConstraints canvasConstraints;
+  const _ConnectorModeBanner({required this.canvasConstraints});
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final bloc = context.read<FlowchartBloc>();
-    final hasSelection = state.selectedConnectorNodeIds.isNotEmpty;
-    // MODIFICA: Richiedi almeno 2 nodi selezionati per confermare
-    final canConfirm = state.selectedConnectorNodeIds.length >= 2;
-
-    // Calcola il testo del bottone
-    final String buttonText = hasSelection
-        ? 'Collega ${state.selectedConnectorNodeIds.length} nod${state.selectedConnectorNodeIds.length > 1 ? "i" : "o"}'
-        : 'Seleziona nodi';
-
-    // Handler che apre i dialog di configurazione prima di creare il nodo
-    Future<void> handleNodeTypeSelection(FlowNodeKind kind) async {
-      _flyoutController.close();
-
-      // Ottieni tutti i nodi sorgente selezionati per il contesto
-      final sourceNodeIds = {
-        state.connectorSourceNodeId!,
-        ...state.selectedConnectorNodeIds
-      };
-
-      // Usa il servizio centralizzato per preparare la creazione del nodo
-      final nodeData = await NodeCreationService.prepareNodeCreation(
-        context: context,
-        kind: kind,
-        flowState: state,
-        sourceNodeIds: sourceNodeIds,
-      );
-
-      if (nodeData == null) {
-        // L'utente ha annullato il dialog o c'è stato un errore
-        return;
-      }
-
-      // Crea il nodo con i dati configurati
-      bloc.add(ApplyConnectorAndCreateNode(
-        kind: kind,
-        canvasConstraints: constraints,
-        initialData: nodeData,
-      ));
-    }
-
-    return Stack(
-      children: [
-        // Overlay semi-trasparente che NON blocca i click sui nodi
-        Positioned.fill(
-          child: IgnorePointer(
-            ignoring: true,
-            child: Container(
-              color: theme.micaBackgroundColor.withValues(alpha: 0.3),
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.resources.cardStrokeColorDefault),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
+          ],
         ),
-
-        // Indicatori visivi sui nodi selezionati
-        ...state.selectedConnectorNodeIds.map((nodeId) {
-          final node = state.getNodeById(nodeId);
-          if (node == null) return const SizedBox.shrink();
-
-          return Positioned(
-            left: node.x,
-            top: node.y,
-            child: IgnorePointer(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Usa CustomPaint con il painter che segue la forma esatta del nodo
-                  CustomPaint(
-                    size: Size(node.width, node.height),
-                    painter: NodeSelectionBorderPainter(
-                      nodeKind: node.kind,
-                      borderColor: theme.selectionColor,
-                      strokeWidth: 4.0,
-                    ),
-                  ),
-                  // Icona di spunta nell'angolo in alto a destra
-                  Positioned(
-                    top: -8,
-                    right: -8,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        FluentIcons.check_mark,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-
-        // ⚠️ MODIFICA 2: Controlli in basso AL CENTRO invece che a destra
-        Positioned(
-          bottom: 24,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.resources.cardStrokeColorDefault),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Button(
-                    onPressed: () => bloc.add(const CancelConnectorMode()),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(FluentIcons.cancel, size: 16),
-                        SizedBox(width: 8),
-                        Text('Annulla'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  FlyoutTarget(
-                    controller: _flyoutController,
-                    child: Opacity(
-                      // MODIFICA: Rende il pulsante semi-trasparente quando non può confermare
-                      opacity: canConfirm ? 1.0 : 0.5,
-                      child: FilledButton(
-                        // MODIFICA: Abilita solo se ci sono almeno 2 nodi selezionati
-                        onPressed: canConfirm
-                            ? () {
-                                _flyoutController.showFlyout(
-                                  placementMode: FlyoutPlacementMode.bottomCenter,
-                                  dismissOnPointerMoveAway: false,
-                                  builder: (flyoutContext) {
-                                    return MenuFlyout(
-                                      items: [
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.input),
-                                          text: const Text('Input'),
-                                          leading: const FaIcon(FontAwesomeIcons.download, size: 16),
-                                        ),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.assignment),
-                                          text: const Text('Assegnazione'),
-                                          leading: const FaIcon(FontAwesomeIcons.calculator, size: 16),
-                                        ),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.output),
-                                          text: const Text('Output'),
-                                          leading: const FaIcon(FontAwesomeIcons.upload, size: 16),
-                                        ),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.decision),
-                                          text: const Text('Condizione'),
-                                          leading: const FaIcon(FontAwesomeIcons.codeBranch, size: 16),
-                                        ),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.process),
-                                          text: const Text('Sottoprogramma'),
-                                          leading: const FaIcon(FontAwesomeIcons.gears, size: 16),
-                                        ),
-                                        const MenuFlyoutSeparator(),
-                                        MenuFlyoutItem(
-                                          onPressed: () => handleNodeTypeSelection(FlowNodeKind.end),
-                                          text: const Text('Fine'),
-                                          leading: const FaIcon(FontAwesomeIcons.flagCheckered, size: 16),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
-                              }
-                            : null,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(FluentIcons.completed_solid, size: 16),
-                            const SizedBox(width: 8),
-                            Text(buttonText),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        child: BlocBuilder<FlowchartBloc, FlowchartState>(
+          builder: (context, state) {
+            final loaded = state as FlowchartLoaded;
+            final count = loaded.selectedConnectorNodeIds.length;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(FluentIcons.info_solid, color: theme.accentColor, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  count == 0
+                      ? 'Seleziona uno o più nodi foglia da connettere a un nuovo blocco.'
+                      : 'Selezionati: $count nodi. Crea il nuovo blocco per connetterli.',
+                  style: theme.typography.body,
+                ),
+                const SizedBox(width: 12),
+                Button(
+                  onPressed: () => context.read<FlowchartBloc>().add(const CancelConnectorMode()),
+                  child: const Text('Annulla'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () async {
+                    await _showCreateNodeDialog(context, loaded);
+                  },
+                  child: const Text('Crea nodo…'),
+                ),
+              ],
+            );
+          },
         ),
-      ],
+      ),
     );
+  }
+
+  Future<void> _showCreateNodeDialog(BuildContext context, FlowchartLoaded state) async {
+    final isFunctionFlowchart = state.flowchart.isFunction;
+
+    final kinds = <Map<String, dynamic>>[
+      {'label': 'Input', 'kind': FlowNodeKind.input, 'icon': FontAwesomeIcons.download},
+      {'label': 'Assegnazione', 'kind': FlowNodeKind.assignment, 'icon': FontAwesomeIcons.calculator},
+      {'label': 'Output', 'kind': FlowNodeKind.output, 'icon': FontAwesomeIcons.upload},
+      {'label': 'Condizione', 'kind': FlowNodeKind.decision, 'icon': FontAwesomeIcons.codeBranch},
+      {'label': 'Sottoprogramma', 'kind': FlowNodeKind.process, 'icon': FontAwesomeIcons.gears},
+      {'label': 'Ciclo Pre-Condizionale', 'kind': FlowNodeKind.whileLoop, 'icon': FontAwesomeIcons.arrowsRotate},
+      {'label': 'Ciclo Post-Condizionale', 'kind': FlowNodeKind.doWhileLoop, 'icon': FontAwesomeIcons.repeat},
+      if (isFunctionFlowchart)
+        {'label': 'Return', 'kind': FlowNodeKind.returnNode, 'icon': FontAwesomeIcons.reply}
+    ];
+
+    FlowNodeKind? selectedKind;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return ContentDialog(
+          title: const Text('Scegli il tipo di nodo da creare'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final item in kinds)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Button(
+                      onPressed: () {
+                        selectedKind = item['kind'] as FlowNodeKind;
+                        Navigator.of(ctx).pop();
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(item['icon'] as IconData, size: 16),
+                          const SizedBox(width: 8),
+                          Text(item['label'] as String),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            Button(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Annulla'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (selectedKind == null) return;
+
+    // Raccogli i dati necessari per il nodo scelto
+    final initialData = await NodeCreationService.prepareNodeCreation(
+      context: context,
+      kind: selectedKind!,
+      flowState: state,
+      sourceNodeIds: {if (state.connectorSourceNodeId != null) state.connectorSourceNodeId!, ...state.selectedConnectorNodeIds},
+    );
+
+    // Dispatch creazione connettore + nuovo nodo
+    context.read<FlowchartBloc>().add(ApplyConnectorAndCreateNode(
+      kind: selectedKind!,
+      canvasConstraints: canvasConstraints,
+      initialData: initialData,
+    ));
   }
 }

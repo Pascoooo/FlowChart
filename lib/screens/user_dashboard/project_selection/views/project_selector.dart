@@ -25,6 +25,7 @@ class ProjectSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     Future<void> showCreateProjectDialog() async {
       final String? projectName = await AppDialogs.showInputDialog(
         context,

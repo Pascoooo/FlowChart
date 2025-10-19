@@ -40,4 +40,16 @@ class CommandHistory {
     _undoStack.clear();
     _redoStack.clear();
   }
+
+  /// Restituisce l'ultimo comando nello stack di undo senza rimuoverlo
+  FlowchartCommand? peekLastUndo() {
+    if (_undoStack.isEmpty) return null;
+    return _undoStack.last;
+  }
+
+  /// Sostituisce l'ultimo comando nello stack di undo con uno nuovo
+  void replaceLastUndo(FlowchartCommand command) {
+    if (_undoStack.isEmpty) return;
+    _undoStack[_undoStack.length - 1] = command;
+  }
 }

@@ -2,12 +2,13 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:file_repository/file_repository.dart';
-import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
+import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
+import '../../../../config/services/dialog_service/service_dialog.dart';
 
 /// Servizio centralizzato per la gestione della creazione di nodi nel flowchart.
 /// Gestisce la logica di validazione, recupero variabili e apertura dei dialog.
@@ -27,6 +28,21 @@ class NodeCreationService {
     final flowState = bloc.state;
 
     if (flowState is! FlowchartLoaded) return null;
+
+    // VALIDAZIONE: Nodi Start/End sono ammessi SOLO nel file main
+    if (kind == FlowNodeKind.start || kind == FlowNodeKind.end) {
+      final fileName = flowState.flowchart.name.toLowerCase();
+      if (fileName != 'main') {
+        await AppDialogs.showInfoDialog(
+          context,
+          title: 'Operazione non permessa',
+          message: 'I blocchi "Inizio" e "Fine" possono essere inseriti solo nel file "main".\n\n'
+                  'I file funzione non richiedono questi blocchi.',
+          type: DialogType.warning,
+        );
+        return null;
+      }
+    }
 
     // Caso speciale: End - verifica se esiste già e chiedi conferma
     if (kind == FlowNodeKind.end) {
@@ -89,34 +105,54 @@ class NodeCreationService {
         break;
 
       case FlowNodeKind.decision:
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
         // NUOVA REGOLA: Passa tutte le variabili disponibili senza filtri
         variablesForDialog = flowState.flowchart.variables.toList();
         break;
 
       case FlowNodeKind.process:
-        final fsState = context.read<FileSystemBloc>().state;
-        if (fsState is FileSystemLoaded) {
-          filesForProcess = fsState.files
-              .where((f) => f.fileId != fsState.activeFileId)
-              .toList();
-          // NUOVA REGOLA: Anche se la lista è vuota, passa comunque senza warning
+        // NUOVA REGOLA: Non mostrare warning, passa lista vuota se necessario
+        // I file vengono recuperati dal FileSystemBloc
+        final fileSystemState = context.read<FileSystemBloc>().state;
+        if (fileSystemState is FileSystemLoaded) {
+          filesForProcess = fileSystemState.files;
         }
+        variablesForDialog = flowState.flowchart.variables.toList();
         break;
 
-
-      case FlowNodeKind.end:
       case FlowNodeKind.start:
-        // Nodi Start/End non richiedono configurazione
-        return {'text': kind == FlowNodeKind.start ? 'Inizio' : 'Fine'};
+      case FlowNodeKind.end:
+      case FlowNodeKind.doWhileStart:
+        // Questi nodi non richiedono variabili o files
+        break;
+
+      case FlowNodeKind.functionHeader:
+        // Il nodo FunctionHeader non dovrebbe essere creabile manualmente
+        // Viene generato automaticamente quando si crea un sottoprogramma
+        return null;
+
+      case FlowNodeKind.returnNode:
+        // Il nodo Return può usare tutte le variabili disponibili
+        variablesForDialog = flowState.flowchart.variables.toList();
+        break;
     }
 
-    // Apri il dialog di configurazione del nodo
-    return await AppDialogs.showNodeCreationDialog(
+    // Apre il dialogo di creazione/modifica e attende i dati di ritorno.
+    final nodeData = await AppDialogs.showNodeCreationDialog(
       context: context,
       kind: kind,
+      signature: flowState.flowchart.signature, // REQUISITO: Passa la signature
       files: filesForProcess,
       variables: variablesForDialog,
     );
+
+    // REQUISITO: Se il dialogo ha creato una nuova variabile, aggiungila al flowchart
+    if (nodeData != null && nodeData['newVariable'] != null) {
+      context.read<FlowchartBloc>().add(AddGlobalVariable(nodeData['newVariable']));
+    }
+
+    return nodeData;
   }
 
   /// Verifica se esiste già un nodo End e chiede conferma per collegarvisi.

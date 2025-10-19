@@ -1,4 +1,5 @@
 // dart
+import 'dart:convert';
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -33,28 +34,72 @@ class _ProcessNodeDialog extends StatefulWidget {
 }
 
 class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
-  final _resultVariableNameController = TextEditingController();
-  final List<String?> _arguments = [];
   MyFile? _selectedFile;
-  String? _resultVariableType = 'void';
+  FlowchartSignature? _selectedSignature;
+  String? _resultVariableName;
+  final List<String?> _argumentVariables = [];
   bool _attemptedSubmit = false;
 
   @override
-  void dispose() {
-    _resultVariableNameController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
   }
 
-  void _addArgument() => setState(() => _arguments.add(null));
-  void _removeArgument(int index) => setState(() => _arguments.removeAt(index));
+  Future<void> _loadSignature(MyFile file) async {
+    try {
+      final content = jsonDecode(file.content);
+      final signature = content['signature'];
 
-  List<String> get _availableDataTypes => [
-    'string',
-    'int',
-    'double',
-    'bool',
-    'void',
-  ];
+      if (signature != null) {
+        final params = (signature['parameters'] as List?)
+            ?.map((p) => FunctionParam.fromJson(p as Map<String, dynamic>))
+            .toList() ?? [];
+
+        setState(() {
+          _selectedSignature = FlowchartSignature(
+            parameters: params,
+            returnType: signature['returnType'] ?? 'void',
+          );
+          _argumentVariables.clear();
+          _argumentVariables.addAll(List.filled(params.length, null));
+          _resultVariableName = null;
+        });
+      } else {
+        setState(() {
+          _selectedSignature = const FlowchartSignature();
+          _argumentVariables.clear();
+          _resultVariableName = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Errore nel parsing della firma: $e');
+      setState(() {
+        _selectedSignature = const FlowchartSignature();
+        _argumentVariables.clear();
+        _resultVariableName = null;
+      });
+    }
+  }
+
+  void _onFileSelected(MyFile? file) {
+    if (file == null) return;
+    setState(() => _selectedFile = file);
+    _loadSignature(file);
+  }
+
+  List<VariableDeclaration> _getVariablesOfType(String targetType) {
+    return widget.availableVariables
+        .where((v) => _isTypeCompatible(v.dataType, targetType))
+        .toList();
+  }
+
+  bool _isTypeCompatible(String varType, String targetType) {
+    final vt = varType.trim().toLowerCase();
+    final tt = targetType.trim().toLowerCase();
+    if (vt == tt) return true;
+    if (tt == 'double' && vt == 'int') return true;
+    return false;
+  }
 
   String _autoLabel() {
     if (_selectedFile == null) return "chiama ''";
@@ -64,27 +109,27 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
 
   void _onConfirm() {
     setState(() => _attemptedSubmit = true);
+
     if (_selectedFile == null) return;
 
-    final arguments = _arguments
-        .where((arg) => arg != null && arg!.isNotEmpty)
-        .cast<String>()
-        .toList();
+    if (_selectedSignature != null) {
+      for (int i = 0; i < _selectedSignature!.parameters.length; i++) {
+        if (_argumentVariables[i] == null || _argumentVariables[i]!.isEmpty) {
+          return;
+        }
+      }
 
-    Map<String, dynamic>? resultTarget;
-    final resultVarName = _resultVariableNameController.text.trim();
-    if (resultVarName.isNotEmpty) {
-      resultTarget = {
-        'name': resultVarName,
-        'type': _resultVariableType ?? 'void',
-      };
+      if (_selectedSignature!.returnType != 'void' &&
+          (_resultVariableName == null || _resultVariableName!.isEmpty)) {
+        return;
+      }
     }
 
     Navigator.of(context).pop({
-      'text': _autoLabel(), // Etichetta automatica
-      'flowchartToCall': _selectedFile!.fileId,
-      'arguments': arguments,
-      'resultTarget': resultTarget,
+      'text': _autoLabel(),
+      'flowchartToCall': _selectedFile!.name,
+      'arguments': _argumentVariables.where((v) => v != null).toList(),
+      'resultTarget': _resultVariableName,
     });
   }
 
@@ -93,120 +138,135 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     final theme = FluentTheme.of(context);
     final errorColor = Colors.red.defaultBrushFor(theme.brightness);
 
+    final availableFunctions = widget.files.where((f) => f.name.toLowerCase() != 'main').toList();
+    final hasFunctions = availableFunctions.isNotEmpty;
+
     return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 750),
+      constraints: const BoxConstraints(maxWidth: 750, maxHeight: 700),
       title: _buildHeader(context),
       content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionLabel(context, 'Flowchart da Chiamare', isRequired: true),
+            _buildSectionLabel(context, 'Selezione Funzione', isRequired: true),
             const SizedBox(height: 8),
-            ComboBox<MyFile>(
-              isExpanded: true,
-              value: _selectedFile,
-              items: widget.files
-                  .map((f) => ComboBoxItem(value: f, child: Text(f.name)))
-                  .toList(),
-              onChanged: (val) => setState(() => _selectedFile = val),
-              placeholder: const Text('Seleziona un file da chiamare'),
-            ),
-            if (_attemptedSubmit && _selectedFile == null)
-              _buildErrorMessage(context, 'Devi selezionare un flowchart da chiamare'),
-            const SizedBox(height: 24),
 
-            // Etichetta generata (anteprima)
-            if (_selectedFile != null)
+            if (!hasFunctions) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.resources.layerFillColorAlt,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: theme.resources.cardStrokeColorDefault),
+                ),
+                child: Row(
+                  children: [
+                    FaIcon(
+                      FontAwesomeIcons.circleInfo,
+                      size: 20,
+                      color: theme.accentColor,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Nessuna funzione disponibile. È necessario crearne una per procedere.',
+                        style: theme.typography.body,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              ComboBox<MyFile>(
+                isExpanded: true,
+                value: _selectedFile,
+                items: availableFunctions
+                    .map((f) => ComboBoxItem(value: f, child: Text(f.name)))
+                    .toList(),
+                onChanged: _onFileSelected,
+                placeholder: const Text('Seleziona una funzione'),
+              ),
+              if (_attemptedSubmit && _selectedFile == null)
+                _buildErrorMessage(context, 'Devi selezionare una funzione da chiamare', errorColor),
+            ],
+
+            // Sezione Valore di Ritorno
+            if (_selectedSignature != null && _selectedSignature!.returnType != 'void') ...[
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 20),
+              _buildSectionLabel(context, 'Gestione Valore di Ritorno', isRequired: true),
+              const SizedBox(height: 8),
+              Text(
+                'La funzione restituisce un valore di tipo: ${_selectedSignature!.returnType.toUpperCase()}',
+                style: theme.typography.caption?.copyWith(
+                  color: theme.accentColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              InfoLabel(
+                label: 'Assegna risultato a variabile',
+                child: ComboBox<String>(
+                  isExpanded: true,
+                  value: _resultVariableName,
+                  items: _getVariablesOfType(_selectedSignature!.returnType)
+                      .map((v) => ComboBoxItem(
+                    value: v.name,
+                    child: _buildVariableItem(context, v),
+                  )).toList(),
+                  onChanged: (value) {
+                    setState(() => _resultVariableName = value);
+                  },
+                  placeholder: const Text('Seleziona una variabile'),
+                ),
+              ),
+              if (_attemptedSubmit && (_resultVariableName == null || _resultVariableName!.isEmpty))
+                _buildErrorMessage(
+                  context,
+                  'Devi selezionare una variabile per il valore di ritorno',
+                  errorColor,
+                ),
+            ],
+
+            // Sezione Parametri
+            if (_selectedSignature != null && _selectedSignature!.parameters.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 20),
+              _buildSectionLabel(context, 'Assegnazione Parametri', isRequired: true),
+              const SizedBox(height: 8),
+              Text(
+                'Seleziona le variabili da passare come argomenti alla funzione.',
+                style: theme.typography.caption,
+              ),
+              const SizedBox(height: 16),
+              ..._selectedSignature!.parameters.asMap().entries.map((entry) {
+                final index = entry.key;
+                final param = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _buildParameterItem(context, index, param, errorColor),
+                );
+              }),
+            ],
+
+            // Label generato (anteprima)
+            if (_selectedFile != null) ...[
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 16),
               InfoLabel(
                 label: 'Etichetta Generata',
                 child: Text(
                   _autoLabel(),
                   style: theme.typography.caption?.copyWith(
                     fontFamily: 'monospace',
+                    color: theme.accentColor,
                   ),
                 ),
               ),
-
-            const SizedBox(height: 24),
-            _buildSectionLabel(context, 'Variabile per il Risultato'),
-            const SizedBox(height: 8),
-            Text(
-              'Salva opzionalmente il risultato della chiamata in una nuova variabile.',
-              style: theme.typography.caption,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: InfoLabel(
-                    label: 'Nome Variabile',
-                    child: TextBox(
-                      controller: _resultVariableNameController,
-                      placeholder: 'Es. risultato_calcolo',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 1,
-                  child: InfoLabel(
-                    label: 'Tipo',
-                    child: ComboBox<String>(
-                      isExpanded: true,
-                      value: _resultVariableType,
-                      items: _availableDataTypes
-                          .map((type) => ComboBoxItem(
-                        value: type,
-                        child: Text(type.toUpperCase()),
-                      ))
-                          .toList(),
-                      onChanged: (val) => setState(() => _resultVariableType = val),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSectionLabel(context, 'Argomenti da Passare'),
-                ),
-                Button(
-                  onPressed: _addArgument,
-                  child: Row(
-                    children: const [
-                      FaIcon(FontAwesomeIcons.plus, size: 14),
-                      SizedBox(width: 8),
-                      Text('Aggiungi'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Seleziona le variabili da passare come argomenti al flowchart chiamato.',
-              style: theme.typography.caption,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 220),
-              child: _arguments.isEmpty
-                  ? _buildEmptyArgumentsState(context)
-                  : ListView.builder(
-                shrinkWrap: true,
-                itemCount: _arguments.length,
-                itemBuilder: (context, index) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _buildArgumentItem(context, index, errorColor),
-                ),
-              ),
-            ),
+            ],
           ],
         ),
       ),
@@ -217,7 +277,7 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
             Button(
               onPressed: () => Navigator.of(context).pop(null),
               style: ButtonStyle(
-                padding: ButtonState.all(
+                padding: WidgetStateProperty.all(
                   const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
               ),
@@ -225,9 +285,9 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
             ),
             const SizedBox(width: 12),
             FilledButton(
-              onPressed: _selectedFile != null ? _onConfirm : null,
+              onPressed: hasFunctions ? _onConfirm : null,
               style: ButtonStyle(
-                padding: ButtonState.all(
+                padding: WidgetStateProperty.all(
                   const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
               ),
@@ -246,7 +306,7 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: theme.accentColor.withOpacity(0.1),
+            color: theme.accentColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: FaIcon(
@@ -260,10 +320,10 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Configura Nodo di Processo', style: theme.typography.subtitle),
+              Text('Configura Blocco Sottoprogramma', style: theme.typography.subtitle),
               const SizedBox(height: 4),
               Text(
-                'Imposta la chiamata ad un altro flowchart con parametri.',
+                'Seleziona una funzione e configura i parametri da passare.',
                 style: theme.typography.body,
               ),
             ],
@@ -273,8 +333,7 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     );
   }
 
-  Widget _buildSectionLabel(BuildContext context, String label,
-      {bool isRequired = false}) {
+  Widget _buildSectionLabel(BuildContext context, String label, {bool isRequired = false}) {
     final theme = FluentTheme.of(context);
     return Row(
       children: [
@@ -293,124 +352,118 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
     );
   }
 
-  Widget _buildErrorMessage(BuildContext context, String message) {
+  Widget _buildErrorMessage(BuildContext context, String message, Color errorColor) {
     final theme = FluentTheme.of(context);
-    final errorColor = Colors.red.defaultBrushFor(theme.brightness);
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
         children: [
-          FaIcon(FontAwesomeIcons.circleExclamation,
-              size: 14, color: errorColor),
+          FaIcon(FontAwesomeIcons.circleExclamation, size: 14, color: errorColor),
           const SizedBox(width: 8),
-          Text(
-            message,
-            style: theme.typography.caption?.copyWith(color: errorColor),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.typography.caption?.copyWith(color: errorColor),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyArgumentsState(BuildContext context) {
+  Widget _buildVariableItem(BuildContext context, VariableDeclaration variable) {
     final theme = FluentTheme.of(context);
-    return Container(
-      height: 120,
-      decoration: BoxDecoration(
-        color: theme.resources.layerFillColorAlt,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FaIcon(FontAwesomeIcons.listUl,
-                size: 24, color: theme.inactiveBackgroundColor),
-            const SizedBox(height: 12),
-            Text(
-              'Nessun argomento specificato',
-              style: theme.typography.body
-                  ?.copyWith(color: theme.inactiveColor),
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: theme.accentColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            variable.dataType.toUpperCase(),
+            style: theme.typography.caption?.copyWith(
+              color: theme.accentColor,
+              fontWeight: FontWeight.bold,
             ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(width: 8),
+        Text(variable.name),
+      ],
     );
   }
 
-  Widget _buildArgumentItem(BuildContext context, int index, Color errorColor) {
+  Widget _buildParameterItem(
+      BuildContext context,
+      int index,
+      FunctionParam param,
+      Color errorColor,
+      ) {
     final theme = FluentTheme.of(context);
+    final compatibleVars = _getVariablesOfType(param.type);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: theme.resources.cardBackgroundFillColorDefault,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: theme.resources.cardStrokeColorDefault),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${index + 1}',
-            style:
-            theme.typography.bodyStrong?.copyWith(color: theme.accentColor),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ComboBox<String>(
-              isExpanded: true,
-              value: _arguments[index],
-              placeholder: Text('Seleziona la Variabile ${index + 1}'),
-              items: widget.availableVariables
-                  .map(
-                    (v) => ComboBoxItem(
-                  value: v.name,
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: theme.accentColor
-                              .defaultBrushFor(theme.brightness)
-                              .withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          v.dataType.toUpperCase(),
-                          style: theme.typography.caption?.copyWith(
-                            color: theme.accentColor,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(v.name),
-                    ],
+          Row(
+            children: [
+              Text(
+                '${param.name} ',
+                style: theme.typography.bodyStrong,
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.accentColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  param.type.toUpperCase(),
+                  style: theme.typography.caption?.copyWith(
+                    color: theme.accentColor,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              )
-                  .toList(),
-              onChanged: (value) {
-                setState(() => _arguments[index] = value);
-              },
-            ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: FaIcon(FontAwesomeIcons.trash, size: 16, color: errorColor),
-            onPressed: () => _removeArgument(index),
-            style: ButtonStyle(
-              backgroundColor: ButtonState.resolveWith((states) {
-                if (states.contains(ButtonStates.hovered)) {
-                  return (theme.brightness == Brightness.light
-                      ? const Color(0xFFDC2626)
-                      : const Color(0xFFEF4444))
-                      .withValues(alpha: 0.1);
-                }
-                return Colors.transparent;
-              }),
-            ),
+          const SizedBox(height: 8),
+          ComboBox<String>(
+            isExpanded: true,
+            value: _argumentVariables[index],
+            items: compatibleVars
+                .map((v) => ComboBoxItem(
+              value: v.name,
+              child: _buildVariableItem(context, v),
+            ))
+                .toList(),
+            onChanged: (value) {
+              setState(() => _argumentVariables[index] = value);
+            },
+            placeholder: Text('Seleziona variabile per ${param.name}'),
           ),
+          if (_attemptedSubmit &&
+              (_argumentVariables[index] == null || _argumentVariables[index]!.isEmpty))
+            _buildErrorMessage(
+              context,
+              'Parametro obbligatorio: devi selezionare una variabile',
+              errorColor,
+            ),
+          if (compatibleVars.isEmpty)
+            _buildErrorMessage(
+              context,
+              'Nessuna variabile compatibile con il tipo ${param.type}',
+              errorColor,
+            ),
         ],
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import '../entities/flowchart_entity.dart';
 import 'flow_node.dart';
+import 'flowchart_type.dart';
 
 /// Rappresenta i parametri e il tipo di ritorno di un flowchart,
 /// definendo la sua firma come se fosse una funzione.
@@ -21,6 +22,7 @@ class Flowchart extends Equatable {
   final String flowchartId;
   final String name;
   final int schemaVersion;
+  final FlowchartType type;
   final FlowchartSignature signature;
   final List<VariableDeclaration> variables;
   final List<FlowNode> nodes;
@@ -30,16 +32,24 @@ class Flowchart extends Equatable {
     required this.flowchartId,
     required this.name,
     required this.schemaVersion,
+    this.type = FlowchartType.main,
     this.signature = const FlowchartSignature(),
     this.variables = const [],
     required this.nodes,
     required this.edges,
   });
 
+  /// Verifica se il flowchart è di tipo main
+  bool get isMain => type == FlowchartType.main;
+
+  /// Verifica se il flowchart è un sottoprogramma
+  bool get isFunction => type == FlowchartType.function;
+
   Flowchart copyWith({
     String? flowchartId,
     String? name,
     int? schemaVersion,
+    FlowchartType? type,
     FlowchartSignature? signature,
     List<VariableDeclaration>? variables,
     List<FlowNode>? nodes,
@@ -49,6 +59,7 @@ class Flowchart extends Equatable {
       flowchartId: flowchartId ?? this.flowchartId,
       name: name ?? this.name,
       schemaVersion: schemaVersion ?? this.schemaVersion,
+      type: type ?? this.type,
       signature: signature ?? this.signature,
       variables: variables ?? this.variables,
       nodes: nodes ?? this.nodes,
@@ -61,6 +72,7 @@ class Flowchart extends Equatable {
       flowchartId: flowchartId,
       name: name,
       schemaVersion: schemaVersion,
+      type: type,
       signature: signature,
       variables: variables,
       nodes: nodes.map((n) => n.toEntity()).toList(),
@@ -74,6 +86,7 @@ class Flowchart extends Equatable {
       flowchartId: entity.flowchartId,
       name: entity.name,
       schemaVersion: entity.schemaVersion,
+      type: entity.type,
       signature: entity.signature,
       variables: allVariables,
       nodes: entity.nodes
@@ -85,5 +98,6 @@ class Flowchart extends Equatable {
 
   @override
   List<Object?> get props =>
-      [flowchartId, name, schemaVersion, signature, variables, nodes, edges];
+      [flowchartId, name, schemaVersion, type, signature, variables, nodes, edges];
 }
+

@@ -2,13 +2,9 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:project_repository/project_repository.dart';
-import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:project_repository/src/services/firestore_storage_service.dart';
 import 'package:project_repository/src/services/rtdb_session_service.dart';
 
-
-/// Implementazione del ProjectRepository che coordina i servizi di storage
-/// (Firestore) e di sessione live (RTDB).
 class FirebaseProjectRepo implements ProjectRepo {
   final String uid;
   final FirestoreStorageService _storage;
@@ -22,29 +18,27 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<PendingSessionInfo?> checkForPendingSessions() async {
-    final sessionSnapshot = await _session.getSessionSnapshot();
-    if (!sessionSnapshot.exists || sessionSnapshot.value == null) return null;
+    try {
+      final sessionSnapshot = await _session.getSessionSnapshot();
+      if (!sessionSnapshot.exists || sessionSnapshot.value == null) return null;
 
-    final sessionData = sessionSnapshot.value as Map<dynamic, dynamic>;
-    if (sessionData.keys.isEmpty) {
-      await _session.clearAllSessions();
-      return null;
-    }
+      final sessionData = sessionSnapshot.value as Map<dynamic, dynamic>;
+      if (sessionData.keys.isEmpty) {
+        await _session.clearAllSessions();
+        return null;
+      }
 
-    final projectId = sessionData.keys.first as String;
-    final projectSession = sessionData[projectId] as Map<dynamic, dynamic>;
-    final rtdbFiles = projectSession['files'] as Map<dynamic, dynamic>? ?? {};
+      final projectId = sessionData.keys.first as String;
+      final projectSession = sessionData[projectId] as Map<dynamic, dynamic>;
+      final rtdbFiles = projectSession['files'] as Map<dynamic, dynamic>? ?? {};
 
-    final firestoreDoc = await _storage.getProjectDoc(projectId);
-    if (!firestoreDoc.exists) {
-      await _session.removeProjectSession(projectId);
-      return null;
-    }
+      final firestoreDoc = await _storage.getProjectDoc(projectId);
+      if (!firestoreDoc.exists) {
+        await _session.removeProjectSession(projectId);
+        return null;
+      }
 
-    final firestoreTimestamp = (firestoreDoc.data()!['updatedAt'] as Timestamp).toDate();
-    final sessionTimestamp = DateTime.parse(projectSession['sessionTimestamp']);
-
-    if (sessionTimestamp.isAfter(firestoreTimestamp)) {
+      // Confronta sempre i contenuti RTDB vs Firestore, indipendentemente dai timestamp
       final structuralChanges = <UnsavedFileChange>[];
       final nonStructuralChanges = <String, String>{};
 
@@ -55,14 +49,14 @@ class FirebaseProjectRepo implements ProjectRepo {
         final firestoreFile = firestoreFiles[fileId];
 
         if (firestoreFile != null) {
-          final rtdbContent = rtdbFile['content'] as String;
-          final firestoreContent = firestoreFile['content'] as String;
+          final rtdbContent = (rtdbFile['content'] ?? '').toString();
+          final firestoreContent = (firestoreFile['content'] ?? '').toString();
 
           if (rtdbContent != firestoreContent) {
             if (_haveStructuralDifferences(rtdbContent, firestoreContent)) {
               structuralChanges.add(UnsavedFileChange(
                 fileId: fileId,
-                fileName: rtdbFile['name'] as String,
+                fileName: (rtdbFile['name'] ?? '').toString(),
                 firestoreContent: firestoreContent,
                 rtdbContent: rtdbContent,
               ));
@@ -73,6 +67,7 @@ class FirebaseProjectRepo implements ProjectRepo {
         }
       }
 
+      // Sincronizza subito le differenze non strutturali, come prima
       if (nonStructuralChanges.isNotEmpty) {
         await _storage.syncFiles(projectId, nonStructuralChanges);
         for (final fileId in nonStructuralChanges.keys) {
@@ -80,6 +75,7 @@ class FirebaseProjectRepo implements ProjectRepo {
         }
       }
 
+      // Se rimangono differenze strutturali, restituisci info per il recupero manuale
       if (structuralChanges.isNotEmpty) {
         return PendingSessionInfo(
           projectId: projectId,
@@ -87,111 +83,113 @@ class FirebaseProjectRepo implements ProjectRepo {
           changedFiles: structuralChanges,
         );
       }
-    }
 
-    await _session.removeProjectSession(projectId);
-    return null;
+      // Nessuna differenza significativa: pulisci la sessione
+      await _session.removeProjectSession(projectId);
+      return null;
+    } catch (e) {
+      // Soft-fail: non bloccare il caricamento dei progetti per transient errors
+      // (es. mismatch temporaneo RTDB/Firestore, rete, token scaduto ma recuperabile).
+      return null;
+    }
   }
 
-  /// **METODO CHIAVE AGGIORNATO**
-  /// Controlla se ci sono differenze strutturali (aggiunta/rimozione di nodi)
-  /// tra due versioni JSON di un flowchart, usando il nuovo modello dati.
   bool _haveStructuralDifferences(String rtdbContent, String firestoreContent) {
     try {
       final rtdbData = jsonDecode(rtdbContent);
       final firestoreData = jsonDecode(firestoreContent);
 
-      // Legge la lista di 'nodes' invece di 'shapes'.
       final List<dynamic> rtdbNodes = rtdbData['nodes'] ?? [];
       final List<dynamic> firestoreNodes = firestoreData['nodes'] ?? [];
 
       if (rtdbNodes.length != firestoreNodes.length) return true;
 
-      // Crea un "fingerprint" per ogni nodo basato su ID e 'kind'.
       final rtdbFingerprints = rtdbNodes.map((n) => '${n['id']}:${n['kind']}').toSet();
       final firestoreFingerprints = firestoreNodes.map((n) => '${n['id']}:${n['kind']}').toSet();
 
-      // Se i set di fingerprint non sono identici, la struttura è cambiata.
       return !rtdbFingerprints.containsAll(firestoreFingerprints);
     } catch (e) {
-      // Se il parsing fallisce, considerala una differenza strutturale per sicurezza.
       return true;
     }
   }
 
   @override
   Future<void> recoverSession(String projectId) async {
-    final sessionSnapshot = await _session.getSessionSnapshot();
-    if (!sessionSnapshot.exists) return;
+    try {
+      final sessionSnapshot = await _session.getSessionSnapshot();
+      if (!sessionSnapshot.exists) return;
 
-    final sessionData = (sessionSnapshot.value as Map<dynamic, dynamic>)[projectId];
-    if (sessionData?['files'] is Map<dynamic, dynamic>) {
-      final filesToSync = Map<String, String>.fromEntries(
-        (sessionData['files'] as Map<dynamic, dynamic>).entries.map(
-              (e) => MapEntry(e.key.toString(), e.value['content'].toString()),
-        ),
-      );
-      await _storage.syncFiles(projectId, filesToSync);
+      final sessionData = (sessionSnapshot.value as Map<dynamic, dynamic>)[projectId];
+      if (sessionData?['files'] is Map<dynamic, dynamic>) {
+        // Carica i file esistenti su Firestore in una mappa {fileId: docData}
+        final firestoreFilesMap = await _storage.getProjectFilesAsMap(projectId: projectId);
+
+        final Map<String, String> filesToSync = {};
+        final Map<String, dynamic> filesSession = Map<String, dynamic>.from(sessionData['files'] as Map);
+
+        for (final entry in filesSession.entries) {
+          final fileId = entry.key.toString();
+          final fileNode = Map<String, dynamic>.from(entry.value as Map);
+          final rtdbContent = (fileNode['content'] ?? '').toString();
+
+          if (rtdbContent.trim().isEmpty) {
+            await _session.removeFileFromSession(projectId, fileId);
+            continue;
+          }
+
+          try {
+            // Parse JSON RTDB
+            final rtdbJson = jsonDecode(rtdbContent) as Map<String, dynamic>;
+            final rtdbFlowchartId = (rtdbJson['flowchartId'] ?? '').toString();
+
+            // Documento Firestore per lo stesso fileId
+            final firestoreFileDoc = firestoreFilesMap[fileId];
+            if (firestoreFileDoc == null) {
+              // File rimosso su Firestore: pulisci la sessione
+              await _session.removeFileFromSession(projectId, fileId);
+              continue;
+            }
+
+            final firestoreContent = (firestoreFileDoc['content'] ?? '').toString();
+            String firestoreFlowchartId = '';
+            if (firestoreContent.trim().isNotEmpty) {
+              try {
+                final fsJson = jsonDecode(firestoreContent) as Map<String, dynamic>;
+                firestoreFlowchartId = (fsJson['flowchartId'] ?? '').toString();
+              } catch (_) {
+                // Contenuto non parseabile: per sicurezza evita overwrite
+                await _session.removeFileFromSession(projectId, fileId);
+                continue;
+              }
+            }
+
+            // ✅ Sincronizza solo se lo stesso flowchart sta aggiornando se stesso
+            if (rtdbFlowchartId.isNotEmpty &&
+                (firestoreFlowchartId.isEmpty || rtdbFlowchartId == firestoreFlowchartId)) {
+              filesToSync[fileId] = rtdbContent;
+            } else {
+              // Mismatch: non sincronizzare per evitare scambio di contenuti
+              await _session.removeFileFromSession(projectId, fileId);
+            }
+          } catch (_) {
+            // JSON RTDB non valido: ignora ed elimina dalla sessione
+            await _session.removeFileFromSession(projectId, fileId);
+          }
+        }
+
+        if (filesToSync.isNotEmpty) {
+          await _storage.syncFiles(projectId, filesToSync);
+        }
+      }
+    } catch (e) {
+      // Soft-fail: se qualcosa va storto qui, non propagare in alto.
+      return;
     }
-    await _session.removeProjectSession(projectId);
+    // Chiusura pulita del metodo (nessun valore di ritorno richiesto)
+    return;
   }
 
-  @override
-  Future<void> discardSession(String projectId) => _session.removeProjectSession(projectId);
-
-  @override
-  Future<void> startWorkspaceSession(MyProject project) async {
-    final files = await _storage.getProjectFiles(projectId: project.projectId);
-    final filesData = {
-      for (var file in files) file.fileId: {'name': file.name, 'content': file.content}
-    };
-    await _session.startSession(project.projectId, filesData);
-  }
-
-  @override
-  Future<void> endWorkspaceSession(String projectId) => recoverSession(projectId);
-
-  @override
-  Future<void> recoverSingleFile({required String projectId, required String fileId, required String rtdbContent}) async {
-    await _storage.updateFileContent(projectId: projectId, fileId: fileId, content: rtdbContent);
-    await _session.removeFileFromSession(projectId, fileId);
-  }
-
-  @override
-  Future<void> discardSingleFileChange({required String projectId, required String fileId}) {
-    return _session.removeFileFromSession(projectId, fileId);
-  }
-
-  @override
-  Stream<List<MyProject>> projects() => _storage.projects();
-
-  @override
-  Future<MyProject> createProject({required String name}) => _storage.createProject(name: name);
-
-  @override
-  Future<void> deleteProject({required String projectId}) async {
-    await _session.removeProjectSession(projectId);
-    await _storage.deleteProject(projectId: projectId);
-  }
-
-  @override
-  Future<void> renameProject({required String projectId, required String newName}) =>
-      _storage.renameProject(projectId: projectId, newName: newName);
-
-  @override
-  Future<List<MyFile>> getProjectFiles({required String projectId}) =>
-      _storage.getProjectFiles(projectId: projectId);
-
-  @override
-  Future<MyFile> addFileToProject({required String projectId, required String fileName, required String content}) async {
-    final newFile = await _storage.addFileToProject(
-      projectId: projectId,
-      fileName: fileName,
-      content: content,
-    );
-    await _session.addFileToSession(projectId, newFile);
-    return newFile;
-  }
+  // --- Gestione File (CRUD Intelligente) ---
 
   @override
   Future<void> deleteFile({required String projectId, required String fileId}) async {
@@ -213,6 +211,8 @@ class FirebaseProjectRepo implements ProjectRepo {
   Future<void> updateLiveFileContent(String projectId, String fileId, String content) =>
       _session.updateLiveFileContent(projectId, fileId, content);
 
+  // --- CONDIVISIONE PROGETTI ---
+
   @override
   Future<void> updateProjectVisibility({required String projectId, required bool isPublic}) {
     return _storage.updateProjectVisibility(projectId: projectId, isPublic: isPublic);
@@ -228,82 +228,76 @@ class FirebaseProjectRepo implements ProjectRepo {
     return _storage.getPublicProjectWithFiles(projectId);
   }
 
+  // --- Gestione Progetti (CRUD) ---
+
   @override
-  Future<void> startDebugSession({required String projectId, required Flowchart flowchart}) async {
-    // Inizializza con una mappa contenente variabili di lavoro (local) e di output come placeholder
-    final Map<String, dynamic> initialVariables = {};
-    for (final v in flowchart.variables) {
-      if (v.scope == VariableScope.local || v.scope == VariableScope.output) {
-        initialVariables[v.name] = '';
-      }
-    }
-    await _session.initializeDebugSession(projectId, initialVariables);
+  Stream<List<MyProject>> projects() => _storage.projects();
+
+  @override
+  Future<MyProject> createProject({required String name}) => _storage.createProject(name: name);
+
+  @override
+  Future<void> deleteProject({required String projectId}) async {
+    await _storage.deleteProject(projectId: projectId);
+    await _session.removeProjectSession(projectId);
   }
 
   @override
-  Future<void> endDebugSession({required String projectId}) async {
-    await _session.clearDebugSession(projectId);
+  Future<void> renameProject({required String projectId, required String newName}) =>
+      _storage.renameProject(projectId: projectId, newName: newName);
+
+  // --- Gestione File (lista e aggiunta) ---
+
+  @override
+  Future<List<MyFile>> getProjectFiles({required String projectId}) =>
+      _storage.getProjectFiles(projectId: projectId);
+
+  @override
+  Future<MyFile> addFileToProject({
+    required String projectId,
+    required String fileName,
+    required String content,
+  }) async {
+    final newFile = await _storage.addFileToProject(
+      projectId: projectId,
+      fileName: fileName,
+      content: content,
+    );
+    await _session.addFileToSession(projectId, newFile);
+    return newFile;
+  }
+
+  // --- Sessione Workspace (RTDB) ---
+
+  @override
+  Future<void> startWorkspaceSession(MyProject project) async {
+    // Avvia una nuova sessione pulita per il progetto con nessun file in coda
+    await _session.startSession(project.projectId, {});
   }
 
   @override
-  Stream<Map<String, dynamic>> watchDebugVariables({required String projectId}) {
-    return _session.watchDebugVariables(projectId);
+  Future<void> endWorkspaceSession(String projectId) async {
+    // Termina la sessione live del progetto
+    await _session.removeProjectSession(projectId);
   }
 
   @override
-  Future<void> updateDebugVariables({required String projectId, required Map<String, dynamic> variables}) async {
-    await _session.updateDebugVariables(projectId, variables);
+  Future<void> discardSession(String projectId) async {
+    await _session.removeProjectSession(projectId);
   }
 
   @override
-  Future<void> clearDebugVariables({required String projectId}) async {
-    await _session.clearDebugSession(projectId);
+  Future<void> recoverSingleFile({
+    required String projectId,
+    required String fileId,
+    required String rtdbContent,
+  }) async {
+    await _storage.updateFileContent(projectId: projectId, fileId: fileId, content: rtdbContent);
+    await _session.removeFileFromSession(projectId, fileId);
   }
 
   @override
-  Future<void> advanceDebugStep({required String projectId, required FlowNode? currentNode}) async {
-    if (currentNode == null) return;
-
-    // Ottieni le variabili correnti
-    final currentVariables = await _session.getCurrentDebugVariables(projectId);
-    final updatedVariables = Map<String, dynamic>.from(currentVariables);
-
-    // Logica di aggiornamento minima per rispettare i requisiti:
-    if (currentNode is InputNode) {
-      // Dichiara solo le variabili (placeholder stringa vuota) se non presenti.
-      for (final varName in currentNode.targetVariables) {
-        if (!updatedVariables.containsKey(varName)) {
-          updatedVariables[varName] = '';
-        }
-      }
-    } else if (currentNode is OutputNode) {
-      // Nessuna azione automatica
-    } else if (currentNode is AssignmentNode) {
-      // NON eseguire automaticamente: sarà il form runtime a farlo
-    } else if (currentNode is DecisionNode) {
-      // Nessuna modifica automatica
-    }
-
-    // Aggiorna solo se qualcosa è cambiato
-    bool changed = false;
-    if (updatedVariables.length != currentVariables.length) {
-      changed = true;
-    } else {
-      for (final entry in updatedVariables.entries) {
-        if (!currentVariables.containsKey(entry.key) || currentVariables[entry.key] != entry.value) {
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (changed) {
-      await _session.updateDebugVariables(projectId, updatedVariables);
-    }
-  }
-
-
-  @override
-  Future<Map<String, dynamic>> getDebugVariables({required String projectId}) {
-    return _session.getCurrentDebugVariables(projectId);
+  Future<void> discardSingleFileChange({required String projectId, required String fileId}) async {
+    await _session.removeFileFromSession(projectId, fileId);
   }
 }

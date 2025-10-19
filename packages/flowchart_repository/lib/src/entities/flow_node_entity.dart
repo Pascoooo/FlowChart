@@ -62,10 +62,19 @@ class EdgeEntity {
   const EdgeEntity({required this.from, required this.to, required this.port});
 
   Map<String, dynamic> toDocument() {
-    return {'from': from, 'to': to, if (port != null) 'port': port};
+    return {
+      'from': from,
+      'to': to,
+      if (port != null) 'port': port,
+    };
   }
 
   static EdgeEntity fromDocument(Map<String, dynamic> doc) {
-    return EdgeEntity(from: doc['from'], to: doc['to'], port: doc['port']);
+    return EdgeEntity(
+      from: doc['from'],
+      to: doc['to'],
+      port: doc['port'] as String?,
+    );
   }
 }
+

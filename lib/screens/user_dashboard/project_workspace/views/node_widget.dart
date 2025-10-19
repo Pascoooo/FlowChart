@@ -1,11 +1,12 @@
 import 'package:flowchart_repository/flowchart_repository.dart';
-import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
-import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
-import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:flowchart_thesis/config/services/dialog_service/app_dialogs.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
+import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
+import '../../../../config/services/dialog_service/app_dialogs.dart';
 import 'painters.dart';
 import 'node_creation_service.dart';
 
@@ -69,32 +70,74 @@ class _NodeWidgetState extends State<NodeWidget> {
           return const SizedBox.shrink();
         }
 
+        // ✅ NUOVO: Verifica se siamo in debug mode
+        final debugState = context.watch<DebugBloc>().state;
+        final isInDebugMode = debugState is DebugInProgress || debugState is DebugAwaitingInput;
+
         final bool isConnectorMode = state.isConnectorModeActive;
         final bool isThisNodeTheSource =
             state.connectorSourceNodeId == widget.node.id;
-        final bool isThisNodeAValidTarget =
-            state.isLeafNode(widget.node.id) && !isThisNodeTheSource;
+
+        // ⚠️ NUOVO: Verifica se siamo in modalità selezione corpo do-while o reset parziale
+        final connectorPurpose = state.connectorPurpose;
+        final sourceNode = state.connectorSourceNodeId != null
+            ? state.getNodeById(state.connectorSourceNodeId!)
+            : null;
+        final isDoWhileBodySelection = connectorPurpose == ConnectorPurpose.doWhileBody; // solo dal purpose
+        final isResetSelection = connectorPurpose == ConnectorPurpose.resetFromNode;
+
+        // Calcola l'insieme di nodi validi per do-while: devono essere PRIMA del do-while
+        final allowedAncestors = isDoWhileBodySelection && sourceNode != null
+            ? state.nodesThatCanReach(sourceNode.id)
+            : const <String>{};
+
+        // Nodo Start non selezionabile come inizio corpo o reset
+        final isStartNode = widget.node.kind == FlowNodeKind.start;
+        // REQUISITO: Anche il FunctionHeader non è selezionabile per il reset
+        final isHeaderNode = widget.node.kind == FlowNodeKind.functionHeader;
+        // 🔒 Nodo Fine: non selezionabile in connector mode come target e non deve avviare connector
+        final isEndNode = widget.node.kind == FlowNodeKind.end;
+
+        // Valida il target in base alla modalità
+        final bool isThisNodeAValidTarget = isDoWhileBodySelection
+            ? (!isThisNodeTheSource && !isStartNode && allowedAncestors.contains(widget.node.id))
+            : (isResetSelection
+                ? (!isStartNode && !isHeaderNode)
+                : (state.isLeafNode(widget.node.id) && !isThisNodeTheSource && !isEndNode));
+
         final bool isThisNodeSelectedForConnector =
             state.selectedConnectorNodeIds.contains(widget.node.id);
 
         final bool isDimmed =
             isConnectorMode && !isThisNodeAValidTarget && !isThisNodeTheSource;
 
-        // ⚠️ MODIFICA: Controlla se siamo in modalità debug
-        final bool isDebugMode = state.isDebugMode;
-
         void handleTap() {
-          // ⚠️ MODIFICA: Disabilita la selezione manuale in modalità debug
-          if (isDebugMode) {
-            // In debug mode, NON permettere la selezione diretta dei nodi
-            return;
+          // ✅ FIXED: Disabilita completamente i click in debug mode
+          if (isInDebugMode) {
+            return; // Ignora i click quando siamo in debug mode
+          }
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      // 🆕 In modalità selezione corpo do-while: cliccando su un altro do-while si cambia la sorgente
+          if (isConnectorMode && isDoWhileBodySelection) {
+            if (widget.node.kind == FlowNodeKind.doWhileLoop) {
+              context.read<FlowchartBloc>().add(StartDoWhileBodySelection(widget.node.id));
+              return;
+            }
           }
 
           if (isConnectorMode) {
             if (isThisNodeAValidTarget) {
-              context
-                  .read<FlowchartBloc>()
-                  .add(ToggleConnectorNodeSelection(widget.node.id));
+              // 🆕 Se stiamo scegliendo l'inizio del corpo di un do-while, conferma subito la scelta
+              if (isDoWhileBodySelection && sourceNode != null) {
+                context.read<FlowchartBloc>().add(SelectDoWhileBodyStart(
+                  doWhileNodeId: sourceNode.id,
+                  bodyStartNodeId: widget.node.id,
+                ));
+              } else {
+                context
+                    .read<FlowchartBloc>()
+                    .add(ToggleConnectorNodeSelection(widget.node.id));
+              }
             }
           } else {
             if (!widget.isSelected) {
@@ -123,8 +166,8 @@ class _NodeWidgetState extends State<NodeWidget> {
                     clipBehavior: Clip.none,
                     alignment: Alignment.topCenter,
                     children: [
-                      // ⚠️ MODIFICA: NON mostrare l'icona dell'occhio in modalità debug
-                      if (widget.isSelected && !isConnectorMode && !isDebugMode)
+                      // Pulsante dettagli nodo (occhio) - mostrato solo se selezionato, non in modalità connettore E NON in debug mode
+                      if (widget.isSelected && !isConnectorMode && !isInDebugMode)
                         Positioned(
                           top: 0,
                           child: _EyeButton(
@@ -142,13 +185,15 @@ class _NodeWidgetState extends State<NodeWidget> {
                           onPanStart: (!widget.isReadOnly ||
                                       widget.allowDragInReadOnly) &&
                                   widget.isSelected &&
-                                  !isConnectorMode
+                                  !isConnectorMode &&
+                                  !isInDebugMode
                               ? (_) => setState(() => _isDragging = true)
                               : null,
                           onPanUpdate: (!widget.isReadOnly ||
                                       widget.allowDragInReadOnly) &&
                                   widget.isSelected &&
-                                  !isConnectorMode
+                                  !isConnectorMode &&
+                                  !isInDebugMode
                               ? (details) {
                                   setState(() {
                                     _dragPosition = Offset(
@@ -163,7 +208,8 @@ class _NodeWidgetState extends State<NodeWidget> {
                           onPanEnd: (!widget.isReadOnly ||
                                       widget.allowDragInReadOnly) &&
                                   widget.isSelected &&
-                                  !isConnectorMode
+                                  !isConnectorMode &&
+                                  !isInDebugMode
                               ? (_) {
                                   setState(() => _isDragging = false);
                                   context
@@ -182,14 +228,16 @@ class _NodeWidgetState extends State<NodeWidget> {
                                 ? (isThisNodeAValidTarget
                                     ? SystemMouseCursors.click
                                     : SystemMouseCursors.basic)
-                                : ((!widget.isReadOnly ||
-                                        widget.allowDragInReadOnly)
-                                    ? (widget.isSelected
-                                        ? SystemMouseCursors.move
-                                        : SystemMouseCursors.click)
-                                    : (widget.isSelected
-                                        ? SystemMouseCursors.basic
-                                        : SystemMouseCursors.click)),
+                                : (isInDebugMode
+                                    ? SystemMouseCursors.basic
+                                    : ((!widget.isReadOnly ||
+                                            widget.allowDragInReadOnly)
+                                        ? (widget.isSelected
+                                            ? SystemMouseCursors.move
+                                            : SystemMouseCursors.click)
+                                        : (widget.isSelected
+                                            ? SystemMouseCursors.basic
+                                            : SystemMouseCursors.click))),
                             child: NodeRenderer(
                               node: widget.node,
                               isSelected: widget.isSelected,
@@ -199,10 +247,18 @@ class _NodeWidgetState extends State<NodeWidget> {
                           ),
                         ),
                       ),
+
+                      // 🆕 Badge di selezione (spunta) visibile SOLO in modalità speciale (connector/reset/do-while)
+                      if (isConnectorMode && (isThisNodeSelectedForConnector || isThisNodeTheSource))
+                        Positioned(
+                          top: topPaddingForButton - 12,
+                          right: -8,
+                          child: _SelectionBadge(isSource: isConnectorMode && isThisNodeTheSource),
+                        ),
                     ],
                   ),
                 ),
-                if (!isConnectorMode)
+                if (!isConnectorMode && !isInDebugMode)
                   ..._getAvailableHandles(context)
                       .map((dir) => _buildCreationHandle(context, dir)),
               ],
@@ -270,7 +326,26 @@ class _NodeWidgetState extends State<NodeWidget> {
         if (!hasFalseBranch) handles.add(HandleDirection.left);
         if (!hasTrueBranch) handles.add(HandleDirection.right);
         return handles;
+      case FlowNodeKind.whileLoop:
+        // While: true va in BASSO (corpo del ciclo), false va a DESTRA (uscita)
+        final outgoingEdges = state.getOutgoingEdges(widget.node.id);
+        final hasFalseBranch = outgoingEdges.any((e) => e.port == 'false');
+        final hasTrueBranch = outgoingEdges.any((e) => e.port == 'true');
+        final handles = <HandleDirection>[];
+        if (!hasFalseBranch) handles.add(HandleDirection.right); // False esce a destra
+        if (!hasTrueBranch) handles.add(HandleDirection.bottom); // True va in basso (corpo ciclo)
+        return handles;
+      case FlowNodeKind.doWhileLoop:
+        // Do-While: SOLO uscita a DESTRA (false)
+        // Il corpo viene collegato tramite dialog di selezione dopo la creazione
+        final outgoingEdges = state.getOutgoingEdges(widget.node.id);
+        final hasFalseBranch = outgoingEdges.any((e) => e.port == 'false');
+        final handles = <HandleDirection>[];
+        if (!hasFalseBranch) handles.add(HandleDirection.right); // Solo false esce a destra
+        // NON mostrare mai handle per 'true' (corpo): si seleziona tramite dialog
+        return handles;
       case FlowNodeKind.end:
+      case FlowNodeKind.returnNode: // REQUISITO: Anche il ReturnNode è terminale
         return [];
       default:
         return state.canAddOutgoingConnection(widget.node.id)
@@ -311,6 +386,14 @@ class _NodeWidgetState extends State<NodeWidget> {
     if (widget.node.kind == FlowNodeKind.decision) {
       return direction == HandleDirection.left ? 'false' : 'true';
     }
+    if (widget.node.kind == FlowNodeKind.whileLoop) {
+      // Per il while: bottom = true (corpo), right = false (uscita)
+      return direction == HandleDirection.bottom ? 'true' : 'false';
+    }
+    if (widget.node.kind == FlowNodeKind.doWhileLoop) {
+      // Per il do-while: bottom = true (inizio corpo), right = false (uscita)
+      return direction == HandleDirection.bottom ? 'true' : 'false';
+    }
     return null;
   }
 }
@@ -328,7 +411,7 @@ class _EyeButton extends StatelessWidget {
         padding: WidgetStateProperty.all(EdgeInsets.zero),
         shape: WidgetStateProperty.all(const CircleBorder()),
         backgroundColor:
-            WidgetStateProperty.all(theme.cardColor.withOpacity(0.95)),
+            WidgetStateProperty.all(theme.cardColor.withValues(alpha: 0.95)),
       ),
       child: Container(
         width: 36,
@@ -336,7 +419,7 @@ class _EyeButton extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)
+            BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)
           ],
         ),
         child: Center(
@@ -362,19 +445,19 @@ class NodeRenderer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    // Grassetto solo per selezione normale, NON per selezione connettore
+    // Testo da mostrare: per FunctionHeader usa la firma generata
+    final String displayText =
+        (node is FunctionHeaderNode) ? (node as FunctionHeaderNode).signatureText : node.text;
+    // Grassetto solo per selezione normale
     final textStyle = TextStyle(
       fontSize: 13,
-      fontWeight: isSelected && !isConnectorSelected
-          ? FontWeight.bold
-          : FontWeight.w500,
+      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
       color: Colors.black,
     );
 
-    final borderColor = isConnectorSelected
-        ? Colors.transparent
-        : (isSelected ? theme.accentColor : Colors.blue);
-    final borderWidth = (isSelected && !isConnectorSelected) ? 2.5 : 1.5;
+    // 🆕 Mantieni sempre il bordo visibile; niente trasparenza in connector mode
+    final borderColor = isSelected ? theme.accentColor : Colors.blue;
+    final borderWidth = isSelected ? 2.5 : 1.5;
     const fillColor = Colors.white;
 
     Widget nodeContent;
@@ -393,7 +476,7 @@ class NodeRenderer extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Text(
-                  node.text,
+                  displayText,
                   textAlign: TextAlign.center,
                   style: textStyle,
                 ),
@@ -402,6 +485,35 @@ class NodeRenderer extends StatelessWidget {
           ),
         );
         break;
+
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
+        // Rombo con colore diverso per distinguerli dalla Decision
+        final loopBorderColor = isSelected ? theme.accentColor : Colors.green;
+
+        nodeContent = CustomPaint(
+          painter: DiamondPainter(
+            color: fillColor,
+            borderColor: loopBorderColor,
+            strokeWidth: borderWidth,
+          ),
+          child: SizedBox(
+            width: node.width,
+            height: node.height,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  displayText,
+                  textAlign: TextAlign.center,
+                  style: textStyle,
+                ),
+              ),
+            ),
+          ),
+        );
+        break;
+
       case FlowNodeKind.input:
       case FlowNodeKind.output:
         nodeContent = CustomPaint(
@@ -419,7 +531,7 @@ class NodeRenderer extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Text(
-                  node.text,
+                  displayText,
                   textAlign: TextAlign.center,
                   style: textStyle,
                   maxLines: 3,
@@ -443,9 +555,9 @@ class NodeRenderer extends StatelessWidget {
             ),
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: [
-              if (isSelected && !isConnectorSelected)
+              if (isSelected)
                 BoxShadow(
-                  color: theme.accentColor.withOpacity(0.25),
+                  color: theme.accentColor.withValues(alpha: 0.25),
                   blurRadius: 8,
                 ),
             ],
@@ -454,7 +566,7 @@ class NodeRenderer extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
               child: Text(
-                node.text,
+                displayText,
                 textAlign: TextAlign.center,
                 style: textStyle,
                 maxLines: 3,
@@ -548,9 +660,9 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
           height: handleSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: theme.cardColor.withOpacity(0.95),
+            color: theme.cardColor.withValues(alpha: 0.95),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)
+              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)
             ],
           ),
           child: Center(
@@ -560,7 +672,7 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
               curve: Curves.easeInOut,
               child: Icon(FontAwesomeIcons.plus,
                   size: 16,
-                  color: theme.typography.body?.color?.withOpacity(0.8)),
+                  color: theme.typography.body?.color?.withValues(alpha: 0.8)),
             ),
           ),
         ),
@@ -574,55 +686,140 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
 
     bool isSourceNodeLeaf = false;
     bool hasOtherLeafNodes = false;
+    bool isInsideLoop = false;
+    String? loopNodeId;
+    final bool isFunctionFlowchart =
+        state is FlowchartLoaded ? state.flowchart.isFunction : false;
+
+    // 🆕 Valuta candidati reali per do-while: presenza di almeno un blocco oltre a Start
+    bool hasEligibleDoWhileCandidates = false;
+
+    // 🆕 Valuta se il flowchart contiene solo il nodo Inizio
+    bool onlyStart = false;
+    if (state is FlowchartLoaded) {
+      final nodes = state.flowchart.nodes;
+      onlyStart = nodes.length == 1 && nodes.first.kind == FlowNodeKind.start;
+
+      // Mostra il do-while se c'è almeno un blocco oltre a Start
+      hasEligibleDoWhileCandidates = !onlyStart;
+    }
 
     if (state is FlowchartLoaded) {
       isSourceNodeLeaf = state.isLeafNode(widget.sourceNodeId);
-
-      // Verifica se ci sono altri nodi foglia disponibili (escluso questo)
+      loopNodeId = state.getParentLoopNodeId(widget.sourceNodeId);
+      isInsideLoop = loopNodeId != null;
       if (isSourceNodeLeaf) {
-        hasOtherLeafNodes = state.flowchart.nodes.any((node) =>
-            state.isLeafNode(node.id) && node.id != widget.sourceNodeId);
+        // Considera solo nodi foglia VALIDi come altri candidati: non End e con capacità di uscita
+        hasOtherLeafNodes = state.flowchart.nodes.any(
+          (node) =>
+              state.isLeafNode(node.id) &&
+              node.id != widget.sourceNodeId &&
+              node.kind != FlowNodeKind.end &&
+              state.canAddOutgoingConnection(node.id),
+        );
       }
     }
 
-    MenuFlyoutItem buildItem(
-        String label, IconData icon, Function() onPressed) {
-      final theme = FluentTheme.of(context);
-      return MenuFlyoutItem(
-        onPressed: () {
-          Navigator.pop(flyoutContext);
-          onPressed();
-        },
-        text: Text(label,
-            style:
-                TextStyle(fontSize: 13, color: theme.typography.body?.color)),
-        leading: Icon(icon,
-            size: 16, color: theme.typography.body?.color?.withOpacity(0.8)),
-      );
+    MenuFlyoutItem _item(String label, IconData icon, VoidCallback onPressed) => MenuFlyoutItem(
+          onPressed: () {
+            Navigator.pop(flyoutContext);
+            onPressed();
+          },
+          text: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: FluentTheme.of(context).typography.body?.color,
+            ),
+          ),
+          leading: Icon(
+            icon,
+            size: 16,
+            color: FluentTheme.of(context).typography.body?.color?.withValues(alpha: 0.8),
+          ),
+        );
+
+    final items = <MenuFlyoutItemBase>[];
+
+    items.addAll([
+      _item('Input', FontAwesomeIcons.download,
+          () => widget.onNodeCreate(FlowNodeKind.input)),
+      _item('Assegnazione', FontAwesomeIcons.calculator,
+          () => widget.onNodeCreate(FlowNodeKind.assignment)),
+      _item('Output', FontAwesomeIcons.upload,
+          () => widget.onNodeCreate(FlowNodeKind.output)),
+      _item('Condizione', FontAwesomeIcons.codeBranch,
+          () => widget.onNodeCreate(FlowNodeKind.decision)),
+      _item('Sottoprogramma', FontAwesomeIcons.gears,
+          () => widget.onNodeCreate(FlowNodeKind.process)),
+      if (isFunctionFlowchart)
+        _item('Return', FontAwesomeIcons.reply,
+            () => widget.onNodeCreate(FlowNodeKind.returnNode)),
+      const MenuFlyoutSeparator(),
+    ]);
+
+    if (!isInsideLoop) {
+      items.addAll([
+        _item('Ciclo Pre-Condizionale', FontAwesomeIcons.arrowsRotate,
+            () => widget.onNodeCreate(FlowNodeKind.whileLoop)),
+        // Mostra Post-Condizionale appena c'è almeno un blocco oltre a Start
+        if (hasEligibleDoWhileCandidates)
+          _item('Ciclo Post-Condizionale', FontAwesomeIcons.repeat,
+              () => widget.onNodeCreate(FlowNodeKind.doWhileLoop)),
+        const MenuFlyoutSeparator(),
+      ]);
     }
 
-    return [
-      buildItem('Input', FontAwesomeIcons.download,
-          () => widget.onNodeCreate(FlowNodeKind.input)),
-      buildItem('Assegnazione', FontAwesomeIcons.calculator,
-          () => widget.onNodeCreate(FlowNodeKind.assignment)),
-      buildItem('Output', FontAwesomeIcons.upload,
-          () => widget.onNodeCreate(FlowNodeKind.output)),
-      buildItem('Condizione', FontAwesomeIcons.codeBranch,
-          () => widget.onNodeCreate(FlowNodeKind.decision)),
-      buildItem('Sottoprogramma', FontAwesomeIcons.gears,
-          () => widget.onNodeCreate(FlowNodeKind.process)),
-
-      const MenuFlyoutSeparator(),
-
-      // Mostra "Connettore" solo se questo è un nodo foglia E ci sono altri nodi foglia disponibili
-      if (isSourceNodeLeaf && hasOtherLeafNodes)
-        buildItem('Connettore', FontAwesomeIcons.shareNodes, () {
-          bloc.add(StartConnectorMode(widget.sourceNodeId));
+    if (isInsideLoop && loopNodeId != null) {
+      items.add(
+        _item('Fine Ciclo', FontAwesomeIcons.arrowRotateLeft, () {
+          bloc.add(CloseLoop(
+            fromNodeId: widget.sourceNodeId,
+            loopNodeId: loopNodeId!,
+          ));
         }),
+      );
+    } else {
+      if (isSourceNodeLeaf && hasOtherLeafNodes && state is FlowchartLoaded && state.canAddOutgoingConnection(widget.sourceNodeId)) {
+        items.add(
+          _item('Connettore', FontAwesomeIcons.shareNodes, () {
+            bloc.add(StartConnectorMode(widget.sourceNodeId));
+          }),
+        );
+      }
 
-      buildItem('Fine', FontAwesomeIcons.flagCheckered,
-          () => widget.onNodeCreate(FlowNodeKind.end)),
-    ];
+      if (!isFunctionFlowchart) {
+        items.add(
+          _item('Fine', FontAwesomeIcons.flagCheckered,
+              () => widget.onNodeCreate(FlowNodeKind.end)),
+        );
+      }
+    }
+
+    return items;
+  }
+}
+
+class _SelectionBadge extends StatelessWidget {
+  final bool isSource;
+  const _SelectionBadge({this.isSource = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    final Color bg = isSource ? theme.accentColor : Colors.green;
+    final IconData icon = isSource ? FluentIcons.plug_connected : FluentIcons.check_mark;
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        color: bg,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Icon(icon, size: 12, color: Colors.white),
+    );
   }
 }

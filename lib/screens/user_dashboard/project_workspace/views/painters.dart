@@ -21,9 +21,9 @@ class GridPainter extends CustomPainter {
     final isDark = theme.brightness == Brightness.dark;
     return GridPainter(
       minorColor: (isDark ? Colors.white : Colors.black)
-          .withOpacity(isDark ? 0.14 : 0.10),
+          .withValues(alpha: isDark ? 0.14 : 0.10),
       majorColor: (isDark ? Colors.white : Colors.black)
-          .withOpacity(isDark ? 0.30 : 0.18),
+          .withValues(alpha: isDark ? 0.30 : 0.18),
     );
   }
 
@@ -103,7 +103,7 @@ class ConnectionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = (theme.typography.body?.color ?? Colors.black).withOpacity(0.5)
+      ..color = (theme.typography.body?.color ?? Colors.black).withValues(alpha: 0.5)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -116,7 +116,28 @@ class ConnectionPainter extends CustomPainter {
 
       if (fromNode != null && toNode != null) {
         Offset startPoint;
-        if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
+
+        // Gestione dei nodi ciclo (while e do-while)
+        if ((fromNode.kind == FlowNodeKind.whileLoop || fromNode.kind == FlowNodeKind.doWhileLoop) && edge.port != null) {
+          if (edge.port == 'true') {
+            startPoint = Offset(
+                fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
+          } else if (edge.port == 'doWhileStart') {
+            startPoint = Offset(
+                fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
+          } else if (edge.port == 'false') {
+            startPoint = Offset(
+                fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
+          } else if (edge.port == 'loop') {
+            startPoint = Offset(
+                fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
+          } else {
+            startPoint = Offset(
+                fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
+          }
+        }
+        // Gestione dei nodi decision (condizioni)
+        else if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
           if (edge.port == 'true') {
             startPoint = Offset(
                 fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
@@ -128,19 +149,76 @@ class ConnectionPainter extends CustomPainter {
               fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
         }
 
-        final endCenter =
-        Offset(toNode.x + toNode.width / 2, toNode.y + toNode.height / 2);
-        final endPoint =
-        _getIntersectionPointWithRect(startPoint, endCenter, toNode);
+        // Gestione del punto di arrivo per archi di ritorno
+        Offset endPoint;
+        if (edge.port == 'loop') {
+          endPoint = Offset(toNode.x, toNode.y + toNode.height / 2);
+        } else {
+          final endCenter =
+              Offset(toNode.x + toNode.width / 2, toNode.y + toNode.height / 2);
+          endPoint = _getIntersectionPointWithRect(startPoint, endCenter, toNode);
+        }
 
-        canvas.drawLine(startPoint, endPoint, paint);
-        _drawArrow(canvas, paint, startPoint, endPoint);
+        // ✨ NUOVO: per gli archi di chiusura ciclo ('loop') disegna una L dal centro del blocco alla punta sinistra del rombo
+        if (edge.port == 'loop' && (toNode.kind == FlowNodeKind.whileLoop || toNode.kind == FlowNodeKind.doWhileLoop)) {
+          // Partenza dal centro del blocco finale
+          final startCenter = Offset(
+              fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height / 2);
+          // Punta sinistra del rombo del ciclo
+          final leftTip = Offset(toNode.x, toNode.y + toNode.height / 2);
+          // Clearance verso sinistra per instradare la L senza sovrapporsi
+          const clearance = 24.0;
+          final viaX = min(startCenter.dx, leftTip.dx) - clearance;
+          final points = <Offset>[
+            startCenter,
+            Offset(viaX, startCenter.dy), // orizzontale verso sinistra dalla metà del blocco
+            Offset(viaX, leftTip.dy),     // verticale fino all'altezza della punta sinistra del rombo
+            leftTip,                      // entra nella punta sinistra del rombo
+          ];
+          _drawOrthogonalArrow(canvas, paint, points);
+        }
+        // ✨ per il do-while ramo 'true' disegna un percorso ortogonale sul lato sinistro
+        else if (fromNode.kind == FlowNodeKind.doWhileLoop && (edge.port == 'true' || edge.port == 'doWhileStart')) {
+          // Spigolo sinistro del rombo do-while
+          final startLeft = Offset(fromNode.x, fromNode.y + fromNode.height / 2);
+          // Lato sinistro del blocco di inizio corpo
+          final endLeft = Offset(toNode.x, toNode.y + toNode.height / 2);
+          // Clearance verso sinistra
+          final clearance = 24.0;
+          final viaX = min(startLeft.dx, endLeft.dx) - clearance;
+          final points = <Offset>[
+            startLeft,
+            Offset(viaX, startLeft.dy),   // vai a sinistra dallo spigolo del rombo
+            Offset(viaX, endLeft.dy),     // su/giù fino all'altezza del target
+            endLeft,                       // entra da sinistra nel blocco di inizio
+          ];
+          _drawOrthogonalArrow(canvas, paint, points);
+        } else {
+          // default: linea diretta
+          canvas.drawLine(startPoint, endPoint, paint);
+          _drawArrow(canvas, paint, startPoint, endPoint);
+        }
 
+        // Disegna le etichette per i rami
         if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
           _drawBranchLabel(canvas, fromNode, edge.port!);
+        } else if ((fromNode.kind == FlowNodeKind.whileLoop ||
+                    fromNode.kind == FlowNodeKind.doWhileLoop) && edge.port != null) {
+          _drawLoopLabel(canvas, fromNode, edge.port!);
         }
       }
     }
+  }
+
+  void _drawOrthogonalArrow(Canvas canvas, Paint paint, List<Offset> points) {
+    // Disegna segmenti rettilinei 90°
+    for (int i = 0; i < points.length - 1; i++) {
+      canvas.drawLine(points[i], points[i + 1], paint);
+    }
+    // Freccia sull'ultimo segmento
+    final start = points[points.length - 2];
+    final end = points.last;
+    _drawArrow(canvas, paint, start, end);
   }
 
   Offset _getIntersectionPointWithRect(
@@ -231,7 +309,53 @@ class ConnectionPainter extends CustomPainter {
     canvas.drawRRect(
       rrect,
       Paint()
-        ..color = theme.inactiveColor.withOpacity(0.5)
+        ..color = theme.inactiveColor.withValues(alpha: 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+    textPainter.paint(
+      canvas,
+      Offset(rect.left + padding, rect.top + padding),
+    );
+  }
+
+  void _drawLoopLabel(Canvas canvas, FlowNode fromNode, String label) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: 'Loop',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: theme.typography.body?.color,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    const padding = 6.0;
+    // const offsetFromNode = 12.0; // rimosso: non usato
+    Offset labelPos;
+
+    // Posiziona l'etichetta sopra il nodo per l'arco di ritorno
+    labelPos = Offset(
+      fromNode.x + fromNode.width / 2 - textPainter.width / 2,
+      fromNode.y - textPainter.height - padding,
+    );
+
+    final rect = Rect.fromLTWH(
+      labelPos.dx,
+      labelPos.dy,
+      textPainter.width + padding * 2,
+      textPainter.height + padding * 2,
+    );
+
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(99));
+    final bgPaint = Paint()..color = theme.cardColor.withAlpha(240);
+    canvas.drawRRect(rrect, bgPaint);
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = theme.inactiveColor.withValues(alpha: 0.5)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0,
     );

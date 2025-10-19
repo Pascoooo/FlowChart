@@ -235,14 +235,43 @@ class _NodeDetailsDialog extends StatelessWidget {
       FlowNodeKind.decision => ('Nodo Condizione', FontAwesomeIcons.codeBranch, warningColor),
       FlowNodeKind.start => ('Nodo Inizio', FontAwesomeIcons.play, successColor),
       FlowNodeKind.end => ('Nodo Fine', FontAwesomeIcons.flagCheckered, errorColor),
-    // NUOVO: Aggiunto titolo, icona e colore per il nodo di assegnazione.
       FlowNodeKind.assignment => ('Nodo Assegnazione', FontAwesomeIcons.calculator, accentColor),
+      FlowNodeKind.whileLoop => ('Ciclo While', FontAwesomeIcons.repeat, accentColor),
+      FlowNodeKind.doWhileLoop => ('Ciclo Do-While', FontAwesomeIcons.undo, accentColor),
+      FlowNodeKind.functionHeader => ('Intestazione Funzione', FontAwesomeIcons.signature, successColor),
+      FlowNodeKind.returnNode => ('Nodo Return', FontAwesomeIcons.reply, errorColor),
+      // TODO: Handle this case.
+      FlowNodeKind.doWhileStart => throw UnimplementedError(),
     };
   }
 
   /// 🔍 Build Specific Details based on Node Type
   List<Widget> _buildSpecificDetails(BuildContext context, FluentThemeData theme) {
     switch (node.kind) {
+      case FlowNodeKind.functionHeader:
+        final headerNode = node as FunctionHeaderNode;
+        return [
+          _KeyValueDetail(
+            label: 'Nome Funzione',
+            value: headerNode.functionName,
+            theme: theme,
+            isMonospace: true,
+          ),
+        ];
+
+      case FlowNodeKind.returnNode:
+        final returnNode = node as ReturnNode;
+        return [
+          _BoxedDetail(
+            label: 'Espressione di Ritorno',
+            value: returnNode.returnExpression != null && returnNode.returnExpression!.isNotEmpty
+                ? returnNode.returnExpression!
+                : '(Nessun valore di ritorno)',
+            theme: theme,
+            isCode: true,
+          ),
+        ];
+
       case FlowNodeKind.input:
       // FIX: Aggiornato per usare 'targetVariables' (List<String>) invece di 'declarations'.
         final inputNode = node as InputNode;
@@ -331,6 +360,28 @@ class _NodeDetailsDialog extends StatelessWidget {
           _BoxedDetail(
             label: 'Condizione',
             value: decisionNode.condition.isNotEmpty ? decisionNode.condition : '–',
+            theme: theme,
+            isCode: true,
+          ),
+        ];
+
+      case FlowNodeKind.whileLoop:
+        final whileNode = node as WhileNode;
+        return [
+          _BoxedDetail(
+            label: 'Condizione (While)',
+            value: whileNode.condition.isNotEmpty ? whileNode.condition : '–',
+            theme: theme,
+            isCode: true,
+          ),
+        ];
+
+      case FlowNodeKind.doWhileLoop:
+        final doWhileNode = node as DoWhileNode;
+        return [
+          _BoxedDetail(
+            label: 'Condizione (Do-While)',
+            value: doWhileNode.condition.isNotEmpty ? doWhileNode.condition : '–',
             theme: theme,
             isCode: true,
           ),

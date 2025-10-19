@@ -36,7 +36,12 @@
         "*.local"
       ],
       "source": "functions",
-      "runtime": "python312"
+      "runtime": "python312",
+      "secrets": [
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "TOKEN_ENCRYPTION_KEY"
+      ]
     }
   ]
 }

@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:bloc/bloc.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../flowchart_bloc/flowchart_shape_factory.dart';
 import '../flowchart_bloc/flowchart_state.dart';
 import 'file_system_event.dart';
@@ -20,69 +20,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<OpenFile>(_onOpenFile);
     on<DeleteFile>(_onDeleteFile);
     on<RenameFile>(_onRenameFile);
-    on<StartDebugSession>(_onStartDebugSession);
-    on<ComputeDebugStep>(_onComputeDebugStep);
-    on<EndDebugSession>(_onEndDebugSession);
-  }
-
-
-// --- SEZIONE DEBUG (AGGIORNATA) ---
-
-  Stream<Map<String, dynamic>> debugVariablesStream(String projectId) {
-    return projectRepository.watchDebugVariables(projectId: projectId);
-  }
-
-  Future<void> _onStartDebugSession(
-      StartDebugSession event, Emitter<FileSystemState> emit) async {
-    try {
-      await projectRepository.startDebugSession(
-          projectId: event.flowchart.flowchartId, flowchart: event.flowchart);
-    } catch (e) {
-      debugPrint('Errore durante l\'avvio della sessione di debug: $e');
-    }
-  }
-
-// FIX: Reso più robusto con un try-catch specifico per trovare il nodo.
-  Future<void> _onComputeDebugStep(
-      ComputeDebugStep event, Emitter<FileSystemState> emit) async {
-    try {
-      if (event.index < 0 || event.index >= event.debugPath.length) {
-        debugPrint('Indice di debug fuori dai limiti.');
-        return;
-      }
-      final currentNodeId = event.debugPath[event.index];
-
-      late final FlowNode currentNode;
-
-      try {
-        // Cerca il nodo. Se non lo trova, lancia StateError.
-        currentNode = event.flowchart.nodes.firstWhere(
-              (n) => n.id == currentNodeId,
-        );
-      } on StateError {
-        // Cattura l'errore se il nodo non viene trovato e interrompe l'esecuzione.
-        debugPrint('ERRORE: Nodo di debug non trovato per id: $currentNodeId.');
-        return;
-      }
-
-      // Se il nodo è stato trovato, chiama il repository.
-      await projectRepository.advanceDebugStep(
-        projectId: event.flowchart.flowchartId,
-        currentNode: currentNode,
-      );
-
-    } catch (e) {
-      debugPrint('Errore generico durante il calcolo dello step di debug: $e');
-    }
-  }
-
-  Future<void> _onEndDebugSession(
-      EndDebugSession event, Emitter<FileSystemState> emit) async {
-    try {
-      await projectRepository.endDebugSession(projectId: event.projectId);
-    } catch (e) {
-      debugPrint('Errore durante la terminazione della sessione di debug: $e');
-    }
+    on<UpdateFileContentInCache>(_onUpdateFileContentInCache);
   }
 
   // --- SEZIONE CRUD (OPERAZIONI SUI FILE) ---
@@ -131,9 +69,52 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     emit(currentState.copyWith(isLoading: true));
     try {
-      final emptyFlowchart = FlowchartLoaded.empty(fileName: fileName).flowchart;
-      final startNode = FlowNodeFactory.createNode(FlowNodeKind.start, const Offset(1030.0, 50.0) ,allVariables: []);
-      final initialFlowchart = emptyFlowchart.copyWith(nodes: [startNode]);
+      // Base: flowchart vuoto con nome corretto
+      final baseFlowchart = FlowchartLoaded.empty(fileName: fileName).flowchart;
+
+      Flowchart initialFlowchart;
+      if (event.signature == null) {
+        // File "main": crea solo il nodo Inizio
+        final startNode = FlowNodeFactory.createNode(
+          FlowNodeKind.start,
+          const Offset(1030.0, 50.0),
+          allVariables: const [],
+        );
+        initialFlowchart = baseFlowchart.copyWith(
+          type: FlowchartType.main,
+          nodes: [startNode],
+        );
+      } else {
+        // Sottoprogramma: intestazione + variabili di input dai parametri
+        final signature = event.signature!;
+
+        final headerNode = FunctionHeaderNode(
+          id: 'header-${Uuid().v4()}',
+          x: 1030.0,
+          y: 50.0,
+          width: 250.0,
+          height: 100.0,
+          functionName: fileName,
+          returnType: signature.returnType,
+          parameters: signature.parameters,
+        );
+
+        final paramVariables = signature.parameters
+            .map((p) => VariableDeclaration(
+          name: p.name,
+          dataType: p.type,
+          scope: VariableScope.local, // REQUISITO: I parametri sono variabili locali
+        ))
+            .toList();
+
+        initialFlowchart = baseFlowchart.copyWith(
+          type: FlowchartType.function,
+          nodes: [headerNode],
+          signature: signature,
+          variables: paramVariables,
+        );
+      }
+
       final initialContent = jsonEncode(initialFlowchart.toEntity().toDocument());
 
       final newFile = await projectRepository.addFileToProject(
@@ -148,6 +129,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         activeFileId: newFile.fileId,
         isLoading: false,
       ));
+      return;
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Impossibile creare il file: ${e.toString()}'));
     }
@@ -172,7 +154,10 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     emit(currentState.copyWith(isLoading: true));
     try {
+      // ✅ FIX CRITICO: Prima rimuovi il file dalla sessione RTDB, poi da Firestore
+      // Questo garantisce che quando esci dal workspace, il file eliminato non venga risincronizzato
       await projectRepository.deleteFile(projectId: event.projectId, fileId: event.fileId);
+
       final updatedFiles = currentState.files.where((f) => f.fileId != event.fileId).toList();
       String? nextActiveFileId = currentState.activeFileId;
 
@@ -206,4 +191,21 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     }
   }
 
+
+  void _onUpdateFileContentInCache(
+      UpdateFileContentInCache event, Emitter<FileSystemState> emit) {
+    if (state is! FileSystemLoaded) return;
+    final currentState = state as FileSystemLoaded;
+
+    final updatedFiles = currentState.files.map((file) {
+      if (file.fileId == event.fileId) {
+        // Assumendo che MyFile abbia un metodo copyWith. Se non ce l'ha, è essenziale aggiungerlo.
+        return file.copyWith(content: event.newContent);
+      }
+      return file;
+    }).toList();
+
+    // Emetti il nuovo stato con la lista dei file aggiornata, in modo silenzioso
+    emit(currentState.copyWith(files: updatedFiles));
+  }
 }

@@ -8,11 +8,9 @@ import 'package:project_repository/project_repository.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
-import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
-import '../../../../config/services/dialog_service/service_dialog.dart';
 
 class TopBar extends StatefulWidget {
   final MyProject selectedProject;
@@ -126,10 +124,10 @@ class _SimpleTopBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.cardColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.inactiveColor.withOpacity(0.1)),
+        border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -189,35 +187,37 @@ class _AdvancedTopBar extends StatelessWidget {
     this.onLeave,
   });
 
-  // ✨ METODO CORRETTO ✨
-  Future<void> _resetFlowchart(BuildContext context) async {
-    // Mostra il nuovo dialogo con le opzioni
-    final ResetChoice? choice = await AppDialogs.showResetOptionsDialog(
+  void _resetFlowchart(BuildContext context) async {
+    final confirmed = await AppDialogs.showConfirmationDialog(
       context,
-      title: 'Scegli il tipo di reset',
-      message: 'Questa azione cancellerà tutti i nodi e le connessioni dal canvas. Vuoi mantenere le variabili dichiarate?',
+      title: 'Reset Flowchart',
+      message: 'Vuoi davvero resettare il flowchart? I nodi verranno rimossi mantenendo le variabili.',
+      isDestructive: true,
     );
-
-    // Questa logica era già corretta
-    if (choice != null && context.mounted) {
-      switch (choice) {
-        case ResetChoice.canvasOnly:
-          context.read<FlowchartBloc>().add(const ResetCanvasPreserveVariables());
-          break;
-        case ResetChoice.canvasAndVariables:
-          context.read<FlowchartBloc>().add(const ResetCanvasAndVariables());
-          break;
-      }
+    if (confirmed == true && context.mounted) {
+      context.read<FlowchartBloc>().add(const ResetCanvasPreserveVariables());
     }
   }
 
-  Future<void> _deleteSelected(BuildContext context, String nodeId) async {
-    bool? confirmed = await AppDialogs.showConfirmationDialog(
+  void _resetFromBlock(BuildContext context) async {
+    final confirmed = await AppDialogs.showConfirmationDialog(
       context,
-      title: 'Conferma eliminazione',
-      message: 'Sei sicuro di voler eliminare il nodo selezionato?',
-      confirmText: 'Elimina',
-      cancelText: 'Annulla',
+      title: 'Reset da un blocco',
+      message:
+          'Vuoi resettare il flowchart a partire da un blocco specifico?\nEntrerai in una modalità di selezione: scegli il blocco e poi conferma nell\'overlay.',
+      isDestructive: true,
+    );
+    if (confirmed == true && context.mounted) {
+      // Apri la connector mode per scegliere UN SOLO blocco (la conferma arriverà nell’overlay)
+      context.read<FlowchartBloc>().add(const StartResetFromNodeSelection());
+    }
+  }
+
+  void _deleteSelected(BuildContext context, String nodeId) async {
+    final confirmed = await AppDialogs.showConfirmationDialog(
+      context,
+      title: 'Elimina Nodo',
+      message: 'Confermi di voler eliminare il nodo selezionato?  L\'azione non è reversibile (se non con Annulla).',
       isDestructive: true,
     );
     if (confirmed == true && context.mounted) {
@@ -230,9 +230,8 @@ class _AdvancedTopBar extends StatelessWidget {
     final theme = FluentTheme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double minWidthForCenterActions = 800.0;
-        final bool showCenterActions =
-            constraints.maxWidth >= minWidthForCenterActions;
+        const double minWidthForCenterActions = 900.0;
+        final bool showCenterActions = constraints.maxWidth >= minWidthForCenterActions;
 
         return Container(
           height: 80,
@@ -240,10 +239,10 @@ class _AdvancedTopBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: theme.inactiveColor.withOpacity(0.1)),
+            border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -268,17 +267,32 @@ class _AdvancedTopBar extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                          icon: const Icon(Icons.edit, size: 20),
-                          onPressed: onEdit),
-                      const SizedBox(width: 8),
-                      IconButton(
-                          icon: const Icon(Icons.download, size: 20),
-                          onPressed: onExport),
-                    ],
+                  BlocBuilder<FlowchartBloc, FlowchartState>(
+                    builder: (context, flowchartState) {
+                      final bool disableUI = flowchartState is FlowchartLoaded && flowchartState.isConnectorModeActive;
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedOpacity(
+                            opacity: disableUI ? 0.4 : 1.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              icon: const Icon(Icons.edit, size: 20),
+                              onPressed: disableUI ? null : onEdit,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          AnimatedOpacity(
+                            opacity: disableUI ? 0.4 : 1.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              icon: const Icon(Icons.download, size: 20),
+                              onPressed: disableUI ? null : onExport,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -289,35 +303,105 @@ class _AdvancedTopBar extends StatelessWidget {
                       return const SizedBox.shrink();
                     }
 
-                    final bool hasEndNode = flowchartState.flowchart.nodes
-                        .any((node) => node.kind == FlowNodeKind.end);
-                    final bool isPlayEnabled =
-                        state.activeFileId != null && hasEndNode;
+                    final bool disableUI = flowchartState.isConnectorModeActive;
+
+                    final hasEndNode = flowchartState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
+                    // REQUISITO: Il debug può partire solo da 'main', non dai sottoprogrammi.
+                    final isPlayEnabled = flowchartState.flowchart.isMain && hasEndNode && !disableUI;
 
                     final nodes = flowchartState.flowchart.nodes;
-                    final bool hasOnlyStartNode =
-                        nodes.length == 1 && nodes.first.kind == FlowNodeKind.start;
-                    final bool isResetEnabled = !hasOnlyStartNode;
+                    // REQUISITO: Logica di reset differenziata per main e sottoprogrammi
+                    final bool hasOnlyStartOrHeader = nodes.length == 1 &&
+                        (nodes.first.kind == FlowNodeKind.start || nodes.first.kind == FlowNodeKind.functionHeader);
+                    final bool isResetEnabled = !hasOnlyStartOrHeader && !disableUI;
 
-                    final selectedNode = flowchartState
-                        .getNodeById(flowchartState.selectedNodeId ?? '');
-                    final isDeletionEnabled = selectedNode != null &&
+                    final selectedId = flowchartState.selectedNodeId;
+                    FlowNode? selectedNode = selectedId != null ? flowchartState.getNodeById(selectedId) : null;
+
+                    bool isDeletionEnabled = false;
+                    // REQUISITO: Non si può eliminare il nodo Start o FunctionHeader
+                    if (selectedNode != null &&
                         selectedNode.kind != FlowNodeKind.start &&
-                        flowchartState
-                            .getOutgoingEdges(selectedNode.id)
-                            .isEmpty;
+                        selectedNode.kind != FlowNodeKind.functionHeader) {
+                      if (selectedNode.kind == FlowNodeKind.doWhileLoop) {
+                        final outs = flowchartState.getOutgoingEdges(selectedNode.id);
+                        final hasFalse = outs.any((e) => e.port == 'false');
+                        // Consenti eliminazione se non ha ramo false (anche se ha 'true')
+                        isDeletionEnabled = !hasFalse;
+                      } else {
+                        isDeletionEnabled = flowchartState.getOutgoingEdges(selectedNode.id).isEmpty;
+                      }
+                    }
+                    isDeletionEnabled = isDeletionEnabled && !disableUI;
 
-                    return _AnimatedFlowchartActions(
-                      animation: animation,
-                      onReset: _resetFlowchart, // La chiamata qui è già corretta
-                      selectedNodeId: flowchartState.selectedNodeId,
-                      isDeletionEnabled: isDeletionEnabled,
-                      onDeleteSelected: _deleteSelected,
-                      projectId: selectedProjectId,
-                      activeFileId: state.activeFileId,
-                      isPlayEnabled: isPlayEnabled,
-                      isResetEnabled: isResetEnabled,
-                      onStartDebug: onStartDebug,
+                    final centerRow = Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Tooltip(
+                          message: 'Elimina nodo selezionato',
+                          child: AnimatedOpacity(
+                            opacity: isDeletionEnabled ? 1.0 : 0.4,
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              icon: const Icon(Icons.delete_rounded, size: 20),
+                              onPressed: isDeletionEnabled && selectedId != null
+                                  ? () => _deleteSelected(context, selectedId)
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Disabilita gli undo/redo quando in modalità connettore/reset
+                        AnimatedOpacity(
+                          opacity: disableUI ? 0.4 : 1.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: AbsorbPointer(
+                            absorbing: disableUI,
+                            child: const UndoRedoControls(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Resetta flowchart',
+                          child: AnimatedOpacity(
+                            opacity: isResetEnabled ? 1.0 : 0.4,
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              icon: const Icon(Icons.delete_sweep_rounded, size: 20),
+                              onPressed: isResetEnabled ? () => _resetFlowchart(context) : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Resetta da un certo blocco',
+                          child: AnimatedOpacity(
+                            opacity: isResetEnabled ? 1.0 : 0.4,
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              icon: const Icon(Icons.lock_reset_outlined, size: 20),
+                              onPressed: isResetEnabled ? () => _resetFromBlock(context) : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Avvia debug',
+                          child: AnimatedOpacity(
+                            opacity: isPlayEnabled ? 1.0 : 0.4,
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                              onPressed: isPlayEnabled ? onStartDebug : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+
+                    return AbsorbPointer(
+                      absorbing: disableUI,
+                      child: centerRow,
                     );
                   },
                 ),
@@ -325,107 +409,6 @@ class _AdvancedTopBar extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-class _AnimatedFlowchartActions extends StatelessWidget {
-  final bool isDeletionEnabled;
-  final Animation<double> animation;
-  final void Function(BuildContext) onReset;
-  final String? selectedNodeId;
-  final void Function(BuildContext, String nodeId) onDeleteSelected;
-  final String projectId;
-  final String? activeFileId;
-  final bool isPlayEnabled;
-  final VoidCallback onStartDebug; // NUOVO
-  final bool? isResetEnabled;
-
-  const _AnimatedFlowchartActions({
-    required this.isDeletionEnabled,
-    required this.animation,
-    required this.onReset,
-    this.selectedNodeId,
-    required this.onDeleteSelected,
-    required this.projectId,
-    this.activeFileId,
-    required this.isPlayEnabled,
-    required this.onStartDebug, // NUOVO
-    this.isResetEnabled,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final List<Widget> buttons = [];
-
-    buttons.add(_buildAnimatedButton(
-      context: context,
-      tooltip: 'Elimina nodo selezionato',
-      icon: Icons.delete_rounded,
-      onPressed: isDeletionEnabled
-          ? () => onDeleteSelected(context, selectedNodeId!)
-          : null,
-      interval: const Interval(0.6, 1.0),
-    ));
-
-    buttons.add(const UndoRedoControls());
-
-    buttons.add(_buildAnimatedButton(
-      context: context,
-      tooltip: 'Resetta flowchart',
-      icon: Icons.delete_sweep_rounded,
-      onPressed: isResetEnabled == true ? () => onReset(context) : null,
-      interval: const Interval(0.3, 0.8),
-    ));
-
-
-    buttons.add(_buildAnimatedButton(
-      context: context,
-      tooltip: 'Avvia debug',
-      icon: Icons.play_arrow_rounded,
-      onPressed: isPlayEnabled ? onStartDebug : null,
-      interval: const Interval(0.0, 0.5),
-    ));
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(buttons.length, (index) {
-        return Padding(
-          padding: EdgeInsets.only(left: index > 0 ? 8.0 : 0.0),
-          child: buttons[index],
-        );
-      }),
-    );
-  }
-
-  Widget _buildAnimatedButton({
-    required BuildContext context,
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback? onPressed,
-    required Interval interval,
-  }) {
-    final tween = Tween<double>(begin: 0.0, end: 1.0);
-    final curvedAnimation = CurvedAnimation(parent: animation, curve: interval);
-
-    return FadeTransition(
-      opacity: tween.animate(curvedAnimation),
-      child: ScaleTransition(
-        scale: tween.animate(curvedAnimation),
-        child: Tooltip(
-          message: tooltip,
-          child: AnimatedOpacity(
-            opacity: onPressed == null ? 0.4 : 1.0,
-            duration: const Duration(milliseconds: 200),
-            child: IconButton(
-              style: ButtonStyle(
-                backgroundColor: WidgetStateProperty.all(Colors.transparent),
-              ),
-              icon: Icon(icon, size: 20),
-              onPressed: onPressed,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -454,14 +437,14 @@ class _Breadcrumb extends StatelessWidget {
       child: Icon(
         Icons.chevron_right,
         size: 20,
-        color: theme.typography.body?.color?.withOpacity(0.4),
+        color: theme.typography.body?.color?.withValues(alpha: 0.4),
       ),
     );
 
     return Row(
       children: [
         Icon(FontAwesomeIcons.file,
-            size: 16, color: theme.accentColor.withOpacity(0.7)),
+            size: 16, color: theme.accentColor.withValues(alpha: 0.7)),
         const SizedBox(width: 8),
         Flexible(
           child: Text(
@@ -477,7 +460,7 @@ class _Breadcrumb extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: theme.accentColor.lighter.withOpacity(0.1),
+              color: theme.accentColor.lighter.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(

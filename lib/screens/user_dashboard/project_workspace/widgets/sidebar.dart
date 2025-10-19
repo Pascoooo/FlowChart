@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
+import 'package:flowchart_repository/flowchart_repository.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
@@ -12,6 +13,7 @@ import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
 import '../../../../config/router/app_router.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
+import '../../../../config/services/dialog_service/node_dialogs/create_function_dialog.dart';
 
 class ProjectSidebar extends StatefulWidget {
   final MyProject selectedProject;
@@ -284,6 +286,15 @@ class FileListItem extends StatelessWidget {
         validator: (v) {
           final value = (v ?? "").trim();
           if (value.isEmpty) return 'Il nome non può essere vuoto';
+
+          // REQUISITO: Solo caratteri alfabetici, no numeri
+          if (RegExp(r'[0-9]').hasMatch(value)) {
+            return 'Il nome non può contenere numeri.';
+          }
+          if (RegExp(r'[^a-zA-Z]').hasMatch(value)) {
+            return 'Sono ammesse solo lettere.';
+          }
+
           final state = context.read<FileSystemBloc>().state;
           if (state is FileSystemLoaded) {
             final exists = state.files.any(
@@ -381,14 +392,14 @@ class FileListItem extends StatelessWidget {
                 ? Icon(
                     Icons.star,
                     size: 16,
-                    color: theme.accentColor.withOpacity(0.8),
+                    color: theme.accentColor.withValues(alpha: 0.8),
                   )
                 : null)
             : (isMain
                 ? Icon(
                     Icons.star,
                     size: 16,
-                    color: theme.accentColor.withOpacity(0.8),
+                    color: theme.accentColor.withValues(alpha: 0.8),
                   )
                 : FlyoutTarget(
                     controller: flyoutController,
@@ -446,37 +457,34 @@ class CreateFileButton extends StatelessWidget {
   const CreateFileButton({super.key, required this.projectId});
 
   void _showCreateFileDialog(BuildContext context, String projectId) async {
-    // Logic unchanged
-    final newName = await AppDialogs.showInputDialog(context,
-        title: "Crea file",
-        message: "Inserisci un nuovo nome per il file",
-        hintText: "es. File",
-        confirmText: "Crea",
-        cancelText: "Annulla",
-        inputLabel: "Nome File",
-        validator: (v) {
-          final value = (v ?? "").trim();
-          if (value.isEmpty) return 'Il nome non può essere vuoto';
-          final state = context.read<FileSystemBloc>().state;
-          if (state is FileSystemLoaded) {
-            final exists = state.files.any(
-                  (f) => f.name.toLowerCase() == value.toLowerCase(),
-            );
-            if (exists) return 'Nome già in uso';
-          }
-          if (value.length > 20) {
-            return 'Nome troppo lungo! (max 20 caratteri)';
-          }
-          return null;
-        });
+    final state = context.read<FileSystemBloc>().state;
+    if (state is! FileSystemLoaded) return;
 
-    if (newName == null) return;
-    final value = newName.trim();
-    if (value.isEmpty) return;
+    // REQUISITO: Passa i nomi dei file esistenti al dialogo per la validazione
+    final functionSignature = await showCreateFunctionDialog(
+      context,
+      existingFileNames: state.files.map((f) => f.name).toSet(),
+    );
 
-    context
-        .read<FileSystemBloc>()
-        .add(CreateFile(projectId: projectId, fileName: newName.toLowerCase()));
+    if (functionSignature == null) return;
+
+    final fileName = functionSignature.name.trim().toLowerCase();
+    if (fileName.isEmpty) return;
+
+    // La validazione del nome duplicato ora è gestita direttamente nel dialog,
+    // quindi la logica di controllo qui non è più necessaria.
+
+    // Crea la firma del flowchart
+    final signature = FlowchartSignature(
+      parameters: functionSignature.parameters,
+      returnType: functionSignature.returnType,
+    );
+
+    context.read<FileSystemBloc>().add(CreateFile(
+      projectId: projectId,
+      fileName: fileName,
+      signature: signature,
+    ));
   }
 
   @override
@@ -500,7 +508,7 @@ class CreateFileButton extends StatelessWidget {
         onPressed: () => _showCreateFileDialog(context, projectId),
         leading: Icon(Icons.add_circle_outline, color: theme.accentColor),
         title: Text(
-          "Nuovo File",
+          "Aggiungi Sottoprogramma",
           style: (theme.typography.body ?? const TextStyle()).copyWith(
             color: theme.accentColor.dark,
             fontWeight: FontWeight.w600,

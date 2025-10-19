@@ -1,9 +1,9 @@
 // file: lib/config/services/dialog_service/node_dialogs/assignment_node_dialog.dart
+import 'package:debug_repository/debug_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import '../../expression_parser.dart';
 
 /// Mostra il dialog di configurazione per un nodo Assignment.
 Future<Map<String, dynamic>?> showAssignmentNodeDialog(
@@ -254,7 +254,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
             children: [
               Text('Configura Nodo Assegnazione', style: theme.typography.title),
               Text(
-                'Seleziona variabili e assegna valori o espressioni. Ogni variabile può essere assegnata una sola volta.',
+                'Le variabili possono essere assegnate in configurazione o a runtime durante il debug.',
                 style: theme.typography.body,
               ),
             ],
@@ -322,7 +322,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
       decoration: BoxDecoration(
         color: theme.brightness == Brightness.light
             ? Colors.grey[20]
-            : theme.cardColor.withOpacity(0.5),
+            : theme.cardColor.withValues(alpha: 0.5),
         borderRadius: const BorderRadius.all(Radius.circular(8)),
       ),
       child: Column(
@@ -348,7 +348,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: theme.accentColor.withOpacity(0.15),
+                                color: theme.accentColor.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(3),
                               ),
                               child: Text(
@@ -389,7 +389,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
                       controller: a.useExpression ? a.expressionController : a.valueController,
                       enabled: a.hasInit,
                       placeholder: a.useExpression
-                          ? 'Es. {x} + 10 * {y}'
+                          ? 'Es. x + 10 * y'
                           : (a.selectedVariable != null ? _getHintForVariable(a.selectedVariable!) : ''),
                       prefix: a.hasInit
                           ? Padding(
@@ -397,7 +397,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
                         child: FaIcon(
                           a.useExpression ? FontAwesomeIcons.calculator : FontAwesomeIcons.hashtag,
                           size: 14,
-                          color: theme.typography.body?.color?.withOpacity(0.5),
+                          color: theme.typography.body?.color?.withValues(alpha: 0.5),
                         ),
                       )
                           : null,
@@ -433,12 +433,12 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
               IconButton(
                 onPressed: () => _removeAssignment(index),
                 style: ButtonStyle(
-                  foregroundColor: ButtonState.resolveWith((states) {
+                  foregroundColor: WidgetStateProperty.resolveWith((states) {
                     final color = Colors.red.defaultBrushFor(theme.brightness);
-                    return states.isHovering ? Colors.white : color;
+                    return states.isHovered ? Colors.white : color;
                   }),
-                  backgroundColor: ButtonState.resolveWith((states) {
-                    return states.isHovering ? Colors.red : Colors.transparent;
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    return states.isHovered ? Colors.red : Colors.transparent;
                   }),
                 ),
                 icon: const FaIcon(FontAwesomeIcons.trash, size: 16),
@@ -532,7 +532,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
         Button(
           onPressed: () => Navigator.of(context).pop(null),
           style: ButtonStyle(
-            padding: ButtonState.all(const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+            padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
           ),
           child: const Text('Annulla'),
         ),
@@ -540,7 +540,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
         FilledButton(
           onPressed: hasVariables ? _confirm : null,
           style: ButtonStyle(
-            padding: ButtonState.all(const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+            padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
           ),
           child: const Text('Conferma'),
         ),

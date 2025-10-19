@@ -9,13 +9,17 @@ abstract class FlowchartEvent extends Equatable {
 }
 
 class LoadFlowchart extends FlowchartEvent {
+  final String fileId;
   final String jsonContent;
   final String fileName;
 
-  const LoadFlowchart({required this.jsonContent, required this.fileName});
+  const LoadFlowchart(
+      {required this.fileId,
+      required this.jsonContent,
+      required this.fileName});
 
   @override
-  List<Object?> get props => [jsonContent, fileName];
+  List<Object?> get props => [fileId, jsonContent, fileName];
 }
 
 class AddNode extends FlowchartEvent {
@@ -127,25 +131,9 @@ class Redo extends FlowchartEvent {
   const Redo();
 }
 
-class ClearHistory extends FlowchartEvent {
-  const ClearHistory();
-}
+class ClearHistory extends FlowchartEvent {}
 
-class DebugFlowchart extends FlowchartEvent {
-  const DebugFlowchart();
-}
-
-class DebugNextNode extends FlowchartEvent {
-  const DebugNextNode();
-}
-
-class DebugPrevNode extends FlowchartEvent {
-  const DebugPrevNode();
-}
-
-class DebugExit extends FlowchartEvent {
-  const DebugExit();
-}
+class ClearFlowchartCache extends FlowchartEvent {}
 
 class ResetCanvasAndVariables extends FlowchartEvent {
   const ResetCanvasAndVariables();
@@ -206,7 +194,74 @@ class CancelConnectorMode extends FlowchartEvent {
   const CancelConnectorMode();
 }
 
-class DebugBranchSelected extends FlowchartEvent {
-  final bool result; // true -> ramo 'true', false -> ramo 'false'
-  const DebugBranchSelected(this.result);
+/// ✨ Avvia la selezione di UN SOLO nodo per il comando "Resetta da un certo blocco"
+class StartResetFromNodeSelection extends FlowchartEvent {
+  const StartResetFromNodeSelection();
+}
+
+// 🟠 FIX MAGGIORE #7: Evento per gestire il debug mode
+/// Imposta o disattiva la modalità debug per bloccare l'editing
+class SetDebugMode extends FlowchartEvent {
+  final bool isDebugMode;
+
+  const SetDebugMode(this.isDebugMode);
+
+  @override
+  List<Object> get props => [isDebugMode];
+}
+
+/// Evento per chiudere un ciclo creando un arco di ritorno al nodo loop
+class CloseLoop extends FlowchartEvent {
+  final String fromNodeId; // Il nodo foglia da cui parte l'arco di ritorno
+  final String loopNodeId; // Il nodo loop a cui tornare
+
+  const CloseLoop({
+    required this.fromNodeId,
+    required this.loopNodeId,
+  });
+
+  @override
+  List<Object?> get props => [fromNodeId, loopNodeId];
+}
+
+/// Evento per selezionare il nodo di partenza del corpo di un ciclo do-while
+class SelectDoWhileBodyStart extends FlowchartEvent {
+  final String doWhileNodeId; // Il nodo do-while
+  final String bodyStartNodeId; // Il nodo selezionato come inizio del corpo
+
+  const SelectDoWhileBodyStart({
+    required this.doWhileNodeId,
+    required this.bodyStartNodeId,
+  });
+
+  @override
+  List<Object?> get props => [doWhileNodeId, bodyStartNodeId];
+}
+
+/// Evento per avviare la modalità di selezione del corpo do-while
+class StartDoWhileBodySelection extends FlowchartEvent {
+  final String doWhileNodeId;
+
+  const StartDoWhileBodySelection(this.doWhileNodeId);
+
+  @override
+  List<Object?> get props => [doWhileNodeId];
+}
+
+/// 🆕 NUOVO: Carica tutti i flowchart del progetto per risolvere le chiamate
+class LoadProjectFlowcharts extends FlowchartEvent {
+  final Map<String, Flowchart> flowcharts;
+
+  const LoadProjectFlowcharts(this.flowcharts);
+
+  @override
+  List<Object?> get props => [flowcharts];
+}
+
+
+class ResetFromNode extends FlowchartEvent {
+  final String nodeId;
+  const ResetFromNode(this.nodeId);
+  @override
+  List<Object?> get props => [nodeId];
 }
