@@ -12,7 +12,7 @@ import 'google_drive_service.dart';
 /// Regione Firebase Functions per le chiamate HTTP.
 const String kFunctionsRegion = 'europe-west8';
 /// Nome della Cloud Function per l'eliminazione dell'utente.
-const String kDeleteUserFunctionName = 'deleteUserAuthHttp';
+const String kDeleteUserFunctionName = 'delete_account_full';
 /// Durata massima per le richieste API prima di un timeout.
 const Duration kApiTimeoutDuration = Duration(seconds: 15);
 
@@ -36,12 +36,17 @@ class FirebaseUserRepo implements UserRepository {
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
     FirebaseFunctions? functions,
+    required String googleClientId,
   })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
         _firestore = firestore ?? FirebaseFirestore.instance,
         _storage = storage ?? FirebaseStorage.instance,
-        _functions = functions ?? FirebaseFunctions.instanceFor(region: kFunctionsRegion) {
+        _functions =
+            functions ?? FirebaseFunctions.instanceFor(region: kFunctionsRegion) {
     _usersCollection = _firestore.collection('users');
-    _driveService = GoogleDriveService(functions: _functions);
+    _driveService = GoogleDriveService(
+      functions: _functions,
+      googleClientId: googleClientId,
+    );
   }
 
 
@@ -104,8 +109,8 @@ class FirebaseUserRepo implements UserRepository {
 
   /// Elimina l'account dell'utente corrente e tutti i dati associati.
   ///
-  /// Utilizza una Cloud Function (`deleteUserAuthHttp`) per garantire
-  /// l'eliminazione sicura dei dati su Auth, Firestore e Storage.
+  /// Utilizza una Cloud Function (`delete_account_full`) per garantire
+  /// l'eliminazione sicura dei dati su Auth, Firestore, RTDB, Storage e copia pubblica.
   @override
   Future<void> deleteAccount() async {
     final user = _firebaseAuth.currentUser;
@@ -280,7 +285,6 @@ class FirebaseUserRepo implements UserRepository {
 
     try {
       final result = await _driveService.uploadFileToDrive(
-        userId: user.uid,
         fileName: fileName,
         fileBytes: fileBytes,
         mimeType: 'image/png',

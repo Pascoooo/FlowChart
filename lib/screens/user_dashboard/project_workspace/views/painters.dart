@@ -100,6 +100,11 @@ class ConnectionPainter extends CustomPainter {
     required this.theme,
   });
 
+  // Helper per ottenere il centro di un nodo (aggiunto per pulizia)
+  Offset _getNodeCenter(FlowNode node) {
+    return Offset(node.x + node.width / 2, node.y + node.height / 2);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -110,148 +115,312 @@ class ConnectionPainter extends CustomPainter {
 
     final nodeMap = {for (var node in nodes) node.id: node};
 
+
+    // Raggruppa archi di chiusura ciclo per nodo ciclo di destinazione
+    final Map<String, List<FlowchartEdge>> loopEdgesByTarget = {};
+    for (final e in edges) {
+      if (e.port == 'loop') {
+        loopEdgesByTarget.putIfAbsent(e.to, () => []).add(e);
+      }
+    }
+
+    // 1) Disegna tutti gli archi NON di chiusura ciclo normalmente
     for (final edge in edges) {
+      if (edge.port == 'loop') continue; // gestiti dopo
       final fromNode = nodeMap[edge.from];
       final toNode = nodeMap[edge.to];
+      if (fromNode == null || toNode == null) continue;
 
-      if (fromNode != null && toNode != null) {
-        Offset startPoint;
+      // ✅ FIX: Calcola i centri di entrambi i nodi
+      final startCenter = _getNodeCenter(fromNode);
+      final endCenter = _getNodeCenter(toNode);
 
-        // Gestione dei nodi ciclo (while e do-while)
-        if ((fromNode.kind == FlowNodeKind.whileLoop || fromNode.kind == FlowNodeKind.doWhileLoop) && edge.port != null) {
-          if (edge.port == 'true') {
-            startPoint = Offset(
-                fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
-          } else if (edge.port == 'doWhileStart') {
-            startPoint = Offset(
-                fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
-          } else if (edge.port == 'false') {
-            startPoint = Offset(
-                fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
-          } else if (edge.port == 'loop') {
-            startPoint = Offset(
-                fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
-          } else {
-            startPoint = Offset(
-                fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
-          }
-        }
-        // Gestione dei nodi decision (condizioni)
-        else if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
-          if (edge.port == 'true') {
-            startPoint = Offset(
-                fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
-          } else {
-            startPoint = Offset(fromNode.x, fromNode.y + fromNode.height / 2);
-          }
+      Offset startPoint;
+
+      // Logica per porte specifiche (Decisioni, Cicli)
+      if ((fromNode.kind == FlowNodeKind.whileLoop || fromNode.kind == FlowNodeKind.doWhileLoop) && edge.port != null) {
+        if (edge.port == 'true') {
+          startPoint = Offset(fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
+        } else if (edge.port == 'doWhileStart') {
+          startPoint = Offset(fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
+        } else if (edge.port == 'false') {
+          startPoint = Offset(fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
         } else {
-          startPoint = Offset(
-              fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height);
+          startPoint = _getIntersectionPoint(startCenter, endCenter, fromNode);
         }
-
-        // Gestione del punto di arrivo per archi di ritorno
-        Offset endPoint;
-        if (edge.port == 'loop') {
-          endPoint = Offset(toNode.x, toNode.y + toNode.height / 2);
+      } else if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
+        if (edge.port == 'true') {
+          startPoint = Offset(fromNode.x + fromNode.width, fromNode.y + fromNode.height / 2);
+        } else if (edge.port == 'false') {
+          startPoint = Offset(fromNode.x, fromNode.y + fromNode.height / 2);
         } else {
-          final endCenter =
-              Offset(toNode.x + toNode.width / 2, toNode.y + toNode.height / 2);
-          endPoint = _getIntersectionPointWithRect(startPoint, endCenter, toNode);
+          startPoint = _getIntersectionPoint(startCenter, endCenter, fromNode);
         }
-
-        // ✨ NUOVO: per gli archi di chiusura ciclo ('loop') disegna una L dal centro del blocco alla punta sinistra del rombo
-        if (edge.port == 'loop' && (toNode.kind == FlowNodeKind.whileLoop || toNode.kind == FlowNodeKind.doWhileLoop)) {
-          // Partenza dal centro del blocco finale
-          final startCenter = Offset(
-              fromNode.x + fromNode.width / 2, fromNode.y + fromNode.height / 2);
-          // Punta sinistra del rombo del ciclo
-          final leftTip = Offset(toNode.x, toNode.y + toNode.height / 2);
-          // Clearance verso sinistra per instradare la L senza sovrapporsi
-          const clearance = 24.0;
-          final viaX = min(startCenter.dx, leftTip.dx) - clearance;
-          final points = <Offset>[
-            startCenter,
-            Offset(viaX, startCenter.dy), // orizzontale verso sinistra dalla metà del blocco
-            Offset(viaX, leftTip.dy),     // verticale fino all'altezza della punta sinistra del rombo
-            leftTip,                      // entra nella punta sinistra del rombo
-          ];
-          _drawOrthogonalArrow(canvas, paint, points);
-        }
-        // ✨ per il do-while ramo 'true' disegna un percorso ortogonale sul lato sinistro
-        else if (fromNode.kind == FlowNodeKind.doWhileLoop && (edge.port == 'true' || edge.port == 'doWhileStart')) {
-          // Spigolo sinistro del rombo do-while
-          final startLeft = Offset(fromNode.x, fromNode.y + fromNode.height / 2);
-          // Lato sinistro del blocco di inizio corpo
-          final endLeft = Offset(toNode.x, toNode.y + toNode.height / 2);
-          // Clearance verso sinistra
-          final clearance = 24.0;
-          final viaX = min(startLeft.dx, endLeft.dx) - clearance;
-          final points = <Offset>[
-            startLeft,
-            Offset(viaX, startLeft.dy),   // vai a sinistra dallo spigolo del rombo
-            Offset(viaX, endLeft.dy),     // su/giù fino all'altezza del target
-            endLeft,                       // entra da sinistra nel blocco di inizio
-          ];
-          _drawOrthogonalArrow(canvas, paint, points);
-        } else {
-          // default: linea diretta
-          canvas.drawLine(startPoint, endPoint, paint);
-          _drawArrow(canvas, paint, startPoint, endPoint);
-        }
-
-        // Disegna le etichette per i rami
-        if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
-          _drawBranchLabel(canvas, fromNode, edge.port!);
-        } else if ((fromNode.kind == FlowNodeKind.whileLoop ||
-                    fromNode.kind == FlowNodeKind.doWhileLoop) && edge.port != null) {
-          _drawLoopLabel(canvas, fromNode, edge.port!);
-        }
+      } else {
+        // ✅ FIX: Applica la logica di intersezione dinamica a tutti gli altri nodi
+        startPoint = _getIntersectionPoint(endCenter, startCenter, fromNode);
       }
+
+      // ✅ FIX: Applica la logica di intersezione dinamica al nodo di destinazione
+      Offset endPoint = _getIntersectionPoint(startCenter, endCenter, toNode);
+
+
+      // default: linea diretta
+      canvas.drawLine(startPoint, endPoint, paint);
+      _drawArrow(canvas, paint, startPoint, endPoint);
+
+      // Etichette
+      if (fromNode.kind == FlowNodeKind.decision && edge.port != null) {
+        _drawBranchLabel(canvas, fromNode, edge.port!);
+      } else if ((fromNode.kind == FlowNodeKind.whileLoop || fromNode.kind == FlowNodeKind.doWhileLoop) && edge.port != null && edge.port != 'loop') {
+        _drawLoopLabel(canvas, fromNode, edge.port!);
+      }
+    }
+
+    // 2) Disegna archi di chiusura ciclo... (Questa sezione rimane invariata)
+    for (final entry in loopEdgesByTarget.entries) {
+      final loopNode = nodeMap[entry.key];
+      if (loopNode == null) continue;
+      final sources = entry.value.map((e) => nodeMap[e.from]).whereType<FlowNode>().toList();
+      if (sources.isEmpty) continue;
+
+      // Calcola i bottom-center dei nodi foglia
+      final bottomCenters = sources
+          .map((n) => Offset(n.x + n.width / 2, n.y + n.height))
+          .toList();
+
+      // Calcola tutti i nodi che appartengono al ciclo (corpo + rombo)
+      final loopBodyIds = _collectLoopBodyNodeIds(loopNode, nodeMap, edges);
+      final loopRects = <Rect>[
+        for (final id in loopBodyIds)
+          if (nodeMap[id] != null)
+            Rect.fromLTWH(nodeMap[id]!.x, nodeMap[id]!.y, nodeMap[id]!.width, nodeMap[id]!.height),
+        // Include sempre il rombo del ciclo
+        Rect.fromLTWH(loopNode.x, loopNode.y, loopNode.width, loopNode.height),
+      ];
+
+      // Evita crash se loopRects è vuoto
+      if (loopRects.isEmpty) continue;
+
+      // Trova l'X minimo dei nodi del ciclo
+      double loopMinX = loopRects.map((r) => r.left).reduce(min);
+
+      // Definisci un punto-ancora a sinistra del ciclo, alla media verticale dei bottomCenters
+      final double baseClearance = 36.0; // margine base (allargabile)
+      final double minStartX = bottomCenters.map((o) => o.dx).reduce(min);
+      final double meanY = bottomCenters.map((o) => o.dy).reduce((a, b) => a + b) / bottomCenters.length;
+      double anchorX = min(minStartX, loopMinX) - baseClearance * 1.5; // ben a sinistra di tutti i nodi del ciclo
+      final double anchorY = meanY + 12.0; // leggermente sotto la media dei bottom
+      final Offset anchor = Offset(anchorX, anchorY);
+
+      // Calcola viaX assicurandoti che sia ancora più a sinistra di TUTTI i nodi del ciclo
+      double viaX = min(anchor.dx, loopMinX) - baseClearance;
+
+      // Se per qualche motivo viaX cadrebbe dentro un rettangolo del ciclo, spostalo ancora a sinistra
+      bool intersects;
+      int guard = 0;
+      do {
+        intersects = loopRects.any((r) => viaX >= r.left && viaX <= r.right);
+        if (intersects) viaX -= baseClearance; // “allarga verso sinistra”
+      } while (intersects && guard++ < 8);
+
+      // Disegna convergenza: da ogni bottom-center al punto-ancora (solo linee, niente frecce)
+      for (final start in bottomCenters) {
+        final points = <Offset>[
+          start,
+          Offset(start.dx, anchor.dy), // verticale fino all'altezza dell'ancora
+          anchor, // orizzontale verso l'ancora
+        ];
+        _drawOrthogonalPolyline(canvas, paint, points);
+      }
+
+      // Disegna il punto-ancora (UI-only)
+      final anchorPaint = Paint()
+        ..color = theme.accentColor
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(anchor, 3.0, anchorPaint);
+
+      // Traccia la L finale dall'ancora verso la punta sinistra del rombo del ciclo, senza toccare altri nodi del ciclo
+      final leftTip = Offset(loopNode.x, loopNode.y + loopNode.height / 2);
+      final pointsToLoop = <Offset>[
+        anchor,
+        Offset(viaX, anchor.dy),        // allontanati a sinistra
+        Offset(viaX, leftTip.dy),       // sali/scendi fino alla metà del rombo
+        leftTip,                        // entra nella punta sinistra
+      ];
+      _drawOrthogonalArrow(canvas, paint, pointsToLoop);
+
+      // Etichetta "Loop" sopra il nodo di ciclo (una sola volta per gruppo)
+      _drawLoopLabel(canvas, loopNode, 'loop');
+    }
+  }
+
+  void _drawOrthogonalPolyline(Canvas canvas, Paint paint, List<Offset> points) {
+    for (int i = 0; i < points.length - 1; i++) {
+      canvas.drawLine(points[i], points[i + 1], paint);
     }
   }
 
   void _drawOrthogonalArrow(Canvas canvas, Paint paint, List<Offset> points) {
-    // Disegna segmenti rettilinei 90°
     for (int i = 0; i < points.length - 1; i++) {
       canvas.drawLine(points[i], points[i + 1], paint);
     }
-    // Freccia sull'ultimo segmento
     final start = points[points.length - 2];
     final end = points.last;
     _drawArrow(canvas, paint, start, end);
   }
 
-  Offset _getIntersectionPointWithRect(
-      Offset startPoint, Offset endCenter, FlowNode toNode) {
-    final toRect =
-    Rect.fromLTWH(toNode.x, toNode.y, toNode.width, toNode.height);
-    final line = Line(endCenter, startPoint);
+  // --- 💡 NUOVA LOGICA DI INTERSEZIONE 💡 ---
 
-    Offset? topIntersection =
-    line.intersection(Line(toRect.topLeft, toRect.topRight));
-    Offset? rightIntersection =
-    line.intersection(Line(toRect.topRight, toRect.bottomRight));
-    Offset? bottomIntersection =
-    line.intersection(Line(toRect.bottomRight, toRect.bottomLeft));
-    Offset? leftIntersection =
-    line.intersection(Line(toRect.bottomLeft, toRect.topLeft));
+  /// Funzione principale che smista al corretto helper di intersezione
+  Offset _getIntersectionPoint(
+      Offset lineStart, Offset lineEnd, FlowNode node) {
+
+    final nodeCenter = _getNodeCenter(node);
+
+    // Se la linea non ha lunghezza, ritorna il centro
+    if ((lineStart - lineEnd).distance < 0.1) {
+      return nodeCenter;
+    }
+
+    switch (node.kind) {
+      case FlowNodeKind.decision:
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
+        return _getIntersectionWithDiamond(lineStart, lineEnd, node);
+
+      case FlowNodeKind.start:
+      case FlowNodeKind.end:
+      // Approssima come un cerchio
+        return _getIntersectionWithCircle(lineStart, lineEnd, node);
+
+      case FlowNodeKind.input:
+        return _getIntersectionWithParallelogram(lineStart, lineEnd, node, reversed: false);
+
+      case FlowNodeKind.output:
+        return _getIntersectionWithParallelogram(lineStart, lineEnd, node, reversed: true);
+
+      case FlowNodeKind.assignment:
+      case FlowNodeKind.process:
+      case FlowNodeKind.returnNode:
+      default:
+      // Tutti gli altri sono trattati come rettangoli
+        return _getIntersectionWithRectangle(lineStart, lineEnd, node);
+    }
+  }
+
+  /// Calcola l'intersezione con un Rettangolo
+  Offset _getIntersectionWithRectangle(Offset lineStart, Offset lineEnd, FlowNode node) {
+    final toRect = Rect.fromLTWH(node.x, node.y, node.width, node.height);
+    final line = Line(lineStart, lineEnd); // Usa la linea centro-centro
 
     final intersections = [
-      topIntersection,
-      rightIntersection,
-      bottomIntersection,
-      leftIntersection
-    ].where((p) => p != null).cast<Offset>().toList();
+      line.intersection(Line(toRect.topLeft, toRect.topRight)),
+      line.intersection(Line(toRect.topRight, toRect.bottomRight)),
+      line.intersection(Line(toRect.bottomRight, toRect.bottomLeft)),
+      line.intersection(Line(toRect.bottomLeft, toRect.topLeft)),
+    ].whereType<Offset>().toList();
 
-    if (intersections.isEmpty) return endCenter;
+    if (intersections.isEmpty) return _getNodeCenter(node);
 
+    // Ordina per distanza dal *punto di partenza* della linea
     intersections.sort(
-            (a, b) => (a - startPoint).distance.compareTo((b - startPoint).distance));
+            (a, b) => (a - lineStart).distance.compareTo((b - lineStart).distance));
     return intersections.first;
   }
 
+  /// Calcola l'intersezione con un Rombo
+  Offset _getIntersectionWithDiamond(Offset lineStart, Offset lineEnd, FlowNode node) {
+    final top = Offset(node.x + node.width / 2, node.y);
+    final right = Offset(node.x + node.width, node.y + node.height / 2);
+    final bottom = Offset(node.x + node.width / 2, node.y + node.height);
+    final left = Offset(node.x, node.y + node.height / 2);
+
+    final line = Line(lineStart, lineEnd);
+
+    final intersections = [
+      line.intersection(Line(top, right)),
+      line.intersection(Line(right, bottom)),
+      line.intersection(Line(bottom, left)),
+      line.intersection(Line(left, top)),
+    ].whereType<Offset>().toList();
+
+    if (intersections.isEmpty) return _getNodeCenter(node);
+
+    intersections.sort(
+            (a, b) => (a - lineStart).distance.compareTo((b - lineStart).distance));
+    return intersections.first;
+  }
+
+  /// Calcola l'intersezione con un Parallelogramma
+  Offset _getIntersectionWithParallelogram(Offset lineStart, Offset lineEnd, FlowNode node, {bool reversed = false}) {
+    final slant = node.width * 0.2;
+    late Offset p1, p2, p3, p4;
+
+    if (!reversed) {
+      p1 = Offset(node.x + slant, node.y); // top-left
+      p2 = Offset(node.x + node.width, node.y); // top-right
+      p3 = Offset(node.x + node.width - slant, node.y + node.height); // bottom-right
+      p4 = Offset(node.x, node.y + node.height); // bottom-left
+    } else {
+      p1 = Offset(node.x, node.y); // top-left
+      p2 = Offset(node.x + node.width - slant, node.y); // top-right
+      p3 = Offset(node.x + node.width, node.y + node.height); // bottom-right
+      p4 = Offset(node.x + slant, node.y + node.height); // bottom-left
+    }
+
+    final line = Line(lineStart, lineEnd);
+    final intersections = [
+      line.intersection(Line(p1, p2)),
+      line.intersection(Line(p2, p3)),
+      line.intersection(Line(p3, p4)),
+      line.intersection(Line(p4, p1)),
+    ].whereType<Offset>().toList();
+
+    if (intersections.isEmpty) return _getNodeCenter(node);
+
+    intersections.sort(
+            (a, b) => (a - lineStart).distance.compareTo((b - lineStart).distance));
+    return intersections.first;
+  }
+
+  /// Calcola l'intersezione con un Cerchio (approssimazione)
+  /// Usa la linea dal centro e la scala al raggio
+  Offset _getIntersectionWithCircle(Offset lineStart, Offset lineEnd, FlowNode node) {
+    final center = _getNodeCenter(node);
+    // Assumiamo che start/end siano cerchi, quindi raggio = larghezza/2
+    final radius = node.width / 2;
+
+    // Se i centri sono identici, non possiamo calcolare un vettore
+    if ((lineStart - center).distance < 0.1) {
+      // Questo accade quando si disegna un arco da un nodo a se stesso (non supportato)
+      // O quando lineStart è il centro del nodo stesso
+      // Restituiamo un punto qualsiasi sul bordo, es. top
+      return Offset(center.dx, center.dy - radius);
+    }
+
+    // Vettore dal centro del nodo di partenza al centro di questo nodo
+    // NOTA: lineEnd è il centro di *questo* nodo (il "toNode")
+    //       lineStart è il centro del *altro* nodo (il "fromNode")
+    final vec = lineEnd - lineStart;
+    final dist = vec.distance;
+
+    if (dist == 0) return center;
+
+    // Trova il punto sul bordo del cerchio
+    // (lineEnd è il centro, quindi ci spostiamo "indietro"
+    // lungo il vettore per la lunghezza del raggio)
+    return center - (vec / dist) * radius;
+  }
+
+  // --- Metodi Helper (disegno frecce, etichette) ---
+
   void _drawArrow(
       Canvas canvas, Paint paint, Offset startPoint, Offset endPoint) {
+
+    // Evita di disegnare frecce se i punti sono coincidenti
+    if ((startPoint - endPoint).distance < 1.0) return;
+
     final angle =
     atan2(endPoint.dy - startPoint.dy, endPoint.dx - startPoint.dx);
     const arrowSize = 10.0;
@@ -283,18 +452,21 @@ class ConnectionPainter extends CustomPainter {
     const padding = 6.0;
     const offsetFromNode = 12.0;
     late Offset labelPos;
+    late Offset textPaintPos;
 
     if (label == 'true') {
       labelPos = Offset(
         fromNode.x + fromNode.width + offsetFromNode,
-        fromNode.y + fromNode.height / 2 - (textPainter.height / 2),
+        fromNode.y + fromNode.height / 2 - (textPainter.height / 2) - padding,
       );
     } else {
       labelPos = Offset(
         fromNode.x - textPainter.width - (padding * 2) - offsetFromNode,
-        fromNode.y + fromNode.height / 2 - (textPainter.height / 2),
+        fromNode.y + fromNode.height / 2 - (textPainter.height / 2) - padding,
       );
     }
+
+    textPaintPos = Offset(labelPos.dx + padding, labelPos.dy + padding);
 
     final rect = Rect.fromLTWH(
       labelPos.dx,
@@ -315,14 +487,33 @@ class ConnectionPainter extends CustomPainter {
     );
     textPainter.paint(
       canvas,
-      Offset(rect.left + padding, rect.top + padding),
+      textPaintPos,
     );
   }
 
   void _drawLoopLabel(Canvas canvas, FlowNode fromNode, String label) {
+    // Distingui tra etichetta 'true'/'false'/'doWhileStart' e 'loop'
+    final String labelText;
+    bool isLoopClosure = false;
+    Offset labelPos;
+    const padding = 6.0;
+
+    if (label == 'loop') {
+      labelText = 'Loop';
+      isLoopClosure = true;
+    } else if (label == 'true') {
+      labelText = 'True';
+    } else if (label == 'false') {
+      labelText = 'False';
+    } else if (label == 'doWhileStart') {
+      labelText = 'Do';
+    } else {
+      labelText = label; // Fallback
+    }
+
     final textPainter = TextPainter(
       text: TextSpan(
-        text: 'Loop',
+        text: labelText,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
@@ -332,16 +523,33 @@ class ConnectionPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     )..layout();
 
-    const padding = 6.0;
-    // const offsetFromNode = 12.0; // rimosso: non usato
-    Offset labelPos;
+    const offsetFromNode = 12.0;
+    late Offset textPaintPos;
 
-    // Posiziona l'etichetta sopra il nodo per l'arco di ritorno
-    labelPos = Offset(
-      fromNode.x + fromNode.width / 2 - textPainter.width / 2,
-      fromNode.y - textPainter.height - padding,
-    );
+    if (isLoopClosure) {
+      // Posiziona l'etichetta "Loop" sopra il nodo per l'arco di ritorno
+      labelPos = Offset(
+        fromNode.x + fromNode.width / 2 - textPainter.width / 2 - padding,
+        fromNode.y - textPainter.height - padding * 2,
+      );
+    } else if (label == 'false') {
+      // Posiziona l'etichetta "False" a destra (per i cicli)
+      labelPos = Offset(
+        fromNode.x + fromNode.width + offsetFromNode,
+        fromNode.y + fromNode.height / 2 - (textPainter.height / 2) - padding,
+      );
+    } else {
+      // Posiziona "True" (while) o "Do" (do-while) sotto il nodo
+      labelPos = Offset(
+        fromNode.x + fromNode.width / 2 - textPainter.width / 2 - padding,
+        fromNode.y + fromNode.height + padding,
+      );
+    }
 
+    // L'offset per textPainter.paint è (rect.left + padding, rect.top + padding)
+    textPaintPos = Offset(labelPos.dx + padding, labelPos.dy + padding);
+
+    // Ricalcola il rect basandoti su labelPos (che è l'angolo top-left del *box*)
     final rect = Rect.fromLTWH(
       labelPos.dx,
       labelPos.dy,
@@ -361,8 +569,58 @@ class ConnectionPainter extends CustomPainter {
     );
     textPainter.paint(
       canvas,
-      Offset(rect.left + padding, rect.top + padding),
+      textPaintPos,
     );
+  }
+
+  // Raccoglie gli ID dei nodi che fanno parte del corpo del ciclo (senza seguire archi 'loop')
+  // (Ho usato la versione che hai fornito nel file completo)
+  Set<String> _collectLoopBodyNodeIds(
+      FlowNode loopNode,
+      Map<String, FlowNode> nodeMap,
+      List<FlowchartEdge> edges,
+      ) {
+    final body = <String>{};
+
+    // Trova l'edge di inizio corpo
+    FlowchartEdge? startEdge;
+    if (loopNode.kind == FlowNodeKind.whileLoop) {
+      startEdge = edges.firstWhere(
+            (e) => e.from == loopNode.id && e.port == 'true',
+        orElse: () => const FlowchartEdge(from: '', to: ''),
+      );
+      if (startEdge.from.isEmpty) return body;
+    } else if (loopNode.kind == FlowNodeKind.doWhileLoop) {
+      startEdge = edges.firstWhere(
+            (e) => e.from == loopNode.id && e.port == 'true',
+        orElse: () => const FlowchartEdge(from: '', to: ''),
+      );
+      if (startEdge.from.isEmpty) {
+        startEdge = edges.firstWhere(
+              (e) => e.from == loopNode.id && e.port == 'doWhileStart',
+          orElse: () => const FlowchartEdge(from: '', to: ''),
+        );
+      }
+      if (startEdge.from.isEmpty) return body;
+    } else {
+      return body;
+    }
+
+    // BFS dal nodo di inizio corpo, evitando archi 'loop'
+    final queue = <String>[startEdge.to];
+    final visited = <String>{};
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      if (!visited.add(current)) continue;
+      body.add(current);
+      for (final e in edges) {
+        if (e.from == current && e.port != 'loop') {
+          queue.add(e.to);
+        }
+      }
+    }
+
+    return body;
   }
 
   @override
@@ -444,7 +702,6 @@ class ParallelogramPainter extends CustomPainter {
           old.reversed != reversed;
 }
 
-// ⚠️ NUOVO: Painter per il bordo di selezione che segue la forma esatta del nodo
 class NodeSelectionBorderPainter extends CustomPainter {
   final FlowNodeKind nodeKind;
   final Color borderColor;
@@ -467,14 +724,16 @@ class NodeSelectionBorderPainter extends CustomPainter {
     switch (nodeKind) {
       case FlowNodeKind.start:
       case FlowNodeKind.end:
-        // Cerchio
+      // Cerchio
         final center = Offset(size.width / 2, size.height / 2);
         final radius = size.width / 2;
         canvas.drawCircle(center, radius, strokePaint);
         break;
 
       case FlowNodeKind.decision:
-        // Rombo
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
+      // Rombo
         final path = Path()
           ..moveTo(size.width / 2, 0)
           ..lineTo(size.width, size.height / 2)
@@ -485,7 +744,7 @@ class NodeSelectionBorderPainter extends CustomPainter {
         break;
 
       case FlowNodeKind.input:
-        // Parallelogramma (non invertito)
+      // Parallelogramma (non invertito)
         final slant = size.width * 0.2;
         final path = Path()
           ..moveTo(slant, 0)
@@ -497,7 +756,7 @@ class NodeSelectionBorderPainter extends CustomPainter {
         break;
 
       case FlowNodeKind.output:
-        // Parallelogramma (invertito)
+      // Parallelogramma (invertito)
         final slant = size.width * 0.2;
         final path = Path()
           ..moveTo(0, 0)
@@ -509,7 +768,7 @@ class NodeSelectionBorderPainter extends CustomPainter {
         break;
 
       default:
-        // Rettangolo arrotondato per process, assignment, ecc.
+      // Rettangolo arrotondato per process, assignment, ecc.
         final rect = RRect.fromRectAndRadius(
           Rect.fromLTWH(0, 0, size.width, size.height),
           const Radius.circular(8),
@@ -522,6 +781,6 @@ class NodeSelectionBorderPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant NodeSelectionBorderPainter old) =>
       old.nodeKind != nodeKind ||
-      old.borderColor != borderColor ||
-      old.strokeWidth != strokeWidth;
+          old.borderColor != borderColor ||
+          old.strokeWidth != strokeWidth;
 }

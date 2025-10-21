@@ -1,5 +1,6 @@
 import 'package:file_repository/file_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -20,6 +21,10 @@ class WorkArea extends StatefulWidget {
   final VoidCallback onToggleGrid;
   final bool isReadOnly;
   final bool allowDragInReadOnly;
+  final VoidCallback? onEdit;
+  final VoidCallback? onExport;
+  final VoidCallback? onStartDebug;
+  final VoidCallback? onLeave;
 
   const WorkArea({
     super.key,
@@ -28,6 +33,10 @@ class WorkArea extends StatefulWidget {
     required this.onToggleGrid,
     this.isReadOnly = false,
     this.allowDragInReadOnly = false,
+    this.onEdit,
+    this.onExport,
+    this.onStartDebug,
+    this.onLeave,
   });
 
   @override
@@ -35,9 +44,12 @@ class WorkArea extends StatefulWidget {
 }
 
 class _WorkAreaState extends State<WorkArea>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _buttonAnimationController;
   late Animation<double> _buttonAnimation;
+  late AnimationController _panelAnimationController;
+  late Animation<Offset> _panelSlideAnimation;
+  bool _isVariablesPanelOpen = false;
 
   @override
   void initState() {
@@ -50,6 +62,17 @@ class _WorkAreaState extends State<WorkArea>
       parent: _buttonAnimationController,
       curve: Curves.easeOutBack,
     );
+
+    _panelAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _panelSlideAnimation =
+        Tween<Offset>(begin: const Offset(-1.1, 0), end: Offset.zero).animate(
+            CurvedAnimation(
+                parent: _panelAnimationController,
+                curve: Curves.easeInOutCubic));
+
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) _buttonAnimationController.forward();
     });
@@ -58,7 +81,19 @@ class _WorkAreaState extends State<WorkArea>
   @override
   void dispose() {
     _buttonAnimationController.dispose();
+    _panelAnimationController.dispose();
     super.dispose();
+  }
+
+  void _toggleVariablesPanel() {
+    setState(() {
+      _isVariablesPanelOpen = !_isVariablesPanelOpen;
+      if (_isVariablesPanelOpen) {
+        _panelAnimationController.forward();
+      } else {
+        _panelAnimationController.reverse();
+      }
+    });
   }
 
   String _renameInText(String text, String oldName, String newName) {
@@ -380,6 +415,46 @@ class _WorkAreaState extends State<WorkArea>
     return clauses;
   }
 
+  Future<void> _handleDeleteSelected(BuildContext context, FlowchartState flowchartState) async {
+    if (flowchartState is! FlowchartLoaded) return;
+    final selectedId = flowchartState.selectedNodeId;
+    if (selectedId == null) return;
+
+    final confirmed = await AppDialogs.showConfirmationDialog(
+      context,
+      title: 'Elimina Nodo',
+      message: 'Confermi di voler eliminare il nodo selezionato? L\'azione non è reversibile (se non con Annulla).',
+      isDestructive: true,
+    );
+    if (confirmed == true && context.mounted) {
+      context.read<FlowchartBloc>().add(RemoveNode(selectedId));
+    }
+  }
+
+  Future<void> _handleResetFlowchart(BuildContext context) async {
+    final confirmed = await AppDialogs.showConfirmationDialog(
+      context,
+      title: 'Reset Flowchart',
+      message: 'Vuoi davvero resettare il flowchart? I nodi verranno rimossi mantenendo le variabili.',
+      isDestructive: true,
+    );
+    if (confirmed == true && context.mounted) {
+      context.read<FlowchartBloc>().add(const ResetCanvasPreserveVariables());
+    }
+  }
+
+  Future<void> _handleResetFromBlock(BuildContext context) async {
+    final confirmed = await AppDialogs.showConfirmationDialog(
+      context,
+      title: 'Reset da un blocco',
+      message: 'Vuoi resettare il flowchart a partire da un blocco specifico?\nEntrerai in una modalità di selezione: scegli il blocco e poi conferma nell\'overlay.',
+      isDestructive: true,
+    );
+    if (confirmed == true && context.mounted) {
+      context.read<FlowchartBloc>().add(const StartResetFromNodeSelection());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Avvolge il canvas con un listener sul FileSystemBloc per caricare il contenuto del file attivo
@@ -423,36 +498,178 @@ class _WorkAreaState extends State<WorkArea>
             allowDragInReadOnly: widget.allowDragInReadOnly,
           ),
 
-          if (!widget.isReadOnly)
+          // Layer per i bottoni sopra la workarea
+          if (!widget.isReadOnly && (widget.onEdit != null || widget.onExport != null || widget.onStartDebug != null || widget.onLeave != null))
             Positioned(
-              top: 24,
-              left: 24,
-              child: ScaleTransition(
-                scale: _buttonAnimation,
-                child: FadeTransition(
-                  opacity: _buttonAnimation,
-                  child: BlocBuilder<FlowchartBloc, FlowchartState>(
-                    builder: (context, state) {
-                      final variables = (state is FlowchartLoaded)
-                          ? state.flowchart.variables
-                          : <VariableDeclaration>[];
+              top: 16,
+              left: 0,
+              right: 0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: BlocBuilder<FlowchartBloc, FlowchartState>(
+                  builder: (context, flowchartState) {
+                    final bool disableUI = flowchartState is FlowchartLoaded && flowchartState.isConnectorModeActive;
 
-                      final protectedVariableNames = (state is FlowchartLoaded)
-                          ? state.flowchart.signature.parameters
-                              .map((p) => p.name)
-                              .toSet()
-                          : <String>{};
+                    // Logica per abilitare/disabilitare i bottoni
+                    bool isPlayEnabled = false;
+                    bool isResetEnabled = false;
+                    bool isDeleteEnabled = false;
+                    bool canUndo = false;
+                    bool canRedo = false;
 
-                      return _VariablesPanel(
-                        variables: variables,
-                        protectedVariableNames: protectedVariableNames,
-                        onAddVariable: _handleAddVariable,
-                        onEditVariable: _handleEditVariable,
-                        onDeleteVariable: _handleDeleteVariable,
-                      );
-                    },
-                  ),
+                    if (flowchartState is FlowchartLoaded) {
+                      final hasEndNode = flowchartState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
+                      isPlayEnabled = flowchartState.flowchart.isMain && hasEndNode && !disableUI;
+
+                      final nodes = flowchartState.flowchart.nodes;
+                      final bool hasOnlyStartOrHeader = nodes.length == 1 &&
+                          (nodes.first.kind == FlowNodeKind.start || nodes.first.kind == FlowNodeKind.functionHeader);
+                      isResetEnabled = !hasOnlyStartOrHeader && !disableUI;
+
+                      final selectedId = flowchartState.selectedNodeId;
+                      FlowNode? selectedNode = selectedId != null ? flowchartState.getNodeById(selectedId) : null;
+
+                      if (selectedNode != null &&
+                          selectedNode.kind != FlowNodeKind.start &&
+                          selectedNode.kind != FlowNodeKind.functionHeader) {
+                        if (selectedNode.kind == FlowNodeKind.doWhileLoop) {
+                          final outs = flowchartState.getOutgoingEdges(selectedNode.id);
+                          final hasFalse = outs.any((e) => e.port == 'false');
+                          isDeleteEnabled = !hasFalse;
+                        } else {
+                          isDeleteEnabled = flowchartState.getOutgoingEdges(selectedNode.id).isEmpty;
+                        }
+                      }
+                      isDeleteEnabled = isDeleteEnabled && !disableUI;
+
+                      canUndo = context.read<FlowchartBloc>().canUndo && !disableUI;
+                      canRedo = context.read<FlowchartBloc>().canRedo && !disableUI;
+                    }
+
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Bottoni centrali (undo, redo, play) - ORA PERFETTAMENTE CENTRATI
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _TopBarButton(
+                              icon: Icons.undo_rounded,
+                              tooltip: 'Annulla',
+                              enabled: canUndo,
+                              onTap: canUndo
+                                  ? () => context.read<FlowchartBloc>().add(const Undo())
+                                  : null,
+                              iconSize: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            _TopBarButton(
+                              icon: FontAwesomeIcons.play,
+                              tooltip: 'Avvia debug',
+                              enabled: isPlayEnabled,
+                              onTap: isPlayEnabled ? widget.onStartDebug : null,
+                              isAccent: true,
+                            ),
+                            const SizedBox(width: 12),
+                            _TopBarButton(
+                              icon: Icons.redo_rounded,
+                              tooltip: 'Ripeti',
+                              enabled: canRedo,
+                              onTap: canRedo
+                                  ? () => context.read<FlowchartBloc>().add(const Redo())
+                                  : null,
+                              iconSize: 22,
+                            ),
+                          ],
+                        ),
+
+                        // Bottoni laterali (sinistra e destra)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Bottoni di gestione flowchart (sinistra)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _TopBarButton(
+                                  icon: FontAwesomeIcons.trash,
+                                  tooltip: 'Elimina nodo selezionato',
+                                  enabled: isDeleteEnabled,
+                                  onTap: isDeleteEnabled
+                                      ? () => _handleDeleteSelected(context, flowchartState)
+                                      : null,
+                                ),
+                                const SizedBox(width: 8),
+                                _TopBarButton(
+                                  icon: FontAwesomeIcons.arrowRotateLeft,
+                                  tooltip: 'Resetta flowchart',
+                                  enabled: isResetEnabled,
+                                  onTap: isResetEnabled ? () => _handleResetFlowchart(context) : null,
+                                ),
+                                const SizedBox(width: 8),
+                                _TopBarButton(
+                                  icon: FontAwesomeIcons.scissors,
+                                  tooltip: 'Resetta da un blocco',
+                                  enabled: isResetEnabled,
+                                  onTap: isResetEnabled ? () => _handleResetFromBlock(context) : null,
+                                ),
+                              ],
+                            ),
+
+                            // Bottoni a destra (export, edit)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _TopBarButton(
+                                  icon: FontAwesomeIcons.pencil,
+                                  tooltip: 'Modifica disegno',
+                                  enabled: !disableUI,
+                                  onTap: !disableUI ? widget.onEdit : null,
+                                ),
+                                const SizedBox(width: 8),
+                                _TopBarButton(
+                                  icon: FontAwesomeIcons.download,
+                                  tooltip: 'Esporta immagine',
+                                  enabled: !disableUI,
+                                  onTap: !disableUI ? widget.onExport : null,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
                 ),
+              ),
+            ),
+
+          // ✨ NUOVO PANNELLO VARIABILI LATERALE E CORTO
+          if (!widget.isReadOnly)
+            SlideTransition(
+              position: _panelSlideAnimation,
+              child: BlocBuilder<FlowchartBloc, FlowchartState>(
+                builder: (context, state) {
+                  final variables = (state is FlowchartLoaded)
+                      ? state.flowchart.variables
+                      : <VariableDeclaration>[];
+
+                  final protectedVariableNames = (state is FlowchartLoaded)
+                      ? state.flowchart.signature.parameters
+                          .map((p) => p.name)
+                          .toSet()
+                      : <String>{};
+
+                  return _VariablesPanel(
+                    variables: variables,
+                    protectedVariableNames: protectedVariableNames,
+                    onAddVariable: _handleAddVariable,
+                    onEditVariable: _handleEditVariable,
+                    onDeleteVariable: _handleDeleteVariable,
+                    onClose: _toggleVariablesPanel,
+                  );
+                },
               ),
             ),
 
@@ -464,13 +681,8 @@ class _WorkAreaState extends State<WorkArea>
                 scale: _buttonAnimation,
                 child: FadeTransition(
                   opacity: _buttonAnimation,
-                  child: _InfoRulesButton(
-                    onTap: () => AppDialogs.showInfoDialog(
-                      context,
-                      title: 'Regole',
-                      message: 'Opzione regole da implementare',
-                      type: DialogType.info,
-                    ),
+                  child: _VariablesPanelButton(
+                    onTap: _toggleVariablesPanel,
                   ),
                 ),
               ),
@@ -529,12 +741,47 @@ class _WorkAreaContent extends StatelessWidget {
   }
 }
 
-class _VariablesPanel extends StatelessWidget {
+class _VariablesPanelButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _VariablesPanelButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    return Tooltip(
+      message: 'Gestisci Variabili',
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(color: theme.resources.cardStrokeColorDefault),
+        ),
+        child: IconButton(
+          onPressed: onTap,
+          icon: Icon(Icons.data_object, color: theme.accentColor, size: 25),
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.all(Colors.transparent),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VariablesPanel extends StatefulWidget {
   final List<VariableDeclaration> variables;
   final Set<String> protectedVariableNames;
   final void Function(VariableScope) onAddVariable;
   final void Function(VariableDeclaration) onEditVariable;
   final void Function(VariableDeclaration) onDeleteVariable;
+  final VoidCallback onClose;
 
   const _VariablesPanel({
     required this.variables,
@@ -542,101 +789,121 @@ class _VariablesPanel extends StatelessWidget {
     required this.onAddVariable,
     required this.onEditVariable,
     required this.onDeleteVariable,
+    required this.onClose,
   });
+
+  @override
+  State<_VariablesPanel> createState() => _VariablesPanelState();
+}
+
+class _VariablesPanelState extends State<_VariablesPanel> {
+  int _currentIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final inputs = widget.variables.where((v) => v.scope == VariableScope.input).toList();
+    final outputs = widget.variables.where((v) => v.scope == VariableScope.output).toList();
+    final works = widget.variables.where((v) => v.scope == VariableScope.local).toList();
 
-    final inputVars = variables.where((v) => v.scope == VariableScope.input).toList();
-    final outputVars = variables.where((v) => v.scope == VariableScope.output).toList();
-    final localVars = variables.where((v) => v.scope == VariableScope.local).toList();
-
-    return Container(
-      width: 260,
-      padding: const EdgeInsets.all(12.0),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.resources.cardStrokeColorDefault),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 8,
-            offset: Offset(0, 4),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Container(
+          width: 320,
+          height: 550,
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: theme.resources.cardStrokeColorDefault),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x1A000000),
+                  blurRadius: 12,
+                  offset: Offset(4, 0)),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-            child: Text('Variabili',
-                style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.w600)),
+          child: Column(
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.data_object, color: theme.accentColor),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text('Gestione Variabili',
+                          style: theme.typography.subtitle),
+                    ),
+                    IconButton(
+                      icon: const Icon(FluentIcons.chrome_close),
+                      onPressed: widget.onClose,
+                    ),
+                  ],
+                ),
+              ),
+              // TabView
+              Expanded(
+                child: TabView(
+                  currentIndex: _currentIndex,
+                  onChanged: (index) => setState(() => _currentIndex = index),
+                  tabs: [
+                    Tab(
+                      text: const Text('Input'),
+                      body: _VariableList(
+                        scope: VariableScope.input,
+                        variables: inputs,
+                        protectedVariableNames: widget.protectedVariableNames,
+                        onAdd: () => widget.onAddVariable(VariableScope.input),
+                        onEdit: widget.onEditVariable,
+                        onDelete: widget.onDeleteVariable,
+                      ),
+                    ),
+                    Tab(
+                      text: const Text('Output'),
+                      body: _VariableList(
+                        scope: VariableScope.output,
+                        variables: outputs,
+                        protectedVariableNames: widget.protectedVariableNames,
+                        onAdd: () => widget.onAddVariable(VariableScope.output),
+                        onEdit: widget.onEditVariable,
+                        onDelete: widget.onDeleteVariable,
+                      ),
+                    ),
+                    Tab(
+                      text: const Text('Lavoro'),
+                      body: _VariableList(
+                        scope: VariableScope.local,
+                        variables: works,
+                        protectedVariableNames: widget.protectedVariableNames,
+                        onAdd: () => widget.onAddVariable(VariableScope.local),
+                        onEdit: widget.onEditVariable,
+                        onDelete: widget.onDeleteVariable,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Divider(
-            style: DividerThemeData(
-              horizontalMargin: const EdgeInsets.symmetric(vertical: 8),
-              thickness: 1,
-              decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
-            ),
-          ),
-          _VariableCategory(
-            title: 'Input',
-            variables: inputVars,
-            protectedVariableNames: protectedVariableNames,
-            onAdd: () => onAddVariable(VariableScope.input),
-            onEdit: onEditVariable,
-            onDelete: onDeleteVariable,
-          ),
-          Divider(
-            style: DividerThemeData(
-              horizontalMargin: const EdgeInsets.symmetric(vertical: 8),
-              thickness: 1,
-              decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
-            ),
-          ),
-          _VariableCategory(
-            title: 'Output',
-            variables: outputVars,
-            protectedVariableNames: protectedVariableNames,
-            onAdd: () => onAddVariable(VariableScope.output),
-            onEdit: onEditVariable,
-            onDelete: onDeleteVariable,
-          ),
-          Divider(
-            style: DividerThemeData(
-              horizontalMargin: const EdgeInsets.symmetric(vertical: 8),
-              thickness: 1,
-              decoration: BoxDecoration(color: theme.resources.dividerStrokeColorDefault),
-            ),
-          ),
-          _VariableCategory(
-            title: 'Di Lavoro',
-            variables: localVars,
-            protectedVariableNames: protectedVariableNames,
-            onAdd: () => onAddVariable(VariableScope.local),
-            onEdit: onEditVariable,
-            onDelete: onDeleteVariable,
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _VariableCategory extends StatelessWidget {
-  final String title;
+class _VariableList extends StatelessWidget {
+  final VariableScope scope;
   final List<VariableDeclaration> variables;
   final Set<String> protectedVariableNames;
   final VoidCallback onAdd;
   final void Function(VariableDeclaration) onEdit;
   final void Function(VariableDeclaration) onDelete;
 
-  const _VariableCategory({
-    required this.title,
+  const _VariableList({
+    required this.scope,
     required this.variables,
     required this.protectedVariableNames,
     required this.onAdd,
@@ -647,48 +914,38 @@ class _VariableCategory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-              child: Text(title, style: theme.typography.bodyStrong?.copyWith(color: theme.resources.textFillColorSecondary)),
-            ),
-            Button(
-              onPressed: onAdd,
-              style: ButtonStyle(
-                padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
-                shape: WidgetStateProperty.all(const CircleBorder()),
-              ),
-              child: const Icon(FluentIcons.add, size: 16),
-            ),
-          ],
-        ),
-        if (variables.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0, left: 4.0, right: 4.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: variables
-                  .map((variable) => _VariableDisplay(
-                        variable: variable,
-                        isProtected:
-                            protectedVariableNames.contains(variable.name),
-                        onEdit: () => onEdit(variable),
-                        onDelete: () => onDelete(variable),
-                      ))
-                  .toList(),
-            ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.only(top: 4.0, left: 4.0, right: 4.0),
-            child: Text('Nessuna', style: theme.typography.caption?.copyWith(fontStyle: FontStyle.italic)),
+    return ScaffoldPage(
+      padding: EdgeInsets.zero,
+      header: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+        child: FilledButton(
+          onPressed: onAdd,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(FluentIcons.add, size: 16),
+              const SizedBox(width: 8),
+              Text('Aggiungi Variabile ${scope.name}'),
+            ],
           ),
-      ],
+        ),
+      ),
+      content: variables.isEmpty
+          ? Center(child: Text('Nessuna variabile', style: theme.typography.caption))
+          : ListView.separated(
+              padding: const EdgeInsets.all(12.0),
+              itemCount: variables.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 6),
+              itemBuilder: (_, i) {
+                final v = variables[i];
+                return _VariableDisplay(
+                  variable: v,
+                  isProtected: protectedVariableNames.contains(v.name),
+                  onEdit: () => onEdit(v),
+                  onDelete: () => onDelete(v),
+                );
+              },
+            ),
     );
   }
 }
@@ -792,33 +1049,59 @@ class _VariableDisplay extends StatelessWidget {
   }
 }
 
-class _InfoRulesButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _InfoRulesButton({required this.onTap});
+class _TopBarButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final bool enabled;
+  final VoidCallback? onTap;
+  final bool isAccent;
+  final double? iconSize;
+
+  const _TopBarButton({
+    required this.icon,
+    required this.tooltip,
+    required this.enabled,
+    required this.onTap,
+    this.isAccent = false,
+    this.iconSize,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
     return Tooltip(
-      message: 'Regole (coming soon)',
-      child: Container(
-        decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+      message: tooltip,
+      child: AnimatedOpacity(
+        opacity: enabled ? 1.0 : 0.4,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isAccent && enabled
+                  ? theme.accentColor
+                  : theme.resources.cardStrokeColorDefault,
             ),
-          ],
-          border: Border.all(color: theme.resources.cardStrokeColorDefault),
-        ),
-        child: IconButton(
-          onPressed: onTap,
-          icon: Icon(FontAwesomeIcons.listCheck, color: theme.accentColor, size: 25),
-          style: ButtonStyle(
-            backgroundColor: WidgetStateProperty.all(Colors.transparent),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: IconButton(
+            icon: Icon(
+              icon,
+              size: iconSize ?? 18,
+              color: isAccent && enabled ? theme.accentColor : null,
+            ),
+            onPressed: enabled ? onTap : null,
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.all(Colors.transparent),
+              padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
+            ),
           ),
         ),
       ),

@@ -11,7 +11,7 @@ abstract class FlowchartState extends Equatable {
 }
 
 // ✨ Nuovo: scopo della modalità connettore
-enum ConnectorPurpose { normal, doWhileBody, resetFromNode }
+enum ConnectorPurpose { normal, doWhileBody, resetFromNode, loopClosure }
 
 class FlowchartInitial extends FlowchartState {}
 
@@ -350,6 +350,46 @@ class FlowchartLoaded extends FlowchartState {
     final body = whileBodyNodes(whileNodeId);
     if (body.isEmpty) return false;
     return flowchart.edges.any((e) => e.port == 'loop' && e.to == whileNodeId && body.contains(e.from));
+  }
+
+  /// 🆕 NUOVO: Restituisce gli ID dei nodi foglia all'interno del corpo di un ciclo
+  /// Un nodo foglia è un nodo senza archi in uscita (esclusi archi 'loop')
+  List<String> getLoopBodyLeafNodes(String loopNodeId) {
+    final loopNode = getNodeById(loopNodeId);
+    if (loopNode == null) return [];
+
+    Set<String> bodyNodes;
+    if (loopNode.kind == FlowNodeKind.whileLoop) {
+      bodyNodes = whileBodyNodes(loopNodeId);
+    } else if (loopNode.kind == FlowNodeKind.doWhileLoop) {
+      bodyNodes = doWhileBodyNodes(loopNodeId);
+    } else {
+      return [];
+    }
+
+    // Trova i nodi foglia: nodi del corpo che non hanno archi in uscita (esclusi 'loop')
+    final leafNodes = <String>[];
+    for (final nodeId in bodyNodes) {
+      final outgoing = flowchart.edges.where((e) => e.from == nodeId && e.port != 'loop').toList();
+      if (outgoing.isEmpty) {
+        leafNodes.add(nodeId);
+      }
+    }
+
+    return leafNodes;
+  }
+
+  /// 🆕 NUOVO: Verifica se un ciclo ha più di un nodo foglia e quindi richiede la modalità connettore
+  bool loopRequiresClosureMode(String loopNodeId) {
+    final leafNodes = getLoopBodyLeafNodes(loopNodeId);
+    return leafNodes.length >= 2;
+  }
+
+  /// 🆕 NUOVO: Verifica se un nodo può essere selezionato nella modalità loop closure
+  /// (deve essere un nodo foglia all'interno del ciclo)
+  bool canSelectForLoopClosure(String nodeId, String loopNodeId) {
+    final leafNodes = getLoopBodyLeafNodes(loopNodeId);
+    return leafNodes.contains(nodeId);
   }
 
   factory FlowchartLoaded.fromJson(String jsonString) {

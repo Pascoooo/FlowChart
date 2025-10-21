@@ -49,7 +49,7 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
               ),
               child: Column(
                 children: [
-                  const _SidebarHeader(),
+                  _SidebarHeader(projectName: widget.selectedProject.name),
                   _buildDivider(theme),
                   Expanded(
                     child: _FileSystemView(
@@ -90,7 +90,8 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
 
 /// Header della Sidebar.
 class _SidebarHeader extends StatefulWidget {
-  const _SidebarHeader();
+  final String projectName;
+  const _SidebarHeader({required this.projectName});
 
   @override
   State<_SidebarHeader> createState() => _SidebarHeaderState();
@@ -188,16 +189,15 @@ class _SidebarHeaderState extends State<_SidebarHeader>
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  "Unichart",
-                  style: theme.typography.title
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ],
+            child: Tooltip(
+              message: widget.projectName,
+              child: Text(
+                widget.projectName,
+                style: theme.typography.title
+                    ?.copyWith(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+              ),
             ),
           ),
         ],
@@ -206,10 +206,23 @@ class _SidebarHeaderState extends State<_SidebarHeader>
   }
 }
 
-  class _FileSystemView extends StatelessWidget {
+  class _FileSystemView extends StatefulWidget {
     final String projectId;
     final bool isReadOnly;
     const _FileSystemView({required this.projectId, this.isReadOnly = false});
+
+    @override
+    State<_FileSystemView> createState() => _FileSystemViewState();
+  }
+
+  class _FileSystemViewState extends State<_FileSystemView> {
+    final _scrollController = ScrollController();
+
+    @override
+    void dispose() {
+      _scrollController.dispose();
+      super.dispose();
+    }
 
     @override
     Widget build(BuildContext context) {
@@ -235,8 +248,10 @@ class _SidebarHeaderState extends State<_SidebarHeader>
             });
 
             return Scrollbar(
+              controller: _scrollController,
               child: ListView.builder(
-                primary: true,
+                controller: _scrollController,
+                primary: false,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 itemCount: orderedFiles.length,
                 itemBuilder: (context, index) {
@@ -244,8 +259,8 @@ class _SidebarHeaderState extends State<_SidebarHeader>
                   return FileListItem(
                     file: file,
                     isSelected: file.fileId == state.activeFileId,
-                    projectId: projectId,
-                    isReadOnly: isReadOnly,
+                    projectId: widget.projectId,
+                    isReadOnly: widget.isReadOnly,
                   );
                 },
               ),

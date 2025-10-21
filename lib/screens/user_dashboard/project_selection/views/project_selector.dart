@@ -25,7 +25,12 @@ class ProjectSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    // ✅ FIX DEFINITIVO: Applica l'ordinamento direttamente nella UI.
+    // Questo garantisce un ordine visivo stabile a ogni rebuild,
+    // eliminando il "rimbalzo" causato dal timing degli aggiornamenti del BLoC.
+    final sortedProjects = List<MyProject>.from(projects)
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
     Future<void> showCreateProjectDialog() async {
       final String? projectName = await AppDialogs.showInputDialog(
         context,
@@ -54,7 +59,7 @@ class ProjectSelector extends StatelessWidget {
                 const WelcomeHeader(),
                 const SizedBox(height: 48),
                 ProjectContainer(
-                  projects: projects,
+                  projects: sortedProjects,
                   onProjectSelected: onProjectSelected,
                   onProjectDeleted: (projectId) {
                     context

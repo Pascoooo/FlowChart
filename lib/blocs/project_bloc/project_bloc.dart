@@ -103,7 +103,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   }
 
   void _onProjectsUpdated(ProjectsUpdated event, Emitter<ProjectState> emit) {
-    final projects = event.projects..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final projects = List<MyProject>.from(event.projects)
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     emit(ProjectsLoaded(projects: projects));
   }
 
@@ -145,10 +146,31 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     emit(const ProjectLoading(message: 'Salvataggio in corso...'));
     try {
       await projectRepository.endWorkspaceSession(projectId);
-      final cleared = currentState.copyWith(clearSelectedProject: true);
-      emit(cleared);
-      if (cleared.projects.isEmpty) {
-        add(const LoadProjects());
+
+      // ✅ FIX: Aggiornamento ottimistico anche all'uscita dal progetto.
+      // Aggiorniamo l'orario del progetto appena chiuso e riordiniamo la lista
+      // PRIMA di emettere lo stato, così la UI riceve subito l'ordine corretto.
+      final projectIndex = currentState.projects.indexWhere((p) => p.projectId == projectId);
+      if (projectIndex != -1) {
+        final updatedProjects = List<MyProject>.from(currentState.projects);
+        updatedProjects[projectIndex] = updatedProjects[projectIndex].copyWith(updatedAt: DateTime.now());
+        updatedProjects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+        emit(ProjectsLoaded(
+          projects: updatedProjects,
+          selectedProject: null, // Esci dal progetto
+        ));
+
+        if (updatedProjects.isEmpty) {
+          add(const LoadProjects());
+        }
+      } else {
+        // Fallback se il progetto non viene trovato (raro)
+        final cleared = currentState.copyWith(clearSelectedProject: true);
+        emit(cleared);
+        if (cleared.projects.isEmpty) {
+          add(const LoadProjects());
+        }
       }
     } catch (e) {
       emit(currentState.copyWith(error: 'Errore critico durante il salvataggio.'));
@@ -240,6 +262,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         isPublic: event.isPublic,
       );
 
+      // Rimuoviamo l'aggiornamento ottimistico locale. L'ordinamento è ora gestito dalla UI.
       final projectIndex = currentState.projects.indexWhere((p) => p.projectId == event.projectId);
       if (projectIndex != -1) {
         final updatedProjects = List<MyProject>.from(currentState.projects);
@@ -255,7 +278,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
           ? 'Attendi ancora $hours ore e $minutes minuti.'
           : 'Attendi ancora $minutes minuti.';
       emit(currentState.copyWith(error: errorMessage));
-    } catch (e, st) {
+    } catch (e) {
       emit(currentState.copyWith(error: 'Impossibile aggiornare la visibilità. Riprova.'));
     }
   }

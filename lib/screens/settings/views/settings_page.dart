@@ -552,7 +552,7 @@ class SystemAndInfoSettings extends StatelessWidget {
   void _showAppInfoDialog(BuildContext context) {
     AppDialogs.showInfoDialog(context,
         title: 'Informazioni App',
-        message: 'Unichart\nVersione 1.0.0\n© 2025 Unichart Inc.',
+        message: 'Unichart\nVersione 1.0.0\n© 2025 Unichart Inc.\n Developed by: \n Nicolo\' Pacucci & Andrea Pantaleo',
         type: DialogType.info);
   }
 

@@ -83,8 +83,9 @@ class _NodeWidgetState extends State<NodeWidget> {
         final sourceNode = state.connectorSourceNodeId != null
             ? state.getNodeById(state.connectorSourceNodeId!)
             : null;
-        final isDoWhileBodySelection = connectorPurpose == ConnectorPurpose.doWhileBody; // solo dal purpose
+        final isDoWhileBodySelection = connectorPurpose == ConnectorPurpose.doWhileBody;
         final isResetSelection = connectorPurpose == ConnectorPurpose.resetFromNode;
+        final isLoopClosure = connectorPurpose == ConnectorPurpose.loopClosure;
 
         // Calcola l'insieme di nodi validi per do-while: devono essere PRIMA del do-while
         final allowedAncestors = isDoWhileBodySelection && sourceNode != null
@@ -99,11 +100,17 @@ class _NodeWidgetState extends State<NodeWidget> {
         final isEndNode = widget.node.kind == FlowNodeKind.end;
 
         // Valida il target in base alla modalità
-        final bool isThisNodeAValidTarget = isDoWhileBodySelection
-            ? (!isThisNodeTheSource && !isStartNode && allowedAncestors.contains(widget.node.id))
-            : (isResetSelection
-                ? (!isStartNode && !isHeaderNode)
-                : (state.isLeafNode(widget.node.id) && !isThisNodeTheSource && !isEndNode));
+        bool isThisNodeAValidTarget = false;
+        if (isDoWhileBodySelection) {
+          isThisNodeAValidTarget = !isThisNodeTheSource && !isStartNode && allowedAncestors.contains(widget.node.id);
+        } else if (isResetSelection) {
+          isThisNodeAValidTarget = !isStartNode && !isHeaderNode;
+        } else if (isLoopClosure && sourceNode != null) {
+          // 🆕 NUOVO: Per loop closure, verifica che il nodo sia selezionabile (nodo foglia all'interno del ciclo)
+          isThisNodeAValidTarget = state.canSelectForLoopClosure(widget.node.id, sourceNode.id);
+        } else {
+          isThisNodeAValidTarget = state.isLeafNode(widget.node.id) && !isThisNodeTheSource && !isEndNode;
+        }
 
         final bool isThisNodeSelectedForConnector =
             state.selectedConnectorNodeIds.contains(widget.node.id);
@@ -696,6 +703,10 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
 
     // 🆕 Valuta se il flowchart contiene solo il nodo Inizio
     bool onlyStart = false;
+
+    // 🆕 NUOVO: Verifica se il ciclo richiede la modalità connettore (più nodi foglia)
+    bool loopRequiresClosureMode = false;
+
     if (state is FlowchartLoaded) {
       final nodes = state.flowchart.nodes;
       onlyStart = nodes.length == 1 && nodes.first.kind == FlowNodeKind.start;
@@ -708,6 +719,12 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
       isSourceNodeLeaf = state.isLeafNode(widget.sourceNodeId);
       loopNodeId = state.getParentLoopNodeId(widget.sourceNodeId);
       isInsideLoop = loopNodeId != null;
+
+      // 🆕 NUOVO: Verifica se il ciclo ha più nodi foglia
+      if (isInsideLoop && loopNodeId != null) {
+        loopRequiresClosureMode = state.loopRequiresClosureMode(loopNodeId);
+      }
+
       if (isSourceNodeLeaf) {
         // Considera solo nodi foglia VALIDi come altri candidati: non End e con capacità di uscita
         hasOtherLeafNodes = state.flowchart.nodes.any(
@@ -771,14 +788,24 @@ class _CreationHandleButtonState extends State<_CreationHandleButton> {
     }
 
     if (isInsideLoop && loopNodeId != null) {
-      items.add(
-        _item('Fine Ciclo', FontAwesomeIcons.arrowRotateLeft, () {
-          bloc.add(CloseLoop(
-            fromNodeId: widget.sourceNodeId,
-            loopNodeId: loopNodeId!,
-          ));
-        }),
-      );
+      // 🆕 NUOVO: Se il ciclo ha più nodi foglia, mostra l'opzione per la modalità connettore
+      if (loopRequiresClosureMode) {
+        items.add(
+          _item('Connettore Ciclo', FontAwesomeIcons.diagramProject, () {
+            bloc.add(StartLoopClosureMode(loopNodeId!));
+          }),
+        );
+      } else {
+        // Singolo nodo foglia: chiusura diretta
+        items.add(
+          _item('Fine Ciclo', FontAwesomeIcons.arrowRotateLeft, () {
+            bloc.add(CloseLoop(
+              fromNodeId: widget.sourceNodeId,
+              loopNodeId: loopNodeId!,
+            ));
+          }),
+        );
+      }
     } else {
       if (isSourceNodeLeaf && hasOtherLeafNodes && state is FlowchartLoaded && state.canAddOutgoingConnection(widget.sourceNodeId)) {
         items.add(

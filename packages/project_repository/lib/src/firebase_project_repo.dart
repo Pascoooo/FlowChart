@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:project_repository/src/services/firestore_storage_service.dart';
@@ -56,7 +55,7 @@ class FirebaseProjectRepo implements ProjectRepo {
             if (_haveStructuralDifferences(rtdbContent, firestoreContent)) {
               structuralChanges.add(UnsavedFileChange(
                 fileId: fileId,
-                fileName: (rtdbFile['name'] ?? '').toString(),
+                fileName: (firestoreFile['name'] ?? 'File Sconosciuto').toString(),
                 firestoreContent: firestoreContent,
                 rtdbContent: rtdbContent,
               ));
@@ -185,7 +184,8 @@ class FirebaseProjectRepo implements ProjectRepo {
       // Soft-fail: se qualcosa va storto qui, non propagare in alto.
       return;
     }
-    // Chiusura pulita del metodo (nessun valore di ritorno richiesto)
+    // Aggiorna sempre l'ultimo accesso quando l'utente gestisce la sessione in rientro
+    await _storage.updateProjectAccessTime(projectId).catchError((_) {});
     return;
   }
 
@@ -277,13 +277,52 @@ class FirebaseProjectRepo implements ProjectRepo {
 
   @override
   Future<void> endWorkspaceSession(String projectId) async {
-    // Termina la sessione live del progetto
-    await _session.removeProjectSession(projectId);
+    // 1) Prova a sincronizzare i file RTDB -> Firestore prima di chiudere
+    bool syncOk = true;
+    try {
+      final sessionSnapshot = await _session.getSessionSnapshot();
+      if (sessionSnapshot.exists && sessionSnapshot.value is Map) {
+        final Map<dynamic, dynamic> data = sessionSnapshot.value as Map;
+        final projectNode = data[projectId];
+        if (projectNode is Map && projectNode['files'] is Map) {
+          final files = Map<String, dynamic>.from(projectNode['files'] as Map);
+          final Map<String, String> filesToSync = {};
+          for (final entry in files.entries) {
+            final fileId = entry.key.toString();
+            final node = Map<String, dynamic>.from(entry.value as Map);
+            final content = (node['content'] ?? '').toString();
+            if (content.trim().isEmpty) continue;
+            // Valida JSON basico per evitare scritture corrotte
+            try {
+              jsonDecode(content);
+              filesToSync[fileId] = content;
+            } catch (_) {
+              // Salta file non validi
+            }
+          }
+          if (filesToSync.isNotEmpty) {
+            await _storage.syncFiles(projectId, filesToSync);
+          }
+        }
+      }
+    } catch (_) {
+      syncOk = false;
+    }
+
+    // 2) Aggiorna in ogni caso l'ultimo accesso
+    await _storage.updateProjectAccessTime(projectId).catchError((_) {});
+
+    // 3) Rimuovi la sessione solo se la sincronizzazione non è fallita in modo critico
+    if (syncOk) {
+      await _session.removeProjectSession(projectId).catchError((_) {});
+    }
   }
 
   @override
   Future<void> discardSession(String projectId) async {
     await _session.removeProjectSession(projectId);
+    // Anche in caso di rifiuto dei cambi, aggiorna updatedAt
+    await _storage.updateProjectAccessTime(projectId).catchError((_) {});
   }
 
   @override

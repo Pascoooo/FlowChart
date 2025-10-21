@@ -18,10 +18,6 @@ dependencies:
   googleapis:
   googleapis_auth:
   cloud_functions:
-  
-  # google sign-in
-  google_sign_in: ^6.2.1
-  google_sign_in_web: ^0.12.4+2
 
   # utils
   rxdart: ^0.27.7

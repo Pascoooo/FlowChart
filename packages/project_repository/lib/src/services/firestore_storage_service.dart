@@ -18,10 +18,12 @@ class FirestoreStorageService {
   // --- Gestione Progetti ---
 
   Stream<List<MyProject>> projects() {
-    return projectCollection.snapshots().map((snapshot) => snapshot.docs
-        .map((doc) =>
-        MyProject.fromEntity(MyProjectEntity.fromDocument(doc.data()!)))
-        .toList());
+    return projectCollection
+        .orderBy('updatedAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MyProject.fromEntity(MyProjectEntity.fromDocument(doc.data()!)))
+            .toList());
   }
 
   Future<DocumentSnapshot<Map<String, dynamic>>> getProjectDoc(String projectId) {
@@ -57,6 +59,11 @@ class FirestoreStorageService {
   Future<void> renameProject(
       {required String projectId, required String newName}) async {
     await projectCollection.doc(projectId).update({'name': newName});
+  }
+
+  /// Aggiorna il campo updatedAt del progetto (usato per ordinare per ultimo accesso)
+  Future<void> updateProjectAccessTime(String projectId) async {
+    await projectCollection.doc(projectId).update({'updatedAt': Timestamp.now()});
   }
 
   // --- Gestione File ---
@@ -110,6 +117,7 @@ class FirestoreStorageService {
   }
 
   /// Sincronizza su Firestore un set di file tramite un'operazione batch.
+  /// Aggiorna anche il campo updatedAt del progetto per tracciare l'ultimo accesso.
   Future<void> syncFiles(
       String projectId, Map<String, String> filesToSync) async {
     final batch = FirebaseFirestore.instance.batch();
@@ -122,7 +130,8 @@ class FirestoreStorageService {
       batch.update(docRef, {'content': content});
     }
 
-    batch.update(projectCollection.doc(projectId), {'updatedAt': DateTime.now()});
+    // Aggiorna updatedAt ogni volta che i file vengono sincronizzati
+    batch.update(projectCollection.doc(projectId), {'updatedAt': Timestamp.now()});
     await batch.commit();
   }
 
@@ -130,11 +139,21 @@ class FirestoreStorageService {
       {required String projectId,
         required String fileId,
         required String content}) async {
-    await projectCollection
-        .doc(projectId)
-        .collection('files')
-        .doc(fileId)
-        .update({'content': content});
+    final batch = FirebaseFirestore.instance.batch();
+
+    // Aggiorna il contenuto del file
+    batch.update(
+      projectCollection.doc(projectId).collection('files').doc(fileId),
+      {'content': content}
+    );
+
+    // Aggiorna updatedAt del progetto
+    batch.update(
+      projectCollection.doc(projectId),
+      {'updatedAt': Timestamp.now()}
+    );
+
+    await batch.commit();
   }
 
 // Dentro la classe FirestoreStorageService

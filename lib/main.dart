@@ -34,7 +34,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => ThemeProvider(prefs)),
           ChangeNotifierProvider(create: (_) => SettingsProvider()),
           Provider<UserRepository>(
-            create: (_) => FirebaseUserRepo(),
+            create: (_) => FirebaseUserRepo(googleClientId: googleClientId),
           ),
         ],
         child: const MyApp(),
@@ -42,13 +42,12 @@ void main() async {
     );
   } else {
     runApp(
-      const FluentApp(
-        home: ScaffoldPage(
-          content: Center(
-            child: Text(
-                "Errore di configurazione critica. Impossibile caricare le impostazioni."),
-          ),
-        ),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ThemeProvider(prefs)),
+          ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ],
+        child: const MyApp(),
       ),
     );
   }

@@ -1,139 +1,242 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Costanti per Google Drive
 const String kDriveScope = 'https://www.googleapis.com/auth/drive.file';
 const String kFunctionsRegion = 'europe-west8';
 
+@JS('google.accounts.oauth2')
+@staticInterop
+class GsiAuth2 {}
+
+extension GsiAuth2Extension on GsiAuth2 {
+  external JSAny initCodeClient(JSObject config);
+  external void revoke(String accessToken, JSFunction doneFn);
+}
+
+
+@JS()
+@anonymous
+@staticInterop
+class CodeClient {}
+
+extension CodeClientExtension on CodeClient {
+  external void requestCode();
+}
+
+@JS()
+@anonymous
+@staticInterop
+class CodeResponse {}
+
+extension CodeResponseExtension on CodeResponse {
+  external String get code;
+}
+
 /// Service dedicato alla gestione dell'integrazione con Google Drive.
-///
-/// Implementa il flusso OAuth2 server-side conformemente alle direttive GIS.
-/// Su web, utilizza Firebase Auth per ottenere token temporanei che vengono
-/// immediatamente scambiati dal backend per refresh token permanenti.
 class GoogleDriveService {
   final FirebaseFunctions _functions;
+  final String _googleClientId;
+  DateTime? _tokenExpiresAt;
+  bool _isRefreshing = false;
+  Completer<void>? _refreshCompleter;
 
-  GoogleDriveService({FirebaseFunctions? functions})
-      : _functions = functions ?? FirebaseFunctions.instanceFor(region: kFunctionsRegion);
+  GoogleDriveService({
+    FirebaseFunctions? functions,
+    required String googleClientId,
+  })  : _functions =
+            functions ?? FirebaseFunctions.instanceFor(region: kFunctionsRegion),
+        _googleClientId = googleClientId;
 
-  /// Richiede il permesso per Google Drive tramite popup OAuth.
-  ///
-  /// Processo:
-  /// 1. Mostra il consent screen di Google con lo scope Drive
-  /// 2. Ottiene access token e ID token temporanei
-  /// 3. Li invia al backend che li scambia per refresh token
-  /// 4. Il backend salva i token in modo sicuro in Firestore
-  ///
-  /// Restituisce `true` se il permesso è stato concesso con successo,
-  /// `false` se l'utente ha annullato l'operazione.
-  Future<bool> requestDrivePermission(String userId) async {
+  /// Controlla se il token è valido localmente, senza chiamare il backend.
+  bool _isTokenValid() {
+    if (_tokenExpiresAt == null) return false;
+    final now = DateTime.now();
+    final buffer = const Duration(minutes: 5);
+    return _tokenExpiresAt!.isAfter(now.add(buffer));
+  }
+
+  /// Assicura che il token di accesso sia valido, rinnovandolo se necessario.
+  Future<void> _ensureValidToken() async {
+    if (_isRefreshing) {
+      return _refreshCompleter?.future;
+    }
+    if (_isTokenValid()) {
+      return;
+    }
+
+    _isRefreshing = true;
+    _refreshCompleter = Completer<void>();
+
     try {
-      // Ottieni l'utente corrente da Firebase Auth
-      final firebaseAuth = FirebaseAuth.instance;
-      final user = firebaseAuth.currentUser;
+      final callable = _functions.httpsCallable('ensure_valid_drive_token');
+      final result = await callable.call<Map<String, dynamic>>({});
+      final data = result.data;
 
-      if (user == null) {
-        throw Exception('User not authenticated');
+      if (data['success'] == true) {
+        final expiresIn = data['expiresIn'] as int? ?? 3600;
+        _tokenExpiresAt = DateTime.now().add(Duration(seconds: expiresIn));
+        _refreshCompleter?.complete();
+      } else {
+        _tokenExpiresAt = null;
+        final error = Exception('Failed to refresh Google Drive token.');
+        _refreshCompleter?.completeError(error);
+        throw error;
       }
-
-      // Configura il provider con lo scope Drive
-      final provider = GoogleAuthProvider()
-        ..addScope(kDriveScope)
-        ..setCustomParameters({
-          'access_type': 'offline', // Richiede refresh token
-          'prompt': 'consent', // Forza il consent screen
-        });
-
-      // Mostra il popup di autorizzazione
-      final userCredential = await user.reauthenticateWithPopup(provider);
-
-      // Ottieni i token dal risultato
-      final accessToken = userCredential.credential?.accessToken;
-      final idToken = await user.getIdToken();
-
-      if (accessToken == null) {
-        throw Exception('Failed to obtain access token from Google');
-      }
-
-      // Invia i token al backend per lo scambio
-      final callable = _functions.httpsCallable(
-        'exchangeGoogleTokens',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 15)),
-      );
-
-      final result = await callable.call({
-        'accessToken': accessToken,
-        'idToken': idToken,
-      });
-
-      return result.data['success'] == true;
-    } on FirebaseAuthException catch (e) {
-      // L'utente ha annullato il popup
-      if (e.code == 'popup-closed-by-user' || e.code == 'cancelled-popup-request') {
-        return false;
-      }
-      throw Exception('Firebase Auth error: ${e.message}');
     } catch (e) {
+      _tokenExpiresAt = null;
+      _refreshCompleter?.completeError(e);
       rethrow;
+    } finally {
+      _isRefreshing = false;
     }
   }
 
-  /// Carica un file su Google Drive tramite il backend.
-  ///
-  /// Questo metodo è un proxy: invia i dati al backend che gestisce
-  /// tutte le chiamate API a Google Drive usando i token salvati.
+  /// Richiede il permesso per Google Drive usando il flusso server-side.
+  Future<bool> requestDrivePermission(String userId) async {
+    if (!kIsWeb) {
+      throw UnsupportedError('This method is only supported on the web.');
+    }
+
+    print('Attempting to request Google Drive permission...');
+    print('Using Google Client ID: $_googleClientId');
+
+    if (_googleClientId.isEmpty || _googleClientId == 'your-client-id-here.apps.googleusercontent.com') {
+      print('ERROR: Google Client ID is not configured.');
+      throw Exception('Google Client ID is not configured. Please check your environment configuration.');
+    }
+
+    final completer = Completer<String?>();
+
+    try {
+      final JSAny? google = globalContext.getProperty('google'.toJS);
+      if (google == null) {
+        throw Exception('Google Identity Services library not loaded. Make sure the GSI script is included in index.html');
+      }
+
+      final JSAny? accounts = (google as JSObject?)?.getProperty('accounts'.toJS);
+      if (accounts == null) {
+        throw Exception('Google accounts object not found');
+      }
+
+      final GsiAuth2? gsi = (accounts as JSObject?)?.getProperty('oauth2'.toJS) as GsiAuth2?;
+      if (gsi == null) {
+        throw Exception('Google Identity Services OAuth2 library not found');
+      }
+
+      final config = <String, JSAny?>{
+        'client_id': _googleClientId.toJS,
+        'scope': kDriveScope.toJS,
+        'ux_mode': 'popup'.toJS,
+        'callback': (CodeResponse response) {
+          final code = response.code;
+          print('OAuth callback received. Code length: ${code.length}');
+          if (code.isNotEmpty) {
+            completer.complete(code);
+          } else {
+            print('OAuth callback received empty code');
+            completer.complete(null);
+          }
+        }.toJS,
+        'error_callback': (JSAny error) {
+          completer.completeError(Exception('OAuth error: $error'));
+        }.toJS,
+      }.jsify() as JSObject;
+
+      final client = gsi.initCodeClient(config);
+      (client as CodeClient).requestCode();
+    } catch (e) {
+      print('Error initializing OAuth client: $e');
+      return false;
+    }
+
+    final authCode = await completer.future.timeout(
+      const Duration(seconds: 120),
+      onTimeout: () {
+        print('OAuth flow timed out');
+        return null;
+      },
+    );
+
+    if (authCode == null || authCode.isEmpty) {
+      print('No authorization code received');
+      return false;
+    }
+
+    try {
+      print('Exchanging authorization code for tokens...');
+      final callable = _functions.httpsCallable(
+        'exchange_google_auth_code',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+      );
+      final result = await callable.call({'code': authCode});
+      final data = result.data as Map<String, dynamic>;
+
+      if (data['success'] == true) {
+        final expiresIn = data['expiresIn'] as int? ?? 3600;
+        _tokenExpiresAt = DateTime.now().add(Duration(seconds: expiresIn));
+        print('Google Drive connected successfully');
+        return true;
+      } else {
+        print('Token exchange failed: ${data['message'] ?? 'Unknown error'}');
+        return false;
+      }
+    } catch (e) {
+      print('Error exchanging auth code: $e');
+      return false;
+    }
+  }
+
+  /// Carica un file su Google Drive.
   Future<Map<String, dynamic>> uploadFileToDrive({
-    required String userId,
     required String fileName,
     required Uint8List fileBytes,
     String mimeType = 'application/json',
   }) async {
+    await _ensureValidToken();
     try {
-      // Converti i byte in base64 per il trasporto JSON
       final String base64FileData = base64Encode(fileBytes);
-
       final callable = _functions.httpsCallable(
-        'uploadFileToDrive',
+        'upload_file_to_drive',
         options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
       );
-
       final result = await callable.call({
         'fileName': fileName,
         'fileData': base64FileData,
         'mimeType': mimeType,
       });
-
       return {
         'success': true,
         'fileId': result.data['fileId'],
-        'webViewLink': result.data['webViewLink'],
       };
     } on FirebaseFunctionsException catch (e) {
-      if (e.code == 'unauthenticated') {
-        throw Exception('Session expired. Please sign in again.');
-      } else if (e.code == 'permission-denied') {
-        throw Exception('Google Drive permissions revoked. Please reconnect.');
+      if (e.code == 'unauthenticated' || e.code == 'permission-denied') {
+        _tokenExpiresAt = null;
+        throw Exception('Google Drive permissions may have been revoked. Please reconnect.');
       }
       throw Exception('Upload error: ${e.message ?? 'Unknown error'}');
     } catch (e) {
-      throw Exception('Network or unexpected error: ${e.toString()}');
+      throw Exception('An unexpected error occurred: ${e.toString()}');
     }
   }
 
   /// Revoca i permessi di Google Drive.
-  ///
-  /// Richiede al backend di eliminare i token salvati.
   Future<void> revokeDrivePermission(String userId) async {
     try {
+      // Revoke via backend
       final callable = _functions.httpsCallable(
-        'revokeGoogleDrivePermission',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 10)),
+        'revoke_google_drive_permission',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 20)),
       );
-
       await callable.call({});
+      _tokenExpiresAt = null;
     } catch (e) {
+      print("Error revoking Drive permission via backend: $e");
       rethrow;
     }
   }

@@ -1,229 +1,214 @@
 """
 Modulo per gestire l'integrazione OAuth2 con Google Drive.
-
-Implementa il flusso server-side conforme alle direttive Google Identity Services (GIS):
-- Scambio di token temporanei con refresh token permanenti
-- Storage sicuro dei token con encryption
-- Gestione automatica del rinnovo dei token scaduti
-- Proxy per le chiamate alle API di Google Drive
 """
 
 import os
-import base64
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
 import requests
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-# Posticipiamo gli import di googleapiclient all'uso, per evitare errori durante l'analisi locale
-# from googleapiclient.discovery import build
-# from googleapiclient.http import MediaInMemoryUpload
 from firebase_admin import firestore
-from cryptography.fernet import Fernet
-
-# Configurazione OAuth2 - da variabili d'ambiente
-CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
-CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
-ENCRYPTION_KEY = os.environ.get('TOKEN_ENCRYPTION_KEY', Fernet.generate_key().decode())
-
-# Inizializza cipher per encryption
-cipher_suite = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
-
 
 class GoogleDriveService:
     """Gestisce l'integrazione con Google Drive usando OAuth2."""
 
     @staticmethod
-    def exchange_tokens(user_uid: str, access_token: str, id_token: str) -> Dict[str, Any]:
+    def exchange_tokens(user_uid: str, auth_code: str, redirect_uri: str) -> Dict[str, Any]:
         """
-        Usa l'access token temporaneo per ottenere un refresh token permanente.
-
-        Strategia:
-        1. Usa l'access token per chiamare l'API Google userinfo (verifica validità)
-        2. Usa l'access token per ottenere informazioni sull'autorizzazione
-        3. Tenta di ottenere un refresh token usando il flusso di exchange
-
-        NOTA: Su web, Firebase Auth non fornisce direttamente il refresh token.
-        Questo metodo salva l'access token e lo userà fino alla scadenza,
-        poi richiederà all'utente di riautorizzarsi.
-
-        Args:
-            user_uid: ID Firebase dell'utente
-            access_token: Access token temporaneo da Firebase Auth
-            id_token: ID token per verificare l'identità
-
-        Returns:
-            dict: {'success': bool, 'message': str}
+        Scambia il codice di autorizzazione per un access token e un refresh token.
         """
+        client_id = os.environ.get('GOOGLE_CLIENT_ID')
+        client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+
+        # Log diagnostico sicuro (mascherato): mostra solo prefisso/suffisso del client_id
+        if client_id:
+            masked = f"{client_id[:8]}...{client_id[-12:]}"
+            print(f"[OAuth] Using client_id: {masked}")
+        else:
+            print("[OAuth] Missing client_id in environment")
+
+        if not client_id or not client_secret:
+            raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set")
+
         try:
-            # Verifica la validità dell'access token
-            userinfo_response = requests.get(
-                'https://www.googleapis.com/oauth2/v2/userinfo',
-                headers={'Authorization': f'Bearer {access_token}'},
-                timeout=10
-            )
+            print(f"Exchanging tokens for user {user_uid}")
+            token_url = 'https://oauth2.googleapis.com/token'
+            response = requests.post(token_url, data={
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'code': auth_code,
+                'grant_type': 'authorization_code',
+                'redirect_uri': redirect_uri
+            }, timeout=10)
 
-            if userinfo_response.status_code != 200:
-                raise Exception(f"Invalid access token: {userinfo_response.text}")
+            if response.status_code != 200:
+                error_details = response.text
+                print(f"Token exchange failed with status {response.status_code}: {error_details}")
+                raise Exception(f"Failed to exchange auth code: {error_details}")
 
-            # Calcola la scadenza del token (tipicamente 1 ora)
-            expires_at = datetime.utcnow() + timedelta(hours=1)
+            token_data = response.json()
+            access_token = token_data.get('access_token')
+            refresh_token = token_data.get('refresh_token')
+            expires_in = token_data.get('expires_in', 3600)
 
-            # Salva i token in Firestore
+            if not access_token:
+                raise Exception("No access token received from Google")
+
+            expires_at = datetime.now().timestamp() + expires_in
+
+            if not refresh_token:
+                # Questo può accadere se l'utente ha già concesso il permesso in passato
+                # e non ha revocato l'accesso. In questo caso, salviamo solo il nuovo access token.
+                print(f"Warning: No refresh token received for user {user_uid}. User may need to revoke and re-authorize.")
+
             db = firestore.client()
-            tokens_ref = db.collection('user_tokens').document(user_uid)
+            user_ref = db.collection('users').document(user_uid)
 
-            # Per ora salviamo solo l'access token
-            # In produzione, implementare un meccanismo di refresh o richiedere riautorizzazione
-            tokens_ref.set({
-                'accessToken': access_token,
-                'expiresAt': expires_at,
-                'hasRefreshToken': False,  # Indica che NON abbiamo un refresh token permanente
-                'scopes': ['https://www.googleapis.com/auth/drive.file'],
-                'createdAt': firestore.SERVER_TIMESTAMP,
-                'updatedAt': firestore.SERVER_TIMESTAMP,
-            })
+            token_payload = {
+                'driveAccessToken': access_token,
+                'driveTokenExpiresAt': expires_at
+            }
+            if refresh_token:
+                token_payload['driveRefreshToken'] = refresh_token
+
+            user_ref.set(token_payload, merge=True)
+            print(f"Tokens saved successfully for user {user_uid}")
 
             return {
                 'success': True,
-                'message': 'Tokens salvati con successo. Nota: riautorizzazione richiesta dopo 1 ora.'
+                'message': 'Tokens exchanged and saved successfully.',
+                'expiresIn': expires_in
             }
 
         except requests.RequestException as e:
-            raise Exception(f"Errore di rete durante lo scambio token: {str(e)}")
+            print(f"Network error during token exchange: {str(e)}")
+            raise Exception(f"Network error during token exchange: {str(e)}")
         except Exception as e:
-            raise Exception(f"Errore durante lo scambio token: {str(e)}")
+            print(f"Error during token exchange: {str(e)}")
+            raise Exception(f"Error during token exchange: {str(e)}")
 
     @staticmethod
     def get_valid_credentials(user_uid: str) -> Credentials:
         """
-        Recupera le credenziali OAuth2 per l'utente.
-        Se scadute, solleva un'eccezione che richiede riautorizzazione.
-
-        Args:
-            user_uid: ID Firebase dell'utente
-
-        Returns:
-            Credentials: Oggetto google.oauth2.credentials con token valido
-
-        Raises:
-            Exception: Se i token non esistono o sono scaduti
+        Recupera le credenziali OAuth2 per l'utente, rinnovandole se necessario.
         """
+        client_id = os.environ.get('GOOGLE_CLIENT_ID')
+        client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+
+        if not client_id or not client_secret:
+            raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set")
+
         db = firestore.client()
-        tokens_ref = db.collection('user_tokens').document(user_uid)
-        token_doc = tokens_ref.get()
+        user_ref = db.collection('users').document(user_uid)
+        user_doc = user_ref.get()
 
-        if not token_doc.exists:
-            raise Exception(
-                "Nessun token salvato. L'utente deve autorizzare l'accesso a Drive."
-            )
+        if not user_doc.exists:
+            raise Exception("User tokens not found. Please authorize access to Drive.")
 
-        token_data = token_doc.to_dict()
+        user_data = user_doc.to_dict()
+        access_token = user_data.get('driveAccessToken')
+        refresh_token = user_data.get('driveRefreshToken')
+        expires_at = user_data.get('driveTokenExpiresAt')
 
-        # Verifica se il token è scaduto
-        expires_at = token_data.get('expiresAt')
-        # Normalizza il timestamp Firestore a naive UTC se necessario
-        if isinstance(expires_at, datetime) and getattr(expires_at, 'tzinfo', None) is not None:
+        if not access_token or not refresh_token:
+            raise Exception("Missing tokens. Please re-authorize access to Drive.")
+
+        # Se il token è scaduto (con un margine di 5 minuti), rinnovalo.
+        if expires_at and datetime.now().timestamp() > (expires_at - 300):
+            print(f"Token for user {user_uid} is expired or expiring soon. Refreshing.")
             try:
-                # Converti a UTC naive
-                expires_at = expires_at.astimezone(tz=None).replace(tzinfo=None)
-            except Exception:
-                # Fallback rimuove solo tzinfo
-                expires_at = expires_at.replace(tzinfo=None)
+                token_url = 'https://oauth2.googleapis.com/token'
+                response = requests.post(token_url, data={
+                    'client_id': client_id,
+                    'client_secret': client_secret,
+                    'refresh_token': refresh_token,
+                    'grant_type': 'refresh_token'
+                }, timeout=10)
 
-        if expires_at and datetime.utcnow() > expires_at:
-            raise Exception(
-                "Token scaduto. L'utente deve riautorizzare l'accesso a Drive."
-            )
+                if response.status_code != 200:
+                    raise Exception(f"Failed to refresh token: {response.text}")
 
-        access_token = token_data.get('accessToken')
-        if not access_token:
-            raise Exception("Access token non trovato nel database.")
+                token_data = response.json()
+                access_token = token_data['access_token']
+                expires_in = token_data.get('expires_in', 3600)
+                new_expires_at = datetime.now().timestamp() + expires_in
 
-        # Crea le credenziali con il token disponibile
-        creds = Credentials(token=access_token)
+                user_ref.update({
+                    'driveAccessToken': access_token,
+                    'driveTokenExpiresAt': new_expires_at
+                })
+                print(f"Token for user {user_uid} refreshed successfully.")
 
-        return creds
+            except requests.RequestException as e:
+                raise Exception(f"Network error during token refresh: {str(e)}")
+            except Exception as e:
+                # Se il refresh fallisce (es. refresh token revocato), pulisci i token.
+                user_ref.update({
+                    'driveAccessToken': firestore.DELETE_FIELD,
+                    'driveRefreshToken': firestore.DELETE_FIELD,
+                    'driveTokenExpiresAt': firestore.DELETE_FIELD
+                })
+                raise Exception(f"Failed to refresh token, it might be revoked. Please re-authorize. Error: {str(e)}")
+
+        return Credentials(
+            token=access_token,
+            refresh_token=refresh_token,
+            client_id=client_id,
+            token_uri='https://oauth2.googleapis.com/token'
+        )
 
     @staticmethod
     def upload_file(user_uid: str, file_name: str, file_data: bytes, mime_type: str) -> Dict[str, str]:
         """
         Carica un file su Google Drive dell'utente.
-
-        Args:
-            user_uid: ID Firebase dell'utente
-            file_name: Nome del file da creare
-            file_data: Contenuto del file (bytes)
-            mime_type: MIME type del file
-
-        Returns:
-            dict: {'fileId': str, 'webViewLink': str}
-
-        Raises:
-            Exception: Se i token non sono validi o l'upload fallisce
         """
         try:
-            # Import posticipati per evitare errori in fase di analisi del deploy locale
             from googleapiclient.discovery import build
             from googleapiclient.http import MediaInMemoryUpload
 
             creds = GoogleDriveService.get_valid_credentials(user_uid)
             service = build('drive', 'v3', credentials=creds)
 
-            file_metadata = {
-                'name': file_name,
-                'description': f'File creato da FlowChart App il {datetime.utcnow().isoformat()}'
-            }
-
-            media = MediaInMemoryUpload(
-                file_data,
-                mimetype=mime_type,
-                resumable=True
-            )
+            file_metadata = {'name': file_name}
+            media = MediaInMemoryUpload(file_data, mimetype=mime_type, resumable=True)
 
             file = service.files().create(
                 body=file_metadata,
                 media_body=media,
-                fields='id, webViewLink, name'
+                fields='id, webViewLink'
             ).execute()
 
             return {
                 'fileId': file.get('id'),
-                'webViewLink': file.get('webViewLink'),
-                'fileName': file.get('name')
+                'webViewLink': file.get('webViewLink')
             }
-
         except Exception as e:
-            # Se l'errore è relativo ai token, propagalo chiaramente
-            if 'token' in str(e).lower() or 'scaduto' in str(e).lower():
-                raise Exception(
-                    "Sessione Google Drive scaduta. Riconnetti il tuo account nelle impostazioni."
-                )
-            raise Exception(f"Errore durante l'upload su Drive: {str(e)}")
+            raise Exception(f"Error during Drive upload: {str(e)}")
 
     @staticmethod
     def revoke_tokens(user_uid: str) -> Dict[str, Any]:
         """
-        Elimina i token salvati per l'utente.
-
-        Args:
-            user_uid: ID Firebase dell'utente
-
-        Returns:
-            dict: {'success': bool, 'message': str}
+        Revoca il refresh token e elimina i dati da Firestore.
         """
         try:
             db = firestore.client()
-            tokens_ref = db.collection('user_tokens').document(user_uid)
+            user_ref = db.collection('users').document(user_uid)
+            user_doc = user_ref.get()
 
-            # Elimina il documento
-            tokens_ref.delete()
+            if user_doc.exists:
+                refresh_token = user_doc.to_dict().get('driveRefreshToken')
+                if refresh_token:
+                    requests.post('https://oauth2.googleapis.com/revoke',
+                                  params={'token': refresh_token},
+                                  headers={'content-type': 'application/x-www-form-urlencoded'},
+                                  timeout=10)
+                user_ref.update({
+                    'driveAccessToken': firestore.DELETE_FIELD,
+                    'driveRefreshToken': firestore.DELETE_FIELD,
+                    'driveTokenExpiresAt': firestore.DELETE_FIELD
+                })
 
-            return {
-                'success': True,
-                'message': 'Token revocati con successo'
-            }
-
+            return {'success': True, 'message': 'Tokens revoked successfully.'}
         except Exception as e:
-            raise Exception(f"Errore durante la revoca dei token: {str(e)}")
+            raise Exception(f"Error during token revocation: {str(e)}")

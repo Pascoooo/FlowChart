@@ -1,6 +1,9 @@
+import 'package:file_repository/file_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
+import '../../../../blocs/file_bloc/file_system_bloc.dart';
+import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
@@ -38,6 +41,11 @@ class _DebugModeViewState extends State<DebugModeView>
   // ✅ NUOVO: Salva lo stato della griglia all'ingresso e lo ripristina all'uscita
   bool _gridStateOnEnter = false;
 
+  // ✅ NUOVO: snapshot del file attivo all'ingresso della debug mode
+  String? _entryFileId;
+  String? _entryFileName;
+  String? _entryFileContent;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +56,23 @@ class _DebugModeViewState extends State<DebugModeView>
 
     // Salva lo stato iniziale della griglia
     _gridStateOnEnter = widget.showGrid;
+
+    // 🔒 Cattura il file attivo corrente per poter ripristinare il canvas all'uscita dal debug
+    final fsState = context.read<FileSystemBloc>().state;
+    if (fsState is FileSystemLoaded) {
+      final activeId = fsState.activeFileId;
+      if (activeId != null) {
+        final file = fsState.files.firstWhere(
+          (f) => f.fileId == activeId,
+          orElse: () => MyFile.empty,
+        );
+        if (file != MyFile.empty) {
+          _entryFileId = file.fileId;
+          _entryFileName = file.name;
+          _entryFileContent = file.content;
+        }
+      }
+    }
   }
 
   @override
@@ -121,6 +146,37 @@ class _DebugModeViewState extends State<DebugModeView>
           // Ripristina lo stato della griglia quando si esce dalla modalità debug (sia con stop che con completamento)
           if (widget.showGrid != _gridStateOnEnter) {
             widget.onToggleGrid();
+          }
+
+          // ✅ NUOVO: Ripristina il flowchart del file originale (es. main) all'uscita
+          // Preferisci lo snapshot catturato all'ingresso; in fallback usa lo stato attuale del FileSystem
+          final savedId = _entryFileId;
+          final savedName = _entryFileName;
+          final savedContent = _entryFileContent;
+          if (savedId != null && savedName != null && savedContent != null) {
+            flowchartBloc.add(LoadFlowchart(
+              jsonContent: savedContent,
+              fileName: savedName,
+              fileId: savedId,
+            ));
+          } else {
+            final fs = context.read<FileSystemBloc>().state;
+            if (fs is FileSystemLoaded) {
+              final activeId = fs.activeFileId;
+              if (activeId != null) {
+                final file = fs.files.firstWhere(
+                  (f) => f.fileId == activeId,
+                  orElse: () => MyFile.empty,
+                );
+                if (file != MyFile.empty) {
+                  flowchartBloc.add(LoadFlowchart(
+                    jsonContent: file.content,
+                    fileName: file.name,
+                    fileId: file.fileId,
+                  ));
+                }
+              }
+            }
           }
         }
       },

@@ -248,6 +248,26 @@ class StartDoWhileBodySelection extends FlowchartEvent {
   List<Object?> get props => [doWhileNodeId];
 }
 
+/// 🆕 NUOVO: Avvia la modalità connettore per chiudere un ciclo con più nodi foglia
+class StartLoopClosureMode extends FlowchartEvent {
+  final String loopNodeId; // Il nodo ciclo (while o do-while)
+
+  const StartLoopClosureMode(this.loopNodeId);
+
+  @override
+  List<Object?> get props => [loopNodeId];
+}
+
+/// 🆕 NUOVO: Applica la chiusura del ciclo collegando i nodi selezionati al ciclo
+class ApplyLoopClosure extends FlowchartEvent {
+  final String loopNodeId;
+
+  const ApplyLoopClosure(this.loopNodeId);
+
+  @override
+  List<Object?> get props => [loopNodeId];
+}
+
 /// 🆕 NUOVO: Carica tutti i flowchart del progetto per risolvere le chiamate
 class LoadProjectFlowcharts extends FlowchartEvent {
   final Map<String, Flowchart> flowcharts;

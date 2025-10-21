@@ -1,5 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 Future<Map<String, dynamic>?> showDecisionNodeDialog(
@@ -556,7 +557,7 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
               }),
               content: FaIcon(
                 row.rightMode == _RightHandMode.variable
-                    ? FontAwesomeIcons.at
+                    ? Icons.data_object
                     : FontAwesomeIcons.quoteLeft,
                 size: 14,
               ),

@@ -79,3 +79,27 @@ def delete_firebase_user(uid: str) -> None:
             message="Errore interno del server durante l'eliminazione dei dati.",
             status_code=500
         )
+
+def delete_user_public_projects(uid: str) -> None:
+    """
+    Elimina tutti i progetti pubblici (collection 'publicProjects') di proprietà dell'utente.
+    Rimuove anche la sottocollezione 'files' per ogni progetto.
+    """
+    try:
+      firestore_client = firestore.client()
+      public_coll = firestore_client.collection('publicProjects')
+      query = public_coll.where('ownerId', '==', uid).stream()
+
+      for doc in query:
+          # Elimina ricorsivamente eventuali sottocollezioni (es. 'files')
+          for sub_coll in doc.reference.collections():
+              _delete_collection_recursively(sub_coll, 50)
+          # Elimina il documento del progetto pubblico
+          doc.reference.delete()
+      print(f"Progetti pubblici per l'utente {uid} eliminati.")
+    except Exception as e:
+      print(f"Errore durante l'eliminazione dei progetti pubblici per {uid}: {e}")
+      raise UserActionException(
+          message="Impossibile eliminare i progetti pubblici dell'utente.",
+          status_code=500
+      )

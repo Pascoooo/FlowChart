@@ -118,6 +118,18 @@ class FlowchartCanvas extends StatelessWidget {
                           child: const _ResetSelectionBanner(),
                         ),
 
+                      // 🆕 NUOVO: Overlay guida per modalità chiusura ciclo
+                      if (state.isConnectorModeActive && state.connectorPurpose == ConnectorPurpose.loopClosure)
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          right: 12,
+                          child: _LoopClosureBanner(
+                            loopNodeId: state.connectorSourceNodeId!,
+                            canvasConstraints: constraints,
+                          ),
+                        ),
+
                       // Overlay guida per modalità Connettore normale
                       if (state.isConnectorModeActive && state.connectorPurpose == ConnectorPurpose.normal)
                         Positioned(
@@ -432,6 +444,212 @@ class _ConnectorModeBanner extends StatelessWidget {
       sourceNodeIds: {if (state.connectorSourceNodeId != null) state.connectorSourceNodeId!, ...state.selectedConnectorNodeIds},
     );
 
+    // Dispatch creazione connettore + nuovo nodo
+    context.read<FlowchartBloc>().add(ApplyConnectorAndCreateNode(
+      kind: selectedKind!,
+      canvasConstraints: canvasConstraints,
+      initialData: initialData,
+    ));
+  }
+}
+
+class _LoopClosureBanner extends StatelessWidget {
+  final String loopNodeId;
+  final BoxConstraints canvasConstraints;
+
+  const _LoopClosureBanner({
+    required this.loopNodeId,
+    required this.canvasConstraints,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.resources.cardStrokeColorDefault),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: BlocBuilder<FlowchartBloc, FlowchartState>(
+          builder: (context, state) {
+            final loaded = state is FlowchartLoaded ? state : null;
+            final selectedCount = loaded?.selectedConnectorNodeIds.length ?? 0;
+
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(FluentIcons.info_solid, color: theme.accentColor, size: 16),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    selectedCount == 0
+                        ? 'Seleziona nodi foglia da connettere, o crea nuovi blocchi.'
+                        : 'Selezionati: $selectedCount nodi. Crea blocchi, chiudi il ciclo o continua.',
+                    style: theme.typography.body,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Button(
+                  onPressed: () => context.read<FlowchartBloc>().add(const CancelConnectorMode()),
+                  child: const Text('Annulla'),
+                ),
+                const SizedBox(width: 8),
+                // Pulsante per creare nuovi blocchi (identico al connettore normale)
+                FilledButton(
+                  onPressed: () async {
+                    await _showCreateNodeDialogForLoop(context, loaded!);
+                  },
+                  child: const Text('Crea Blocco…'),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCreateNodeDialogForLoop(BuildContext context, FlowchartLoaded state) async {
+    final isFunctionFlowchart = state.flowchart.isFunction;
+
+    final kinds = <Map<String, dynamic>>[
+      {'label': 'Input', 'kind': FlowNodeKind.input, 'icon': FontAwesomeIcons.download},
+      {'label': 'Assegnazione', 'kind': FlowNodeKind.assignment, 'icon': FontAwesomeIcons.calculator},
+      {'label': 'Output', 'kind': FlowNodeKind.output, 'icon': FontAwesomeIcons.upload},
+      {'label': 'Condizione', 'kind': FlowNodeKind.decision, 'icon': FontAwesomeIcons.codeBranch},
+      {'label': 'Sottoprogramma', 'kind': FlowNodeKind.process, 'icon': FontAwesomeIcons.gears},
+      {'label': 'Ciclo Pre-Condizionale', 'kind': FlowNodeKind.whileLoop, 'icon': FontAwesomeIcons.arrowsRotate},
+      {'label': 'Ciclo Post-Condizionale', 'kind': FlowNodeKind.doWhileLoop, 'icon': FontAwesomeIcons.repeat},
+      if (isFunctionFlowchart)
+        {'label': 'Return', 'kind': FlowNodeKind.returnNode, 'icon': FontAwesomeIcons.reply}
+    ];
+
+    FlowNodeKind? selectedKind;
+    bool closeLoop = false;
+
+    // ✅ MODIFICA: Il dialogo ora restituisce un bool? (true=azione, false/null=annulla)
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return ContentDialog(
+          title: const Text('Scegli il tipo di blocco da creare'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final item in kinds)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Button(
+                      onPressed: () {
+                        selectedKind = item['kind'] as FlowNodeKind;
+                        // ✅ MODIFICA: Restituisce true per confermare
+                        Navigator.of(ctx).pop(true);
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(item['icon'] as IconData, size: 16),
+                          const SizedBox(width: 8),
+                          Text(item['label'] as String),
+                        ],
+                      ),
+                    ),
+                  ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Divider(),
+                ),
+                // 🎯 Opzione "Fine Ciclo"
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Button(
+                    onPressed: state.selectedConnectorNodeIds.length >= 2
+                        ? () {
+                      closeLoop = true;
+                      // ✅ MODIFICA: Restituisce true per confermare
+                      Navigator.of(ctx).pop(true);
+                    }
+                        : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(FontAwesomeIcons.arrowRotateLeft, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          state.selectedConnectorNodeIds.length >= 2
+                              ? 'Fine Ciclo'
+                              : 'Fine Ciclo (seleziona almeno 2 nodi)',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            Button(
+              onPressed: () {
+                // ✅ MODIFICA: Restituisce false per annullare
+                Navigator.of(ctx).pop(false);
+              },
+              child: const Text('Annulla'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // ✅ MODIFICA: Controlla il risultato del dialogo
+    // Se l'utente ha premuto "Annulla" (o chiuso il dialogo), esci E annulla la modalità connettore
+    if (result == null || result == false) {
+      if (!context.mounted) return;
+      // Questa è l'azione che mancava:
+      context.read<FlowchartBloc>().add(const CancelConnectorMode());
+      return;
+    }
+
+    // --- Da qui in poi, il codice viene eseguito solo se result == true ---
+
+    // Se l'utente ha scelto "Fine Ciclo"
+    if (closeLoop) {
+      if (!context.mounted) return;
+      context.read<FlowchartBloc>().add(ApplyLoopClosure(loopNodeId));
+      return;
+    }
+
+    // Se l'utente ha scelto un tipo di nodo (selectedKind non sarà null)
+    if (selectedKind == null) {
+      // Questo non dovrebbe accadere se result è true e closeLoop è false,
+      // ma è una sicurezza in più.
+      if (!context.mounted) return;
+      context.read<FlowchartBloc>().add(const CancelConnectorMode());
+      return;
+    }
+
+    // Raccogli i dati necessari per il nodo scelto
+    final initialData = await NodeCreationService.prepareNodeCreation(
+      context: context,
+      kind: selectedKind!,
+      flowState: state,
+      sourceNodeIds: {if (state.connectorSourceNodeId != null) state.connectorSourceNodeId!, ...state.selectedConnectorNodeIds},
+    );
+
+    if (!context.mounted) return;
     // Dispatch creazione connettore + nuovo nodo
     context.read<FlowchartBloc>().add(ApplyConnectorAndCreateNode(
       kind: selectedKind!,

@@ -8,7 +8,6 @@ import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
 import 'package:flowchart_thesis/blocs/debug_bloc/debug_bloc_exports.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/sidebar.dart';
-import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/topbar.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
@@ -48,7 +47,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   final GlobalKey _workareaKey = GlobalKey();
   late AnimationController _slideInController;
   late Animation<Offset> _sidebarSlideAnimation;
-  late Animation<Offset> _topbarSlideAnimation;
   late Animation<Offset> _workareaSlideAnimation;
   late Animation<double> _workareaScaleAnimation;
   late Animation<double> _fadeAnimation;
@@ -73,10 +71,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     );
     _sidebarSlideAnimation =
         Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero).animate(
-            CurvedAnimation(
-                parent: _slideInController, curve: Curves.easeOutCubic));
-    _topbarSlideAnimation =
-        Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(
             CurvedAnimation(
                 parent: _slideInController, curve: Curves.easeOutCubic));
     _workareaSlideAnimation =
@@ -639,7 +633,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                       builder: (innerContext, child) {
                         return _WorkspaceLayout(
                           sidebarSlideAnimation: _sidebarSlideAnimation,
-                          topbarSlideAnimation: _topbarSlideAnimation,
                           workareaSlideAnimation: _workareaSlideAnimation,
                           workareaScaleAnimation: _workareaScaleAnimation,
                           fadeAnimation: _fadeAnimation,
@@ -669,7 +662,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
 class _WorkspaceLayout extends StatelessWidget {
   final Animation<Offset> sidebarSlideAnimation;
-  final Animation<Offset> topbarSlideAnimation;
   final Animation<Offset> workareaSlideAnimation;
   final Animation<double> workareaScaleAnimation;
   final Animation<double> fadeAnimation;
@@ -685,7 +677,6 @@ class _WorkspaceLayout extends StatelessWidget {
 
   const _WorkspaceLayout({
     required this.sidebarSlideAnimation,
-    required this.topbarSlideAnimation,
     required this.workareaSlideAnimation,
     required this.workareaScaleAnimation,
     required this.fadeAnimation,
@@ -714,42 +705,25 @@ class _WorkspaceLayout extends StatelessWidget {
         ),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(right: 16.0, bottom: 16.0),
-            child: Column(
-              children: [
-                SlideTransition(
-                  position: topbarSlideAnimation,
-                  child: FadeTransition(
-                    opacity: fadeAnimation,
-                    child: TopBar(
-                      selectedProject: selectedProject,
-                      onEdit: onEdit,
-                      onExport: onExport,
-                      onStartDebug: onStartDebug,
-                      isReadOnly: isReadOnly,
-                      onLeave: onLeave,
-                    ),
+            padding: const EdgeInsets.only(right: 16.0, bottom: 16.0, top: 16.0),
+            child: SlideTransition(
+              position: workareaSlideAnimation,
+              child: ScaleTransition(
+                scale: workareaScaleAnimation,
+                child: FadeTransition(
+                  opacity: fadeAnimation,
+                  child: WorkArea(
+                    repaintKey: workareaKey,
+                    showGrid: showGrid,
+                    onToggleGrid: toggleGrid,
+                    isReadOnly: isReadOnly,
+                    onEdit: onEdit,
+                    onExport: onExport,
+                    onStartDebug: onStartDebug,
+                    onLeave: onLeave,
                   ),
                 ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: SlideTransition(
-                    position: workareaSlideAnimation,
-                    child: ScaleTransition(
-                      scale: workareaScaleAnimation,
-                      child: FadeTransition(
-                        opacity: fadeAnimation,
-                        child: WorkArea(
-                          repaintKey: workareaKey,
-                          showGrid: showGrid,
-                          onToggleGrid: toggleGrid,
-                          isReadOnly: isReadOnly,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -757,4 +731,3 @@ class _WorkspaceLayout extends StatelessWidget {
     );
   }
 }
-

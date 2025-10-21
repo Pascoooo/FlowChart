@@ -48,12 +48,12 @@ class RecoveryDialogs {
                           color: (theme.brightness == Brightness.light
                               ? const Color(0xFFD97706) // Warning color light
                               : const Color(0xFFF59E0B)  // Warning color dark
-                          ).withOpacity(0.1),
+                          ).withValues(alpha: 0.1),
                           border: Border.all(
                             color: (theme.brightness == Brightness.light
                                 ? const Color(0xFFD97706)
                                 : const Color(0xFFF59E0B)
-                            ).withOpacity(0.3),
+                            ).withValues(alpha: 0.3),
                             width: 2,
                           ),
                         ),
@@ -100,7 +100,7 @@ class RecoveryDialogs {
                       textAlign: TextAlign.center,
                       text: TextSpan(
                         style: theme.typography.body?.copyWith(
-                          color: theme.typography.body?.color?.withOpacity(0.8),
+                          color: theme.typography.body?.color?.withValues(alpha: 0.8),
                           height: 1.6,
                           fontSize: 15,
                         ),
@@ -283,7 +283,7 @@ class _RecoveryComparisonLayout extends StatelessWidget {
       children: [
         // 🎯 Header Section - Professional Design
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           decoration: BoxDecoration(
             color: theme.resources.layerFillColorDefault,
             border: Border(
@@ -293,82 +293,41 @@ class _RecoveryComparisonLayout extends StatelessWidget {
               ),
             ),
           ),
-          child: Row(
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              // Compare Icon Container
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.2),
+              // Centered Title and File Name
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Confronta Versioni',
+                    style: theme.typography.caption,
                   ),
-                ),
-                child: FaIcon(
-                  FontAwesomeIcons.codeCompare,
-                  size: 20,
-                  color: theme.accentColor.defaultBrushFor(theme.brightness),
-                ),
-              ),
-
-              const SizedBox(width: 20),
-
-              // Title and Subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Confronta versioni: $fileName',
-                      style: theme.typography.subtitle?.copyWith(
-                        color: theme.typography.body?.color,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
+                  const SizedBox(height: 4),
+                  Text(
+                    fileName,
+                    style: theme.typography.title?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 20,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Scegli quale versione del file desideri conservare per procedere.',
-                      style: theme.typography.body?.copyWith(
-                        color: theme.typography.body?.color?.withOpacity(0.7),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 20),
-
-              // Progress Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.3),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FaIcon(
-                      FontAwesomeIcons.listCheck,
-                      size: 14,
-                      color: theme.accentColor.defaultBrushFor(theme.brightness),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      progressText,
-                      style: theme.typography.caption?.copyWith(
-                        color: theme.accentColor.defaultBrushFor(theme.brightness),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                ],
+              ),
+              // Progress indicator on the right
+              Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: theme.resources.subtleFillColorSecondary,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    'File $progressText',
+                    style: theme.typography.caption,
+                  ),
                 ),
               ),
             ],
@@ -472,7 +431,7 @@ class _RecoveryComparisonLayout extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: iconColor.withOpacity(0.1),
+                          color: iconColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: FaIcon(
@@ -497,7 +456,7 @@ class _RecoveryComparisonLayout extends StatelessWidget {
                             Text(
                               subtitle,
                               style: theme.typography.caption?.copyWith(
-                                color: theme.typography.body?.color?.withOpacity(0.6),
+                                color: theme.typography.body?.color?.withValues(alpha: 0.6),
                                 fontSize: 12,
                               ),
                             ),

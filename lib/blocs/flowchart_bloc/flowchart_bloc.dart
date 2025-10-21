@@ -74,6 +74,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     on<SelectDoWhileBodyStart>(_onSelectDoWhileBodyStart);
     on<LoadProjectFlowcharts>(_onLoadProjectFlowcharts);
     on<SetDebugMode>(_onSetDebugMode); // 🟠 FIX #7: Nuovo handler
+    on<StartLoopClosureMode>(_onStartLoopClosureMode); // 🆕 NUOVO
+    on<ApplyLoopClosure>(_onApplyLoopClosure); // 🆕 NUOVO
   }
 
   bool get canUndo => _history.canUndo;
@@ -938,10 +940,13 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     final newEdges = <FlowchartEdge>[];
 
     // Edge dal nodo sorgente al nuovo nodo
-    newEdges.add(FlowchartEdge(
-      from: s.connectorSourceNodeId!,
-      to: newNode.id,
-    ));
+    // REQ: In modalità connettore ciclo NON collegare dal nodo ciclo/condizione
+    if (s.connectorPurpose != ConnectorPurpose.loopClosure) {
+      newEdges.add(FlowchartEdge(
+        from: s.connectorSourceNodeId!,
+        to: newNode.id,
+      ));
+    }
 
     // Edge dai nodi foglia selezionati al nuovo nodo
     for (final selectedNodeId in s.selectedConnectorNodeIds) {
@@ -949,6 +954,16 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         from: selectedNodeId,
         to: newNode.id,
       ));
+    }
+
+    // Se in modalità loopClosure ma non è stato selezionato alcun foglia, blocca
+    if (s.connectorPurpose == ConnectorPurpose.loopClosure && newEdges.isEmpty) {
+      emit(const FlowchartActionFailure(
+        title: 'Selezione mancante',
+        message: 'Seleziona almeno un nodo foglia del ciclo da collegare al nuovo blocco.',
+      ));
+      emit(s);
+      return;
     }
 
     // Valida tutte le connessioni
@@ -1281,5 +1296,145 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     final s = state as FlowchartLoaded;
 
     emit(s.copyWith(isDebugMode: event.isDebugMode));
+  }
+
+  void _onStartLoopClosureMode(StartLoopClosureMode event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final s = state as FlowchartLoaded;
+
+    // Se è già attiva un'altra modalità speciale, blocca
+    if (s.isConnectorModeActive && s.connectorPurpose != ConnectorPurpose.normal) {
+      emit(const FlowchartActionFailure(
+        title: 'Operazione non disponibile',
+        message: 'Completa o annulla la modalità attiva prima di usare la chiusura del ciclo.',
+      ));
+      emit(s);
+      return;
+    }
+
+    final loop = s.getNodeById(event.loopNodeId);
+    if (loop == null || (loop.kind != FlowNodeKind.whileLoop && loop.kind != FlowNodeKind.doWhileLoop)) {
+      emit(const FlowchartActionFailure(
+        title: 'Nodo ciclo non valido',
+        message: 'Seleziona un ciclo valido per chiudere.',
+      ));
+      emit(s);
+      return;
+    }
+
+    emit(s.copyWith(
+      isConnectorModeActive: true,
+      connectorSourceNodeId: loop.id,
+      selectedConnectorNodeIds: {},
+      connectorPurpose: ConnectorPurpose.loopClosure,
+      selectedNodeId: loop.id,
+    ));
+  }
+
+  void _onApplyLoopClosure(ApplyLoopClosure event, Emitter<FlowchartState> emit) {
+    if (state is! FlowchartLoaded) return;
+    final s = state as FlowchartLoaded;
+
+    if (s.connectorSourceNodeId == null || s.selectedConnectorNodeIds.isEmpty) {
+      emit(const FlowchartActionFailure(
+        title: 'Nessun nodo selezionato',
+        message: 'Seleziona almeno 2 nodi foglia da collegare al ciclo.',
+      ));
+      emit(s);
+      return;
+    }
+
+    if (s.selectedConnectorNodeIds.length < 2) {
+      emit(const FlowchartActionFailure(
+        title: 'Selezione insufficiente',
+        message: 'Seleziona almeno 2 nodi foglia per usare il connettore ciclo.',
+      ));
+      emit(s);
+      return;
+    }
+
+    final loopNode = s.getNodeById(event.loopNodeId);
+    if (loopNode == null || (loopNode.kind != FlowNodeKind.whileLoop && loopNode.kind != FlowNodeKind.doWhileLoop)) {
+      emit(const FlowchartActionFailure(
+        title: 'Nodo ciclo non valido',
+        message: 'Il nodo di destinazione non è un ciclo valido.',
+      ));
+      emit(s);
+      return;
+    }
+
+    // 🆕 NUOVO: Crea gli archi di chiusura per tutti i nodi selezionati direttamente al ciclo
+    // La convergenza sarà gestita solo visivamente nel painter
+    final newEdges = <FlowchartEdge>[];
+    final validator = rules.FlowchartValidator();
+
+    for (final selectedNodeId in s.selectedConnectorNodeIds) {
+      // Verifica che il nodo sia effettivamente nel corpo del ciclo
+      final parentLoopId = s.getParentLoopNodeId(selectedNodeId);
+      if (parentLoopId != event.loopNodeId) {
+        emit(FlowchartActionFailure(
+          title: 'Nodo fuori ciclo',
+          message: 'Il nodo $selectedNodeId non appartiene a questo ciclo.',
+        ));
+        emit(s);
+        return;
+      }
+
+      // Verifica che non esista già l'arco
+      final alreadyExists = s.flowchart.edges.any(
+        (e) => e.from == selectedNodeId && e.to == event.loopNodeId && e.port == 'loop',
+      );
+      if (alreadyExists) continue;
+
+      // Arco di chiusura diretto dal nodo al ciclo
+      final loopClosureEdge = FlowchartEdge(
+        from: selectedNodeId,
+        to: event.loopNodeId,
+        port: 'loop',
+      );
+
+      // Valida l'arco
+      final validation = validator.validate(s, loopClosureEdge);
+      if (!validation.isValid) {
+        emit(FlowchartActionFailure(
+          title: 'Connessione non permessa',
+          message: validation.errorMessage ?? '',
+        ));
+        emit(s);
+        return;
+      }
+
+      newEdges.add(loopClosureEdge);
+    }
+
+    if (newEdges.isEmpty) {
+      // Nessun arco da aggiungere (tutti già esistenti)
+      emit(s.copyWith(
+        isConnectorModeActive: false,
+        clearConnectorSource: true,
+        selectedConnectorNodeIds: {},
+        connectorPurpose: null,
+      ));
+      return;
+    }
+
+    // Aggiorna il flowchart con gli archi di chiusura
+    final updatedFlowchart = s.flowchart.copyWith(
+      edges: [...s.flowchart.edges, ...newEdges],
+    );
+
+    final command = UpdateFlowchartCommand(
+      oldFlowchart: s.flowchart,
+      newFlowchart: updatedFlowchart,
+      description: 'Applica connettore ciclo (${s.selectedConnectorNodeIds.length} nodi → ciclo)',
+    );
+    _history.executeCommand(command);
+
+    emit(command.execute(s).copyWith(
+      isConnectorModeActive: false,
+      clearConnectorSource: true,
+      selectedConnectorNodeIds: {},
+      connectorPurpose: null,
+    ));
   }
 }
