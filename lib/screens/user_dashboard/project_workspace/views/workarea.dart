@@ -506,139 +506,170 @@ class _WorkAreaState extends State<WorkArea>
               right: 0,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: BlocBuilder<FlowchartBloc, FlowchartState>(
-                  builder: (context, flowchartState) {
-                    final bool disableUI = flowchartState is FlowchartLoaded && flowchartState.isConnectorModeActive;
+                child: BlocBuilder<FileSystemBloc, FileSystemState>(
+                  builder: (context, fileSystemState) {
+                    return BlocBuilder<FlowchartBloc, FlowchartState>(
+                      builder: (context, flowchartState) {
+                        final bool disableUI = flowchartState is FlowchartLoaded &&
+                            flowchartState.isConnectorModeActive;
 
-                    // Logica per abilitare/disabilitare i bottoni
-                    bool isPlayEnabled = false;
-                    bool isResetEnabled = false;
-                    bool isDeleteEnabled = false;
-                    bool canUndo = false;
-                    bool canRedo = false;
+                        // Logica per abilitare/disabilitare i bottoni
+                        bool isPlayEnabled = false;
+                        bool isResetEnabled = false;
+                        bool isDeleteEnabled = false;
+                        bool canUndo = false;
+                        bool canRedo = false;
 
-                    if (flowchartState is FlowchartLoaded) {
-                      final hasEndNode = flowchartState.flowchart.nodes.any((n) => n.kind == FlowNodeKind.end);
-                      isPlayEnabled = flowchartState.flowchart.isMain && hasEndNode && !disableUI;
+                        if (flowchartState is FlowchartLoaded &&
+                            fileSystemState is FileSystemLoaded) {
+                          final hasEndNode = flowchartState.flowchart.nodes
+                              .any((n) => n.kind == FlowNodeKind.end);
+                          isPlayEnabled = flowchartState.flowchart.isMain &&
+                              hasEndNode &&
+                              !disableUI &&
+                              fileSystemState.isProjectValid;
 
-                      final nodes = flowchartState.flowchart.nodes;
-                      final bool hasOnlyStartOrHeader = nodes.length == 1 &&
-                          (nodes.first.kind == FlowNodeKind.start || nodes.first.kind == FlowNodeKind.functionHeader);
-                      isResetEnabled = !hasOnlyStartOrHeader && !disableUI;
+                          final nodes = flowchartState.flowchart.nodes;
+                          final bool hasOnlyStartOrHeader = nodes.length == 1 &&
+                              (nodes.first.kind == FlowNodeKind.start ||
+                                  nodes.first.kind ==
+                                      FlowNodeKind.functionHeader);
+                          isResetEnabled = !hasOnlyStartOrHeader && !disableUI;
 
-                      final selectedId = flowchartState.selectedNodeId;
-                      FlowNode? selectedNode = selectedId != null ? flowchartState.getNodeById(selectedId) : null;
+                          final selectedId = flowchartState.selectedNodeId;
+                          FlowNode? selectedNode = selectedId != null
+                              ? flowchartState.getNodeById(selectedId)
+                              : null;
 
-                      if (selectedNode != null &&
-                          selectedNode.kind != FlowNodeKind.start &&
-                          selectedNode.kind != FlowNodeKind.functionHeader) {
-                        if (selectedNode.kind == FlowNodeKind.doWhileLoop) {
-                          final outs = flowchartState.getOutgoingEdges(selectedNode.id);
-                          final hasFalse = outs.any((e) => e.port == 'false');
-                          isDeleteEnabled = !hasFalse;
-                        } else {
-                          isDeleteEnabled = flowchartState.getOutgoingEdges(selectedNode.id).isEmpty;
+                          if (selectedNode != null &&
+                              selectedNode.kind != FlowNodeKind.start &&
+                              selectedNode.kind !=
+                                  FlowNodeKind.functionHeader) {
+                            if (selectedNode.kind == FlowNodeKind.doWhileLoop) {
+                              final outs = flowchartState
+                                  .getOutgoingEdges(selectedNode.id);
+                              final hasFalse =
+                                  outs.any((e) => e.port == 'false');
+                              isDeleteEnabled = !hasFalse;
+                            } else {
+                              isDeleteEnabled = flowchartState
+                                  .getOutgoingEdges(selectedNode.id)
+                                  .isEmpty;
+                            }
+                          }
+                          isDeleteEnabled = isDeleteEnabled && !disableUI;
+
+                          canUndo =
+                              context.read<FlowchartBloc>().canUndo && !disableUI;
+                          canRedo =
+                              context.read<FlowchartBloc>().canRedo && !disableUI;
                         }
-                      }
-                      isDeleteEnabled = isDeleteEnabled && !disableUI;
 
-                      canUndo = context.read<FlowchartBloc>().canUndo && !disableUI;
-                      canRedo = context.read<FlowchartBloc>().canRedo && !disableUI;
-                    }
-
-                    return Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Bottoni centrali (undo, redo, play) - ORA PERFETTAMENTE CENTRATI
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
+                        return Stack(
+                          alignment: Alignment.center,
                           children: [
-                            _TopBarButton(
-                              icon: Icons.undo_rounded,
-                              tooltip: 'Annulla',
-                              enabled: canUndo,
-                              onTap: canUndo
-                                  ? () => context.read<FlowchartBloc>().add(const Undo())
-                                  : null,
-                              iconSize: 22,
-                            ),
-                            const SizedBox(width: 12),
-                            _TopBarButton(
-                              icon: FontAwesomeIcons.play,
-                              tooltip: 'Avvia debug',
-                              enabled: isPlayEnabled,
-                              onTap: isPlayEnabled ? widget.onStartDebug : null,
-                              isAccent: true,
-                            ),
-                            const SizedBox(width: 12),
-                            _TopBarButton(
-                              icon: Icons.redo_rounded,
-                              tooltip: 'Ripeti',
-                              enabled: canRedo,
-                              onTap: canRedo
-                                  ? () => context.read<FlowchartBloc>().add(const Redo())
-                                  : null,
-                              iconSize: 22,
-                            ),
-                          ],
-                        ),
-
-                        // Bottoni laterali (sinistra e destra)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            // Bottoni di gestione flowchart (sinistra)
+                            // Bottoni centrali (undo, redo, play) - ORA PERFETTAMENTE CENTRATI
                             Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 _TopBarButton(
-                                  icon: FontAwesomeIcons.trash,
-                                  tooltip: 'Elimina nodo selezionato',
-                                  enabled: isDeleteEnabled,
-                                  onTap: isDeleteEnabled
-                                      ? () => _handleDeleteSelected(context, flowchartState)
+                                  icon: Icons.undo_rounded,
+                                  tooltip: 'Annulla',
+                                  enabled: canUndo,
+                                  onTap: canUndo
+                                      ? () => context
+                                          .read<FlowchartBloc>()
+                                          .add(const Undo())
                                       : null,
+                                  iconSize: 22,
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 12),
                                 _TopBarButton(
-                                  icon: FontAwesomeIcons.arrowRotateLeft,
-                                  tooltip: 'Resetta flowchart',
-                                  enabled: isResetEnabled,
-                                  onTap: isResetEnabled ? () => _handleResetFlowchart(context) : null,
+                                  icon: FontAwesomeIcons.play,
+                                  tooltip: 'Avvia debug',
+                                  enabled: isPlayEnabled,
+                                  onTap:
+                                      isPlayEnabled ? widget.onStartDebug : null,
+                                  isAccent: true,
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 12),
                                 _TopBarButton(
-                                  icon: FontAwesomeIcons.scissors,
-                                  tooltip: 'Resetta da un blocco',
-                                  enabled: isResetEnabled,
-                                  onTap: isResetEnabled ? () => _handleResetFromBlock(context) : null,
+                                  icon: Icons.redo_rounded,
+                                  tooltip: 'Ripeti',
+                                  enabled: canRedo,
+                                  onTap: canRedo
+                                      ? () => context
+                                          .read<FlowchartBloc>()
+                                          .add(const Redo())
+                                      : null,
+                                  iconSize: 22,
                                 ),
                               ],
                             ),
 
-                            // Bottoni a destra (export, edit)
+                            // Bottoni laterali (sinistra e destra)
                             Row(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _TopBarButton(
-                                  icon: FontAwesomeIcons.pencil,
-                                  tooltip: 'Modifica disegno',
-                                  enabled: !disableUI,
-                                  onTap: !disableUI ? widget.onEdit : null,
+                                // Bottoni di gestione flowchart (sinistra)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _TopBarButton(
+                                      icon: FontAwesomeIcons.trash,
+                                      tooltip: 'Elimina nodo selezionato',
+                                      enabled: isDeleteEnabled,
+                                      onTap: isDeleteEnabled
+                                          ? () => _handleDeleteSelected(
+                                              context, flowchartState)
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _TopBarButton(
+                                      icon: FontAwesomeIcons.arrowRotateLeft,
+                                      tooltip: 'Resetta flowchart',
+                                      enabled: isResetEnabled,
+                                      onTap: isResetEnabled
+                                          ? () => _handleResetFlowchart(context)
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _TopBarButton(
+                                      icon: FontAwesomeIcons.scissors,
+                                      tooltip: 'Resetta da un blocco',
+                                      enabled: isResetEnabled,
+                                      onTap: isResetEnabled
+                                          ? () => _handleResetFromBlock(context)
+                                          : null,
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                _TopBarButton(
-                                  icon: FontAwesomeIcons.download,
-                                  tooltip: 'Esporta immagine',
-                                  enabled: !disableUI,
-                                  onTap: !disableUI ? widget.onExport : null,
+
+                                // Bottoni a destra (export, edit)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _TopBarButton(
+                                      icon: FontAwesomeIcons.pencil,
+                                      tooltip: 'Modifica disegno',
+                                      enabled: !disableUI,
+                                      onTap: !disableUI ? widget.onEdit : null,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _TopBarButton(
+                                      icon: FontAwesomeIcons.download,
+                                      tooltip: 'Esporta immagine',
+                                      enabled: !disableUI,
+                                      onTap: !disableUI ? widget.onExport : null,
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     );
                   },
                 ),

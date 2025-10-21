@@ -20,6 +20,7 @@ import '../widgets/export_setting.dart';
 import '../widgets/settings_provider.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/settings_tile.dart';
+import '../widgets/validation_rules_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -427,7 +428,6 @@ class _ProfileSettingsState extends State<ProfileSettings> {
 // in pascoooo/flowchart/FlowChart-rework-flowchart/lib/screens/settings/views/settings_page.dart
 
 // ... (widget Header, ProfileSettings e altri import restano invariati) ...
-
 class IntegrationSettings extends StatelessWidget {
   const IntegrationSettings({super.key});
 
@@ -532,21 +532,11 @@ class ExportPreferencesSettings extends StatelessWidget {
 class SystemAndInfoSettings extends StatelessWidget {
   const SystemAndInfoSettings({super.key});
 
-  void _confirmResetSettings(BuildContext context) async {
-    final bool? confirmed = await AppDialogs.showConfirmationDialog(
-        context,
-        title: 'Conferma Ripristino',
-        message: 'Ripristinare tutte le impostazioni ai valori predefiniti?',
-        confirmText: 'Ripristina',
-        isDestructive: true
+  void _showValidationRulesDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const ValidationRulesDialog(),
     );
-    if (confirmed == true && context.mounted) {
-      // Logic for reset settings would go here
-      AppDialogs.showInfoDialog(context,
-          title: 'Successo',
-          message: 'Impostazioni ripristinate.',
-          type: DialogType.success);
-    }
   }
 
   void _showAppInfoDialog(BuildContext context) {
@@ -568,10 +558,10 @@ class SystemAndInfoSettings extends StatelessWidget {
           onTap: () => _showAppInfoDialog(context),
         ),
         SettingsTile(
-          title: 'Ripristina impostazioni predefinite',
-          subtitle: 'Reimposta tutte le preferenze',
-          icon: FontAwesomeIcons.arrowRotateLeft,
-          onTap: () => _confirmResetSettings(context),
+          title: 'Regole Flowchart',
+          subtitle: 'Scopri le regole e linee guida per i diagrammi',
+          icon: FontAwesomeIcons.book,
+          onTap: () => _showValidationRulesDialog(context),
         ),
       ],
     );
@@ -683,3 +673,4 @@ class _StatusLabel extends StatelessWidget {
     );
   }
 }
+

@@ -784,3 +784,236 @@ class NodeSelectionBorderPainter extends CustomPainter {
           old.borderColor != borderColor ||
           old.strokeWidth != strokeWidth;
 }
+
+class RoundedRectanglePainter extends CustomPainter {
+  final Color color;
+  final Color borderColor;
+  final double strokeWidth;
+  final Radius radius;
+
+  RoundedRectanglePainter({
+    required this.color,
+    required this.borderColor,
+    required this.strokeWidth,
+    required this.radius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final rrect = RRect.fromRectAndRadius(rect, radius);
+    canvas.drawRRect(rrect, Paint()..color = color);
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = borderColor
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant RoundedRectanglePainter old) =>
+      old.color != color ||
+      old.borderColor != borderColor ||
+      old.strokeWidth != strokeWidth ||
+      old.radius != radius;
+}
+
+class FunctionHeaderPainter extends CustomPainter {
+  final Color fillColor;
+  final Color borderColor;
+  final double strokeWidth;
+
+  FunctionHeaderPainter({
+    required this.fillColor,
+    required this.borderColor,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(8));
+
+    canvas.drawRRect(rrect, Paint()..color = fillColor);
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = borderColor
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke,
+    );
+
+    final sidePaint = Paint()
+      ..color = borderColor
+      ..strokeWidth = strokeWidth;
+    const padding = 8.0;
+    canvas.drawLine(Offset(padding, 0), Offset(padding, size.height), sidePaint);
+    canvas.drawLine(Offset(size.width - padding, 0),
+        Offset(size.width - padding, size.height), sidePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant FunctionHeaderPainter old) =>
+      old.fillColor != fillColor ||
+      old.borderColor != borderColor ||
+      old.strokeWidth != strokeWidth;
+}
+
+class ReturnPainter extends CustomPainter {
+  final Color fillColor;
+  final Color borderColor;
+  final double strokeWidth;
+
+  ReturnPainter({
+    required this.fillColor,
+    required this.borderColor,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(8));
+
+    canvas.drawRRect(rrect, Paint()..color = fillColor);
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = borderColor
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant ReturnPainter old) =>
+      old.fillColor != fillColor ||
+      old.borderColor != borderColor ||
+      old.strokeWidth != strokeWidth;
+}
+
+class NodeRenderer extends StatelessWidget {
+  final FlowNode node;
+  final bool isSelected;
+  final bool isPreview;
+
+  const NodeRenderer({
+    super.key,
+    required this.node,
+    this.isSelected = false,
+    this.isPreview = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    final String displayText = (node is FunctionHeaderNode)
+        ? (node as FunctionHeaderNode).signatureText
+        : node.text;
+
+    final textStyle = isPreview
+        ? theme.typography.caption?.copyWith(
+            color: Colors.black.withValues(alpha: 0.85),
+          )
+        : TextStyle(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: Colors.black,
+          );
+
+    final borderColor = isPreview
+        ? theme.inactiveColor
+        : (isSelected ? theme.accentColor : Colors.blue);
+    final borderWidth = isPreview ? 1.5 : (isSelected ? 2.5 : 1.5);
+    final fillColor = Colors.white;
+
+    CustomPainter painter;
+
+    switch (node.kind) {
+      case FlowNodeKind.start:
+      case FlowNodeKind.end:
+        painter = RoundedRectanglePainter(
+          color: fillColor,
+          borderColor: borderColor,
+          strokeWidth: borderWidth,
+          radius: Radius.circular(min(node.width, node.height) / 2),
+        );
+        break;
+      case FlowNodeKind.decision:
+      case FlowNodeKind.whileLoop:
+      case FlowNodeKind.doWhileLoop:
+        painter = DiamondPainter(
+          color: fillColor,
+          borderColor: isPreview
+              ? borderColor
+              : (isSelected ? theme.accentColor : Colors.green),
+          strokeWidth: borderWidth,
+        );
+        break;
+      case FlowNodeKind.input:
+      case FlowNodeKind.output:
+        painter = ParallelogramPainter(
+          fillColor: fillColor,
+          borderColor: borderColor,
+          strokeWidth: borderWidth,
+          reversed: node.kind == FlowNodeKind.output,
+        );
+        break;
+      case FlowNodeKind.functionHeader:
+        painter = FunctionHeaderPainter(
+          fillColor: fillColor,
+          borderColor: borderColor,
+          strokeWidth: borderWidth,
+        );
+        break;
+      case FlowNodeKind.returnNode:
+        painter = ReturnPainter(
+          fillColor: fillColor,
+          borderColor: borderColor,
+          strokeWidth: borderWidth,
+        );
+        break;
+      default: // Process, Assignment
+        painter = RoundedRectanglePainter(
+          color: fillColor,
+          borderColor: borderColor,
+          strokeWidth: borderWidth,
+          radius: const Radius.circular(8),
+        );
+        break;
+    }
+
+    return Container(
+      width: node.width,
+      height: node.height,
+      decoration: BoxDecoration(
+        boxShadow: [
+          // Rimosso l'effetto ombra per la selezione
+          if (isPreview)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+        ],
+      ),
+      child: CustomPaint(
+        painter: painter,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              displayText,
+              textAlign: TextAlign.center,
+              style: textStyle,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

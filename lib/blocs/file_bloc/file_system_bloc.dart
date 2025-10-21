@@ -21,6 +21,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<DeleteFile>(_onDeleteFile);
     on<RenameFile>(_onRenameFile);
     on<UpdateFileContentInCache>(_onUpdateFileContentInCache);
+    on<ValidateProject>(_onValidateProject);
   }
 
   // --- SEZIONE CRUD (OPERAZIONI SUI FILE) ---
@@ -47,6 +48,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         final mainFile = files.firstWhere((f) => f.name.toLowerCase() == 'main', orElse: () => files.first);
         emit(FileSystemLoaded(files: files, activeFileId: mainFile.fileId));
       }
+      add(const ValidateProject()); // Attiva la validazione dopo il caricamento
     } catch (e) {
       emit(FileSystemError(message: 'Errore nel caricamento dei file: ${e.toString()}'));
     }
@@ -129,6 +131,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         activeFileId: newFile.fileId,
         isLoading: false,
       ));
+      add(const ValidateProject()); // Attiva la validazione dopo la creazione
       return;
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Impossibile creare il file: ${e.toString()}'));
@@ -166,6 +169,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       }
 
       emit(FileSystemLoaded(files: updatedFiles, activeFileId: nextActiveFileId));
+      add(const ValidateProject()); // Attiva la validazione dopo l'eliminazione
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Errore durante l\'eliminazione: ${e.toString()}'));
     }
@@ -186,6 +190,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       }).toList();
 
       emit(currentState.copyWith(files: updatedFiles, isLoading: false));
+      add(const ValidateProject()); // Attiva la validazione dopo la rinomina
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Errore durante la rinomina.'));
     }
@@ -207,5 +212,92 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     // Emetti il nuovo stato con la lista dei file aggiornata, in modo silenzioso
     emit(currentState.copyWith(files: updatedFiles));
+    add(const ValidateProject());
+  }
+
+  Future<void> _onValidateProject(
+    ValidateProject event, Emitter<FileSystemState> emit) async {
+    if (state is! FileSystemLoaded) return;
+    final currentState = state as FileSystemLoaded;
+
+    bool allValid = true;
+    try {
+      final List<Flowchart> flowcharts = currentState.files.map((file) {
+        final jsonContent = jsonDecode(file.content);
+        return Flowchart.fromEntity(FlowchartEntity.fromDocument(jsonContent));
+      }).toList();
+
+      for (final flowchart in flowcharts) {
+        if (!_isFlowchartValid(flowchart, flowcharts)) {
+          allValid = false;
+          break;
+        }
+      }
+    } catch (e) {
+      allValid = false;
+      // Puoi gestire l'errore di parsing o validazione qui se necessario
+    }
+
+    emit(currentState.copyWith(isProjectValid: allValid));
+  }
+
+  bool _isFlowchartValid(Flowchart flowchart, List<Flowchart> allFlowcharts) {
+    // 1. Tutti i nodi devono essere raggiungibili dal nodo di partenza
+    if (flowchart.nodes.isEmpty) return false; // Un flowchart vuoto non è valido
+    final startNode = flowchart.nodes.firstWhere(
+        (n) => n.kind == FlowNodeKind.start || n.kind == FlowNodeKind.functionHeader,
+        orElse: () => const StartNode(id: '', x: 0, y: 0, width: 0, height: 0, text: '')
+    );
+    if (startNode.id.isEmpty) return false; // Nessun nodo di partenza
+
+    final visited = <String>{};
+    final queue = [startNode.id];
+    visited.add(startNode.id);
+
+    while (queue.isNotEmpty) {
+      final currentId = queue.removeAt(0);
+      final outgoingEdges = flowchart.edges.where((e) => e.from == currentId);
+      for (final edge in outgoingEdges) {
+        if (!visited.contains(edge.to)) {
+          visited.add(edge.to);
+          queue.add(edge.to);
+        }
+      }
+    }
+    if (visited.length != flowchart.nodes.length) return false;
+
+    // 2. Validazione dei nodi condizionali (cicli e decisioni)
+    final conditionalNodes = flowchart.nodes.where((n) =>
+        n.kind == FlowNodeKind.whileLoop ||
+        n.kind == FlowNodeKind.doWhileLoop ||
+        n.kind == FlowNodeKind.decision);
+
+    for (final node in conditionalNodes) {
+      final outgoingEdges = flowchart.edges.where((e) => e.from == node.id).toList();
+      final hasTrueExit = outgoingEdges.any((e) => e.port == 'true');
+      final hasFalseExit = outgoingEdges.any((e) => e.port == 'false');
+      if (!hasTrueExit || !hasFalseExit) {
+        return false; // Il nodo non ha entrambi i rami (true/false)
+      }
+    }
+
+    // 3. Validazione dei nodi foglia (nodi senza uscite)
+    final leafNodes = flowchart.nodes.where((node) {
+      return !flowchart.edges.any((edge) => edge.from == node.id);
+    }).toList();
+
+    if (flowchart.type == FlowchartType.main) {
+      // Per il main: deve esserci esattamente un nodo foglia, e deve essere un nodo 'end'.
+      if (leafNodes.length != 1) return false;
+      if (leafNodes.first.kind != FlowNodeKind.end) return false;
+    } else {
+      // Per i sottoprogrammi: tutti i nodi foglia devono essere di tipo 'return'.
+      if (leafNodes.isEmpty) return false; // Un sottoprogramma deve avere almeno un return
+      for (final node in leafNodes) {
+        if (node.kind != FlowNodeKind.returnNode) return false;
+      }
+    }
+
+    return true;
   }
 }

@@ -111,11 +111,11 @@ class FlowchartCanvas extends StatelessWidget {
 
                       // Overlay guida per modalità Reset da nodo
                       if (state.isConnectorModeActive && state.connectorPurpose == ConnectorPurpose.resetFromNode)
-                        Positioned(
+                        const Positioned(
                           top: 12,
                           left: 12,
                           right: 12,
-                          child: const _ResetSelectionBanner(),
+                          child: _ResetSelectionBanner(),
                         ),
 
                       // 🆕 NUOVO: Overlay guida per modalità chiusura ciclo

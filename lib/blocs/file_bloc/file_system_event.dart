@@ -64,3 +64,7 @@ class UpdateFileContentInCache extends FileSystemEvent {
   @override
   List<Object> get props => [fileId, newContent];
 }
+
+class ValidateProject extends FileSystemEvent {
+  const ValidateProject();
+}

@@ -30,6 +30,7 @@ class FileSystemLoaded extends FileSystemState {
   final String? error;
   final bool isLoading;
   final String? executionCode; // Proprietà per contenere il codice C generato
+  final bool isProjectValid; // NUOVO: Stato di validazione del progetto
 
   const FileSystemLoaded({
     required this.files,
@@ -37,6 +38,7 @@ class FileSystemLoaded extends FileSystemState {
     this.error,
     this.isLoading = false,
     this.executionCode,
+    this.isProjectValid = false, // Default a non valido
   });
 
   FileSystemLoaded copyWith({
@@ -48,6 +50,7 @@ class FileSystemLoaded extends FileSystemState {
     bool? isLoading,
     String? executionCode,
     bool clearExecutionCode = false, // Flag per pulire il codice
+    bool? isProjectValid, // NUOVO
   }) {
     return FileSystemLoaded(
       files: files ?? this.files,
@@ -55,9 +58,10 @@ class FileSystemLoaded extends FileSystemState {
       error: clearError ? null : error,
       isLoading: isLoading ?? this.isLoading,
       executionCode: clearExecutionCode ? null : (executionCode ?? this.executionCode),
+      isProjectValid: isProjectValid ?? this.isProjectValid, // NUOVO
     );
   }
 
   @override
-  List<Object?> get props => [files, activeFileId, error, isLoading, executionCode];
+  List<Object?> get props => [files, activeFileId, error, isLoading, executionCode, isProjectValid];
 }
