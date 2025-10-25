@@ -112,42 +112,39 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
         selectedVars.putIfAbsent(a.selectedVariable!, () => []).add(i);
       }
 
-      // Validazione valore/espressione SOLO se hasInit è true
-      if (a.hasInit) {
-        final value = a.useExpression
-            ? a.expressionController.text.trim()
-            : a.valueController.text.trim();
+      // Validazione valore/espressione
+      final value = a.useExpression
+          ? a.expressionController.text.trim()
+          : a.valueController.text.trim();
 
-        if (value.isEmpty) {
-          a.valueError = 'Obbligatorio';
-          isFormValid = false;
+      if (value.isEmpty) {
+        a.valueError = 'Obbligatorio';
+        isFormValid = false;
+      } else {
+        if (a.useExpression) {
+          final result = ExpressionParser.validate(
+            value,
+            widget.availableVariables.map((v) => v.name).toList(),
+          );
+          if (!result.isValid) {
+            a.valueError = result.errorMessage;
+            isFormValid = false;
+          }
         } else {
-          if (a.useExpression) {
-            final result = ExpressionParser.validate(
-              value,
-              widget.availableVariables.map((v) => v.name).toList(),
-            );
-            if (!result.isValid) {
-              a.valueError = result.errorMessage;
-              isFormValid = false;
-            }
-          } else {
-            final targetVar = widget.availableVariables.firstWhere(
-                  (v) => v.name == a.selectedVariable,
-              orElse: () => VariableDeclaration(
-                name: '',
-                dataType: 'string',
-                scope: VariableScope.local,
-              ),
-            );
-            if (!_validateValue(targetVar.dataType, value)) {
-              a.valueError = 'Valore non valido';
-              isFormValid = false;
-            }
+          final targetVar = widget.availableVariables.firstWhere(
+                (v) => v.name == a.selectedVariable,
+            orElse: () => VariableDeclaration(
+              name: '',
+              dataType: 'string',
+              scope: VariableScope.local,
+            ),
+          );
+          if (!_validateValue(targetVar.dataType, value)) {
+            a.valueError = 'Valore non valido';
+            isFormValid = false;
           }
         }
       }
-      // Se hasInit è false, non validare il valore (è opzionale)
     }
 
     // Validazione variabili duplicate
@@ -169,25 +166,22 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
     if (!_validateForm()) return;
 
     final assignmentsList = _assignments.map((a) {
-      String? expression;
-      if (a.hasInit) {
-        expression = a.useExpression
-            ? a.expressionController.text.trim()
-            : a.valueController.text.trim();
-      }
+      final expression = a.useExpression
+          ? a.expressionController.text.trim()
+          : a.valueController.text.trim();
 
       return {
         'target': a.selectedVariable!,
-        'expression': (expression ?? '').trim(),
+        'expression': expression,
       };
     }).toList();
 
     final summary = assignmentsList
         .map((a) {
-          final expr = (a['expression'] as String).trim();
-          final tgt = a['target'] as String;
-          return expr.isNotEmpty ? '$tgt = $expr' : tgt;
-        })
+      final expr = (a['expression'] as String).trim();
+      final tgt = a['target'] as String;
+      return expr.isNotEmpty ? '$tgt = $expr' : tgt;
+    })
         .join('; ');
 
     Navigator.of(context).pop({
@@ -380,56 +374,29 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
               const SizedBox(width: 16),
               Expanded(
                 flex: 5,
-                child: AnimatedOpacity(
-                  opacity: a.hasInit ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: InfoLabel(
-                    label: a.useExpression ? 'Espressione *' : 'Valore *',
-                    child: TextBox(
-                      controller: a.useExpression ? a.expressionController : a.valueController,
-                      enabled: a.hasInit,
-                      placeholder: a.useExpression
-                          ? 'Es. x + 10 * y'
-                          : (a.selectedVariable != null ? _getHintForVariable(a.selectedVariable!) : ''),
-                      prefix: a.hasInit
-                          ? Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: FaIcon(
-                          a.useExpression ? FontAwesomeIcons.calculator : FontAwesomeIcons.hashtag,
-                          size: 14,
-                          color: theme.typography.body?.color?.withValues(alpha: 0.5),
-                        ),
-                      )
-                          : null,
-                      style: const TextStyle(fontFamily: 'Consolas, Monaco, monospace', fontSize: 14),
-                      onChanged: (_) {
-                        if (_attemptedSubmit) _validateForm();
-                      },
+                child: InfoLabel(
+                  label: a.useExpression ? 'Espressione *' : 'Valore *',
+                  child: TextBox(
+                    controller: a.useExpression ? a.expressionController : a.valueController,
+                    placeholder: a.useExpression
+                        ? 'Es. x + 10 * y'
+                        : (a.selectedVariable != null ? _getHintForVariable(a.selectedVariable!) : ''),
+                    prefix: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: FaIcon(
+                        a.useExpression ? FontAwesomeIcons.calculator : FontAwesomeIcons.hashtag,
+                        size: 14,
+                        color: theme.typography.body?.color?.withValues(alpha: 0.5),
+                      ),
                     ),
+                    style: const TextStyle(fontFamily: 'Consolas, Monaco, monospace', fontSize: 14),
+                    onChanged: (_) {
+                      if (_attemptedSubmit) _validateForm();
+                    },
                   ),
                 ),
               ),
               const SizedBox(width: 16),
-              Column(
-                children: [
-                  const Text('Inizializza?', style: TextStyle(fontSize: 12)),
-                  const SizedBox(height: 4),
-                  Checkbox(
-                    checked: a.hasInit,
-                    onChanged: (val) => setState(() {
-                      if (val != null) {
-                        a.hasInit = val;
-                        if (!val) {
-                          a.expressionController.clear();
-                          a.valueController.clear();
-                        }
-                        if (_attemptedSubmit) _validateForm();
-                      }
-                    }),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 12),
               IconButton(
                 onPressed: () => _removeAssignment(index),
                 style: ButtonStyle(
@@ -445,38 +412,34 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
               ),
             ],
           ),
-          if (a.hasInit) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Spacer(flex: 3),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 5,
-                  child: ToggleSwitch(
-                    checked: a.useExpression,
-                    onChanged: (val) => setState(() {
-                      a.useExpression = val;
-                      if (val) {
-                        a.valueController.clear();
-                      } else {
-                        a.expressionController.clear();
-                      }
-                      if (_attemptedSubmit) _validateForm();
-                    }),
-                    content: Text(
-                      a.useExpression ? 'Espressione matematica' : 'Valore diretto',
-                      style: theme.typography.body,
-                    ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Spacer(flex: 3),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 5,
+                child: ToggleSwitch(
+                  checked: a.useExpression,
+                  onChanged: (val) => setState(() {
+                    a.useExpression = val;
+                    if (val) {
+                      a.valueController.clear();
+                    } else {
+                      a.expressionController.clear();
+                    }
+                    if (_attemptedSubmit) _validateForm();
+                  }),
+                  content: Text(
+                    a.useExpression ? 'Espressione matematica' : 'Valore diretto',
+                    style: theme.typography.body,
                   ),
                 ),
-                const SizedBox(width: 16),
-                const Spacer(flex: 1),
-                const SizedBox(width: 12),
-                const SizedBox(width: 40),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(width: 16),
+              const Spacer(flex: 1),
+            ],
+          ),
           if (_attemptedSubmit && (a.variableError != null || a.valueError != null))
             _buildErrorMessages(a),
         ],
@@ -568,7 +531,6 @@ class _AssignmentRowData {
   final expressionController = TextEditingController();
   final valueController = TextEditingController();
   String? selectedVariable;
-  bool hasInit = false;
   bool useExpression = false;
   String? variableError;
   String? valueError;

@@ -181,7 +181,7 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
 
     // Trova il nodo Start
     final startNode = flowchart.nodes.firstWhere(
-      (n) => n.kind == FlowNodeKind.start,
+          (n) => n.kind == FlowNodeKind.start,
       orElse: () => throw Exception('Nodo Start non trovato'),
     );
 
@@ -199,7 +199,7 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
 
       // Trova il nodo corrente
       final currentNode = flowchart.nodes.firstWhere(
-        (n) => n.id == currentId,
+            (n) => n.id == currentId,
         orElse: () => throw Exception('Nodo non trovato: $currentId'),
       );
 
@@ -220,14 +220,14 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
       // 1. Edge senza porta (null o vuoto)
       // 2. Edge con porta != 'loop' e != 'false' (per nodi condizionali prendi il default/true)
       FlowchartEdge? next = outgoing.firstWhere(
-        (e) => e.port == null || e.port!.isEmpty,
+            (e) => e.port == null || e.port!.isEmpty,
         orElse: () => const FlowchartEdge(from: '', to: ''),
       );
 
       // Se non trovato, cerca il primo edge che non sia 'loop'
       if (next.from.isEmpty && outgoing.isNotEmpty) {
         next = outgoing.firstWhere(
-          (e) => e.port != 'loop',
+              (e) => e.port != 'loop',
           orElse: () => outgoing.first,
         );
       }
@@ -293,7 +293,7 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
         projectFlowcharts = event.initialProjectFlowcharts ?? _lastProjectFlowcharts;
         flowchart = event.initialFlowchart ?? _lastFlowchart ??
             projectFlowcharts.values.firstWhere(
-              (f) => f.flowchartId == activeSession.flowchartId,
+                  (f) => f.flowchartId == activeSession.flowchartId,
               orElse: () => projectFlowcharts.values.first,
             );
       }
@@ -355,11 +355,30 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
       if (result.requiresUserInput) {
         debugPrint('⏸️ In attesa input: ${result.userInputPrompt}');
         final effectiveFlowchart = _resolveCurrentFlowchart(flowchart, projectFlowcharts, session);
+        final currentNode = effectiveFlowchart.nodes.firstWhere((n) => n.id == session.debugPath[session.currentIndex]);
+        final Set<String> targets;
+        if (currentNode is AssignmentNode) {
+          targets = (currentNode)
+              .assignments
+              .where((a) => a.expression.trim().isEmpty)
+              .map((a) => a.target)
+              .toSet();
+        } else if (currentNode is InputNode) {
+          targets = (currentNode)
+              .assignments
+              .where((a) => a.expression.trim().isEmpty)
+              .map((a) => a.target)
+              .toSet();
+        } else {
+          targets = <String>{};
+        }
+
         emit(DebugAwaitingInput(
           session: session,
-          currentFlowchart: effectiveFlowchart,
+          currentFlowchart: flowchart,
           promptMessage: result.userInputPrompt ?? 'Inserisci i valori richiesti',
           projectFlowcharts: projectFlowcharts,
+          targets: targets,
         ));
         return;
       }
@@ -420,7 +439,7 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
   }
 
   // ==========================================================================
-  // ���� STOP
+  // 🛑 STOP
   // ==========================================================================
 
   Future<void> _onStop(DebugStop event, Emitter<DebugState> emit) async {
@@ -545,14 +564,14 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
   // ==========================================================================
 
   Future<void> _emitRunningState(
-    Emitter<DebugState> emit,
-    Flowchart flowchart,
-    Map<String, Flowchart> projectFlowcharts, {
-    bool isFirst = false,
-    String? lastMessage,
-    Map<String, dynamic>? lastUpdatedVariables,
-    bool? setProcessing,
-  }) async {
+      Emitter<DebugState> emit,
+      Flowchart flowchart,
+      Map<String, Flowchart> projectFlowcharts, {
+        bool isFirst = false,
+        String? lastMessage,
+        Map<String, dynamic>? lastUpdatedVariables,
+        bool? setProcessing,
+      }) async {
     final session = debugRepository.getCurrentSession();
     if (session == null) {
       emit(const DebugError('Sessione persa'));

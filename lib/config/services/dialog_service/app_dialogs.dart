@@ -141,7 +141,10 @@ class AppDialogs {
   }) {
     switch (kind) {
       case FlowNodeKind.input:
-        return showInputNodeDialog(context,availableInputVariables: variables ?? const [],);
+        return showInputNodeDialog(
+          context,
+          availableVariables: variables ?? const [],
+        );
 
       case FlowNodeKind.assignment:
         return showAssignmentNodeDialog(

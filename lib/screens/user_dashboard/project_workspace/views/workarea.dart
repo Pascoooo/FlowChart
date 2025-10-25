@@ -3,6 +3,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
+import 'package:flutter_svg/svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
@@ -106,7 +107,7 @@ class _WorkAreaState extends State<WorkArea>
   bool _isVariableInUse(String variableName, List<FlowNode> nodes) {
     for (final node in nodes) {
       if (node is InputNode) {
-        if (node.targetVariables.contains(variableName)) return true;
+        if (node.assignments.any((a) => a.target == variableName)) return true;
       } else if (node is OutputNode) {
         if (node.variables.any((v) => v.name == variableName)) return true;
       } else if (node is AssignmentNode) {
@@ -131,7 +132,7 @@ class _WorkAreaState extends State<WorkArea>
     for (final node in nodes) {
       bool isUsed = false;
       if (node is InputNode) {
-        isUsed = node.targetVariables.contains(variableName);
+        isUsed = node.assignments.any((a) => a.target == variableName);
       } else if (node is OutputNode) {
         isUsed = node.variables.any((v) => v.name == variableName);
       } else if (node is AssignmentNode) {
@@ -207,8 +208,10 @@ class _WorkAreaState extends State<WorkArea>
           if (node is InputNode) {
             return node.copyWith(
               text: updatedText,
-              targetVariables: node.targetVariables
-                  .map((name) => name == oldName ? updatedVariable.name : name)
+              assignments: node.assignments
+                  .map((a) => a.target == oldName
+                      ? Assignment(target: updatedVariable.name, expression: a.expression)
+                      : a)
                   .toList(),
             );
           } else if (node is OutputNode) {
@@ -796,9 +799,14 @@ class _VariablesPanelButton extends StatelessWidget {
         ),
         child: IconButton(
           onPressed: onTap,
-          icon: Icon(Icons.data_object, color: theme.accentColor, size: 25),
-          style: ButtonStyle(
-            backgroundColor: WidgetStateProperty.all(Colors.transparent),
+          icon: SvgPicture.asset(
+            'assets/icons/var.svg',
+            colorFilter: ColorFilter.mode(
+              theme.accentColor, // Applica il colore blu del tema
+              BlendMode.srcIn,
+            ),
+            width: 25, // Imposta la larghezza
+            height: 25, // Imposta l'altezza
           ),
         ),
       ),
@@ -833,9 +841,12 @@ class _VariablesPanelState extends State<_VariablesPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-    final inputs = widget.variables.where((v) => v.scope == VariableScope.input).toList();
-    final outputs = widget.variables.where((v) => v.scope == VariableScope.output).toList();
-    final works = widget.variables.where((v) => v.scope == VariableScope.local).toList();
+    final inputs =
+    widget.variables.where((v) => v.scope == VariableScope.input).toList();
+    final outputs =
+    widget.variables.where((v) => v.scope == VariableScope.output).toList();
+    final works =
+    widget.variables.where((v) => v.scope == VariableScope.local).toList();
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -855,6 +866,7 @@ class _VariablesPanelState extends State<_VariablesPanel> {
                   offset: Offset(4, 0)),
             ],
           ),
+          // È necessario un Column per contenere sia l'Header che l'Expanded
           child: Column(
             children: [
               // Header
@@ -862,8 +874,6 @@ class _VariablesPanelState extends State<_VariablesPanel> {
                 padding: const EdgeInsets.all(12.0),
                 child: Row(
                   children: [
-                    Icon(Icons.data_object, color: theme.accentColor),
-                    const SizedBox(width: 12),
                     Expanded(
                       child: Text('Gestione Variabili',
                           style: theme.typography.subtitle),
@@ -875,7 +885,8 @@ class _VariablesPanelState extends State<_VariablesPanel> {
                   ],
                 ),
               ),
-              // TabView
+
+              // Corpo (TabView)
               Expanded(
                 child: TabView(
                   currentIndex: _currentIndex,
@@ -895,12 +906,12 @@ class _VariablesPanelState extends State<_VariablesPanel> {
                     Tab(
                       text: const Text('Output'),
                       body: _VariableList(
-                        scope: VariableScope.output,
-                        variables: outputs,
-                        protectedVariableNames: widget.protectedVariableNames,
-                        onAdd: () => widget.onAddVariable(VariableScope.output),
-                        onEdit: widget.onEditVariable,
-                        onDelete: widget.onDeleteVariable,
+                          scope: VariableScope.output,
+                          variables: outputs,
+                          protectedVariableNames: widget.protectedVariableNames,
+                          onAdd: () => widget.onAddVariable(VariableScope.output),
+                          onEdit: widget.onEditVariable,
+                          onDelete: widget.onDeleteVariable,
                       ),
                     ),
                     Tab(
@@ -1139,3 +1150,4 @@ class _TopBarButton extends StatelessWidget {
     );
   }
 }
+

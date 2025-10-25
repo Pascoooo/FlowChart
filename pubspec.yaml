@@ -24,6 +24,7 @@ dependencies:
   web_socket_channel:
   url_launcher:
   uuid:
+  flutter_svg:
 
   # == FIREBASE ==
   firebase_core: ^3.1.1
@@ -64,3 +65,6 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/
+    - assets/icons/

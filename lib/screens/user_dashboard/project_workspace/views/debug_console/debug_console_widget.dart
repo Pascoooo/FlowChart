@@ -12,8 +12,8 @@
 //
 // ============================================================================
 
-import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../../blocs/debug_bloc/debug_bloc_exports.dart';
@@ -76,7 +76,7 @@ class _DebugConsoleState extends State<DebugConsole> {
 
     final nodeId = session.debugPath[session.currentIndex];
     final currentNode = flowchart.nodes.firstWhere(
-      (n) => n.id == nodeId,
+          (n) => n.id == nodeId,
       orElse: () => throw StateError('Nodo non trovato: $nodeId'),
     );
 
@@ -106,7 +106,8 @@ class _DebugConsoleState extends State<DebugConsole> {
         if (s is DebugAwaitingInput) return s.session.variables;
         return <String, dynamic>{};
       },
-      allowedAssignmentTargets: currentNode is AssignmentNode
+      // 🔴 MODIFICATO: Controlla InputNode invece di AssignmentNode
+      allowedAssignmentTargets: currentNode is InputNode
           ? (currentNode).assignments.map((a) => a.target).toSet()
           : null,
       isDoWhileReentry: isReentry,
@@ -123,10 +124,12 @@ class _DebugConsoleState extends State<DebugConsole> {
           if (session.currentIndex >= session.debugPath.length || session.currentIndex < 0) return false;
           final nodeId = session.debugPath[session.currentIndex];
           final node = s.currentFlowchart.nodes.firstWhere(
-            (n) => n.id == nodeId,
+                (n) => n.id == nodeId,
             orElse: () => throw StateError('Nodo non trovato: $nodeId'),
           );
-          if (node is AssignmentNode) {
+
+          // 🔴 MODIFICATO: Controlla InputNode invece di AssignmentNode
+          if (node is InputNode) {
             final vars = session.variables;
             final hasPending = node.assignments.any((a) {
               final expr = a.expression.trim();
@@ -211,7 +214,7 @@ class _DebugConsoleState extends State<DebugConsole> {
             FlowNode? currentNode;
             try {
               currentNode = state.currentFlowchart.nodes.firstWhere(
-                (n) => n.id == nodeId,
+                    (n) => n.id == nodeId,
               );
             } catch (_) {
               currentNode = null;
@@ -279,10 +282,12 @@ class _DebugConsoleState extends State<DebugConsole> {
                   if (session.currentIndex >= 0 && session.currentIndex < session.debugPath.length) {
                     final nodeId = session.debugPath[session.currentIndex];
                     final node = dbgState.currentFlowchart.nodes.firstWhere(
-                      (n) => n.id == nodeId,
+                          (n) => n.id == nodeId,
                       orElse: () => throw StateError('Nodo non trovato: $nodeId'),
                     );
-                    if (node is AssignmentNode) {
+
+                    // 🔴 MODIFICATO: Controlla InputNode
+                    if (node is InputNode) {
                       final vars = session.variables;
                       final hasPending = node.assignments.any((a) {
                         final expr = a.expression.trim();

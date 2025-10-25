@@ -42,7 +42,7 @@ class DebugEngine {
   ConsoleState _state = ConsoleState.idle;
   String? _currentPrompt;
 
-  /// Set di variabili consentite per l'assegnazione runtime, utilizzato solo nei nodi di tipo Assignment.
+  /// Set di variabili consentite per l'assegnazione runtime, utilizzato solo nei nodi di tipo Input.
   final Set<String>? allowedAssignmentTargets;
 
   // 🆕 Guardie per abilitare/disabilitare i comandi di navigazione dalla UI esterna
@@ -80,19 +80,14 @@ class DebugEngine {
     if (currentNode is StartNode) {
       _addInfoMessage('🟢 Nodo Start: ${currentNode.text}');
       _showCurrentPrompt('Scrivi "next" per iniziare l\'esecuzione');
-    } else if (currentNode is InputNode) {
-      final names = (currentNode as InputNode).targetVariables;
-      _addInfoMessage('📥 Nodo Input: ${names.join(', ')}');
-      _showCurrentPrompt('Le variabili verranno dichiarate nello scope');
-    } else if (currentNode is OutputNode) {
-      _addInfoMessage('📤 Nodo Output: ${currentNode.text}');
-      _showCurrentPrompt('Scrivi "next" per eseguire l\'output');
-    } else if (currentNode is AssignmentNode) {
-      final assignments = (currentNode as AssignmentNode).assignments;
-      final preview = assignments.map((a) => '${a.target} = ${a.expression}').join(', ');
-      _addInfoMessage('✏️ Nodo Assegnazione: $preview');
 
-      // 🆕 Badge variabili mancanti per runtime assignment
+      // 🔴 MODIFICATO: Logica spostata qui
+    } else if (currentNode is InputNode) {
+      final assignments = (currentNode as InputNode).assignments;
+      final names = assignments.map((a) => a.target).toList();
+      _addInfoMessage('📥 Nodo Input: ${names.join(', ')}');
+
+      // 🆕 Badge variabili mancanti per runtime assignment (spostato qui)
       try {
         final pending = <String>[];
         if (getVariables != null) {
@@ -106,11 +101,26 @@ class DebugEngine {
           }
         }
         if (pending.isNotEmpty) {
-          _addInfoMessage('⏳ In attesa assegnazioni: ${pending.join(', ')}');
+          _addInfoMessage('⏳ In attesa input per: ${pending.join(', ')}');
         }
       } catch (_) {}
 
+      _showCurrentPrompt('Inserisci i valori (es: var = 10) e premi "next"');
+
+    } else if (currentNode is OutputNode) {
+      _addInfoMessage('📤 Nodo Output: ${currentNode.text}');
+      _showCurrentPrompt('Scrivi "next" per eseguire l\'output');
+
+      // 🔴 MODIFICATO: Logica badge rimossa
+    } else if (currentNode is AssignmentNode) {
+      final assignments = (currentNode as AssignmentNode).assignments;
+      final preview = assignments.map((a) => '${a.target} = ${a.expression}').join(', ');
+      _addInfoMessage('✏️ Nodo Assegnazione: $preview');
+
+      // (Badge variabili mancanti rimosso da qui)
+
       _showCurrentPrompt('Scrivi "next" per eseguire le assegnazioni');
+
     } else if (currentNode is DecisionNode) {
       _addInfoMessage('🔀 Nodo Decisione: ${currentNode.text}');
       _showCurrentPrompt('Scrivi "next" per valutare la condizione');
@@ -173,15 +183,15 @@ class DebugEngine {
       final varName = m.group(1)!;
       final expr = m.group(2)!.trim();
 
-      // ✅ Restringi alle variabili del blocco Assignment corrente
+      // ✅ Restringi alle variabili del blocco Input corrente
       if (allowedAssignmentTargets != null) {
         if (!allowedAssignmentTargets!.contains(varName)) {
-          _addErrorMessage('"$varName" non fa parte del blocco di assegnazione corrente');
+          _addErrorMessage('"$varName" non fa parte del blocco di input corrente');
           _notifyUpdate();
           return;
         }
       } else {
-        _addErrorMessage('Assegnazioni a runtime consentite solo nei nodi Assegnazione');
+        _addErrorMessage('Assegnazioni a runtime non consentite in questo nodo');
         _notifyUpdate();
         return;
       }

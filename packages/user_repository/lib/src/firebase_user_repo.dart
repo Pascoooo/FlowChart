@@ -16,7 +16,6 @@ const String kDeleteUserFunctionName = 'delete_account_full';
 /// Durata massima per le richieste API prima di un timeout.
 const Duration kApiTimeoutDuration = Duration(seconds: 15);
 
-
 // --- Implementazione del Repository ---
 
 /// Implementazione concreta di [UserRepository] che utilizza Firebase.

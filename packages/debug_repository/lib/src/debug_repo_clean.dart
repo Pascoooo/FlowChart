@@ -25,7 +25,7 @@ class DebugRepoImpl implements DebugRepo {
   final List<DebugSnapshot> _history = [];
   final Map<String, Flowchart> _flowcharts;
   final StreamController<Map<String, dynamic>> _varsStream =
-      StreamController<Map<String, dynamic>>.broadcast();
+  StreamController<Map<String, dynamic>>.broadcast();
 
   // 🆕 Stato interno: se l'ultimo step ha richiesto input utente
   bool _awaitingInput = false;
@@ -84,7 +84,7 @@ class DebugRepoImpl implements DebugRepo {
       final flowchart = _getCurrentFlowchart();
       final nodeId = s.debugPath[idx];
       final node = flowchart?.nodes.firstWhere(
-        (n) => n.id == nodeId,
+            (n) => n.id == nodeId,
         orElse: () => throw StateError('❌ Nodo $nodeId non trovato'),
       );
 
@@ -131,11 +131,17 @@ class DebugRepoImpl implements DebugRepo {
 
       _saveSnapshot();
 
-      // FIX: NON avanzare qui. L'avanzamento e l'esecuzione del prossimo nodo
-      // avverranno alla prossima chiamata di executeNextStep(). Questo evita di
-      // saltare il nodo successivo (es. Decision) subito dopo un Assignment runtime.
+      // 🔴 MODIFICA CRUCIALE:
+      // Se l'input è stato soddisfatto (_awaitingInput è ora false),
+      // NON ritornare, ma prosegui (fall-through) all'avanzamento dello step.
+      if (_awaitingInput) {
+        // Se richiede ANCORA input (es. validazione fallita), allora fermati e ritorna.
+        debugPrint('⏸️ Input ancora richiesto, resto sul nodo.');
+        return result;
+      }
 
-      return result;
+      debugPrint('✅ Input soddisfatto. Procedo con l\'avanzamento...');
+      // Se _awaitingInput è diventato false, l'esecuzione prosegue al blocco "AVANZA PRIMA, POI ESEGUI"
     }
 
     // ✅ NUOVA LOGICA: AVANZA PRIMA, POI ESEGUI
@@ -155,7 +161,7 @@ class DebugRepoImpl implements DebugRepo {
     final nodeId = _session!.debugPath[newIndex];
     final flowchart = _getCurrentFlowchart();
     final node = flowchart?.nodes.firstWhere(
-      (n) => n.id == nodeId,
+          (n) => n.id == nodeId,
       orElse: () => throw StateError('❌ Nodo $nodeId non trovato'),
     );
 
@@ -283,7 +289,7 @@ class DebugRepoImpl implements DebugRepo {
 
     if (result.requiresUserInput) {
       // Non salviamo uno snapshot qui: evitiamo di registrare lo stato "null" iniziale
-      // dell'Assignment. Lo snapshot verrà creato solo dopo che l'input è stato
+      // dell'Input. Lo snapshot verrà creato solo dopo che l'input è stato
       // completato (nel ramo _awaitingInput), garantendo che il Previous non
       // ripristini valori null involontariamente.
       debugPrint('⏸️ In attesa input utente: ${result.userInputPrompt ?? ''}');
@@ -417,7 +423,7 @@ class DebugRepoImpl implements DebugRepo {
       visited.add(currentId);
 
       final currentNode = flowchart.nodes.firstWhere(
-        (n) => n.id == currentId,
+            (n) => n.id == currentId,
         orElse: () => const StartNode(id: '', x: 0, y: 0, width: 0, height: 0, text: ''),
       );
       if (currentNode.id.isEmpty) break;
@@ -428,12 +434,12 @@ class DebugRepoImpl implements DebugRepo {
 
       // Priorità: edge senza porta, poi primo edge che non sia 'loop'
       FlowchartEdge? next = outgoing.firstWhere(
-        (e) => e.port == null || e.port!.isEmpty,
+            (e) => e.port == null || e.port!.isEmpty,
         orElse: () => const FlowchartEdge(from: '', to: ''),
       );
       if (next.from.isEmpty) {
         next = outgoing.firstWhere(
-          (e) => e.port != 'loop',
+              (e) => e.port != 'loop',
           orElse: () => outgoing.first,
         );
       }
@@ -452,7 +458,7 @@ class DebugRepoImpl implements DebugRepo {
       // Nel do-while il branch 'loop' corrisponde alla porta 'true' (ripetere), altrimenti 'false'
       final desiredPort = branch == 'loop' ? 'true' : 'false';
       final edge = outgoing.firstWhere(
-        (e) => (e.port ?? '') == desiredPort || (desiredPort.isEmpty && (e.port == null || e.port!.isEmpty)),
+            (e) => (e.port ?? '') == desiredPort || (desiredPort.isEmpty && (e.port == null || e.port!.isEmpty)),
         orElse: () => const FlowchartEdge(from: '', to: ''),
       );
       return edge.from.isEmpty ? null : edge.to;
@@ -460,7 +466,7 @@ class DebugRepoImpl implements DebugRepo {
 
     // Decision/While: branch 'true'/'false'
     final edge = outgoing.firstWhere(
-      (e) => (e.port ?? '') == branch,
+          (e) => (e.port ?? '') == branch,
       orElse: () => const FlowchartEdge(from: '', to: ''),
     );
     return edge.from.isEmpty ? null : edge.to;

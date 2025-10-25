@@ -273,13 +273,11 @@ class _NodeDetailsDialog extends StatelessWidget {
         ];
 
       case FlowNodeKind.input:
-      // FIX: Aggiornato per usare 'targetVariables' (List<String>) invece di 'declarations'.
         final inputNode = node as InputNode;
         return [
           _TruncatedList(
             title: 'Variabili in Input',
-            items: inputNode.targetVariables,
-            // La UI ora mostra dei chip, dato che abbiamo solo i nomi.
+            items: inputNode.assignments.map((a) => a.target).toList(),
             itemBuilder: (item) => _VariableChip(variable: item as String, theme: theme),
             displayMode: _TruncatedListDisplayMode.wrap,
             fullListBuilder: (items) => items.cast<String>().join(', '),

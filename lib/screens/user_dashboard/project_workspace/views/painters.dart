@@ -131,6 +131,34 @@ class ConnectionPainter extends CustomPainter {
       final toNode = nodeMap[edge.to];
       if (fromNode == null || toNode == null) continue;
 
+      // 💡 NUOVA GESTIONE SPECIALE per il corpo del Do-While
+      if (fromNode.kind == FlowNodeKind.doWhileLoop && (edge.port == 'true' || edge.port == 'doWhileStart')) {
+        final loopNode = fromNode;
+        final bodyStartNode = toNode;
+
+        // Il loop esce a sinistra del rombo e rientra a sinistra del nodo di inizio corpo
+        final startPoint = Offset(loopNode.x, loopNode.y + loopNode.height / 2);
+        final endPoint = Offset(bodyStartNode.x, bodyStartNode.y + bodyStartNode.height / 2);
+
+        const double clearance = 36.0;
+        // ✨ NUOVO: Calcola il livello di annidamento per evitare sovrapposizioni
+        final nestingLevel = _getNestingLevel(loopNode, nodeMap, edges);
+        // ✨ MODIFICATO: Usa la posizione del loopNode come riferimento stabile
+        double viaX = loopNode.x - (clearance * (1.5 + nestingLevel));
+
+        final points = [
+            startPoint,
+            Offset(viaX, startPoint.dy),
+            Offset(viaX, endPoint.dy),
+            endPoint,
+        ];
+        _drawOrthogonalArrow(canvas, paint, points);
+
+
+        _drawLoopLabel(canvas, fromNode, edge.port!);
+        continue;
+      }
+
       // ✅ FIX: Calcola i centri di entrambi i nodi
       final startCenter = _getNodeCenter(fromNode);
       final endCenter = _getNodeCenter(toNode);
@@ -202,27 +230,18 @@ class ConnectionPainter extends CustomPainter {
       // Evita crash se loopRects è vuoto
       if (loopRects.isEmpty) continue;
 
-      // Trova l'X minimo dei nodi del ciclo
-      double loopMinX = loopRects.map((r) => r.left).reduce(min);
+      // ✨ NUOVO: Calcola il livello di annidamento per evitare sovrapposizioni
+      final nestingLevel = _getNestingLevel(loopNode, nodeMap, edges);
 
       // Definisci un punto-ancora a sinistra del ciclo, alla media verticale dei bottomCenters
-      final double baseClearance = 36.0; // margine base (allargabile)
-      final double minStartX = bottomCenters.map((o) => o.dx).reduce(min);
+      final double baseClearance = 36.0;
       final double meanY = bottomCenters.map((o) => o.dy).reduce((a, b) => a + b) / bottomCenters.length;
-      double anchorX = min(minStartX, loopMinX) - baseClearance * 1.5; // ben a sinistra di tutti i nodi del ciclo
-      final double anchorY = meanY + 12.0; // leggermente sotto la media dei bottom
-      final Offset anchor = Offset(anchorX, anchorY);
 
-      // Calcola viaX assicurandoti che sia ancora più a sinistra di TUTTI i nodi del ciclo
-      double viaX = min(anchor.dx, loopMinX) - baseClearance;
+      // ✨ MODIFICATO: viaX e anchorX sono basati sulla posizione del loopNode e sul livello di annidamento
+      double viaX = loopNode.x - (baseClearance * (1.5 + nestingLevel));
+      final double anchorY = meanY + 12.0;
+      final Offset anchor = Offset(viaX + baseClearance / 2, anchorY);
 
-      // Se per qualche motivo viaX cadrebbe dentro un rettangolo del ciclo, spostalo ancora a sinistra
-      bool intersects;
-      int guard = 0;
-      do {
-        intersects = loopRects.any((r) => viaX >= r.left && viaX <= r.right);
-        if (intersects) viaX -= baseClearance; // “allarga verso sinistra”
-      } while (intersects && guard++ < 8);
 
       // Disegna convergenza: da ogni bottom-center al punto-ancora (solo linee, niente frecce)
       for (final start in bottomCenters) {
@@ -574,53 +593,69 @@ class ConnectionPainter extends CustomPainter {
   }
 
   // Raccoglie gli ID dei nodi che fanno parte del corpo del ciclo (senza seguire archi 'loop')
-  // (Ho usato la versione che hai fornito nel file completo)
   Set<String> _collectLoopBodyNodeIds(
-      FlowNode loopNode,
-      Map<String, FlowNode> nodeMap,
-      List<FlowchartEdge> edges,
-      ) {
+    FlowNode loopNode,
+    Map<String, FlowNode> nodeMap,
+    List<FlowchartEdge> edges,
+  ) {
     final body = <String>{};
-
-    // Trova l'edge di inizio corpo
     FlowchartEdge? startEdge;
-    if (loopNode.kind == FlowNodeKind.whileLoop) {
-      startEdge = edges.firstWhere(
-            (e) => e.from == loopNode.id && e.port == 'true',
-        orElse: () => const FlowchartEdge(from: '', to: ''),
-      );
-      if (startEdge.from.isEmpty) return body;
-    } else if (loopNode.kind == FlowNodeKind.doWhileLoop) {
-      startEdge = edges.firstWhere(
-            (e) => e.from == loopNode.id && e.port == 'true',
-        orElse: () => const FlowchartEdge(from: '', to: ''),
-      );
-      if (startEdge.from.isEmpty) {
-        startEdge = edges.firstWhere(
-              (e) => e.from == loopNode.id && e.port == 'doWhileStart',
-          orElse: () => const FlowchartEdge(from: '', to: ''),
-        );
-      }
-      if (startEdge.from.isEmpty) return body;
-    } else {
-      return body;
-    }
 
-    // BFS dal nodo di inizio corpo, evitando archi 'loop'
-    final queue = <String>[startEdge.to];
-    final visited = <String>{};
+    // Trova l'edge che inizia il corpo del ciclo
+    if (loopNode.kind == FlowNodeKind.whileLoop) {
+      startEdge = edges.firstWhere((e) => e.from == loopNode.id && e.port == 'true', orElse: () => const FlowchartEdge(from: '', to: ''));
+    } else if (loopNode.kind == FlowNodeKind.doWhileLoop) {
+      startEdge = edges.firstWhere((e) => e.from == loopNode.id && (e.port == 'true' || e.port == 'doWhileStart'), orElse: () => const FlowchartEdge(from: '', to: ''));
+    }
+    if (startEdge == null || startEdge.to.isEmpty) return body;
+
+    final bodyStartNodeId = startEdge.to;
+    final queue = <String>[bodyStartNodeId];
+    final visited = <String>{bodyStartNodeId};
+
     while (queue.isNotEmpty) {
-      final current = queue.removeAt(0);
-      if (!visited.add(current)) continue;
-      body.add(current);
-      for (final e in edges) {
-        if (e.from == current && e.port != 'loop') {
-          queue.add(e.to);
+      final currentId = queue.removeAt(0);
+      body.add(currentId);
+
+      for (final edge in edges.where((e) => e.from == currentId)) {
+        // Stop traversal if we exit the loop via the 'false' port of the loop header
+        if (edge.from == loopNode.id && edge.port == 'false') {
+          continue;
+        }
+        // Don't follow explicit 'loop' return edges of inner loops
+        if (edge.port == 'loop') {
+          continue;
+        }
+
+        if (!visited.contains(edge.to)) {
+          visited.add(edge.to);
+          queue.add(edge.to);
         }
       }
     }
-
     return body;
+  }
+
+  // ✨ NUOVA FUNZIONE HELPER per calcolare il livello di annidamento di un ciclo
+  int _getNestingLevel(
+    FlowNode loopNode,
+    Map<String, FlowNode> nodeMap,
+    List<FlowchartEdge> edges,
+  ) {
+    int level = 0;
+    // Trova tutti gli altri cicli nel flowchart
+    final otherLoops = nodeMap.values.where((n) =>
+        (n.kind == FlowNodeKind.whileLoop || n.kind == FlowNodeKind.doWhileLoop) &&
+        n.id != loopNode.id);
+
+    for (final outerLoop in otherLoops) {
+      // Controlla se il nostro loopNode è nel corpo di quest'altro ciclo
+      final bodyIds = _collectLoopBodyNodeIds(outerLoop, nodeMap, edges);
+      if (bodyIds.contains(loopNode.id)) {
+        level++;
+      }
+    }
+    return level;
   }
 
   @override

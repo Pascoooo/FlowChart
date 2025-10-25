@@ -761,7 +761,7 @@ class DoWhileNode extends FlowNode {
 }
 
 class InputNode extends FlowNode {
-  final List<String> targetVariables;
+  final List<Assignment> assignments;
 
   const InputNode({
     required super.id,
@@ -770,25 +770,28 @@ class InputNode extends FlowNode {
     required super.width,
     required super.height,
     required super.text,
-    this.targetVariables = const [],
+    this.assignments = const [],
     super.metadata,
   }) : super(kind: FlowNodeKind.input);
 
   @override
   FlowNodeEntity toEntity() => FlowNodeEntity(
-    id: id,
-    kind: kind,
-    x: x,
-    y: y,
-    width: width,
-    height: height,
-    text: text,
-    data: {'targetVariables': targetVariables},
-    metadata: metadata,
-  );
+        id: id,
+        kind: kind,
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        text: text,
+        data: {'assignments': assignments.map((a) => a.toMap()).toList()},
+        metadata: metadata,
+      );
 
   static InputNode fromEntity(FlowNodeEntity e) {
-    final targetVariables = (e.data?['targetVariables'] as List?)?.cast<String>() ?? [];
+    final assignmentsData = e.data?['assignments'] as List? ?? [];
+    final assignments = assignmentsData
+        .map((a) => Assignment.fromMap(a as Map<String, dynamic>))
+        .toList();
     return InputNode(
       id: e.id,
       x: e.x,
@@ -796,19 +799,19 @@ class InputNode extends FlowNode {
       width: e.width,
       height: e.height,
       text: e.text,
-      targetVariables: targetVariables,
+      assignments: assignments,
       metadata: e.metadata,
     );
   }
 
   @override
-  List<Object?> get props => [...super.props, targetVariables];
+  List<Object?> get props => [...super.props, assignments];
 
   InputNode copyWith({
     double? x,
     double? y,
     String? text,
-    List<String>? targetVariables,
+    List<Assignment>? assignments,
   }) {
     return InputNode(
       id: id,
@@ -817,7 +820,7 @@ class InputNode extends FlowNode {
       width: width,
       height: height,
       text: text ?? this.text,
-      targetVariables: targetVariables ?? this.targetVariables,
+      assignments: assignments ?? this.assignments,
       metadata: metadata,
     );
   }

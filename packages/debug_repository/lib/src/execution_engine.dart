@@ -1,5 +1,6 @@
 // filepath: lib/config/services/execution_engine.dart
 import 'package:flowchart_repository/flowchart_repository.dart';
+
 import 'expression_parser.dart';
 import 'models/execution_result.dart';
 
@@ -33,7 +34,7 @@ class DecisionResult {
 // REGOLA CRITICA: L'esecuzione avviene IMMEDIATAMENTE quando si entra nel nodo
 // NON quando si esce. Questo vale per TUTTI i tipi di nodo.
 //
-// Se un nodo richiede input (AssignmentNode con espressioni vuote),
+// Se un nodo richiede input (InputNode con espressioni vuote),
 // lo stato diventa DebugAwaitingInput e il BLoC gestisce l'input utente.
 //
 // ============================================================================
@@ -84,47 +85,127 @@ class ExecutionEngine {
     return ExecutionResult.success(message: '⏹️ Fine');
   }
 
-  /// INPUT NODE: Dichiara variabili con null
+  /// INPUT NODE: Gestisce la pausa e l'assegnazione runtime (step-by-step)
   ///
-  /// ESECUZIONE IMMEDIATA: Non appena si entra nel nodo Input,
-  /// tutte le variabili di input vengono dichiarate nello scope (con valore null).
-  static ExecutionResult _input(InputNode node, Map<String, dynamic> vars, List<VariableDeclaration> allVars) {
+  /// ESECUZIONE (LOGICA VECCHIO ASSIGNMENT):
+  /// Se ci sono espressioni, le valuta (valori pre-compilati).
+  /// Se ci sono espressioni vuote, chiede input all'utente (requiresUserInput).
+  /// Può assegnare SOLO a variabili di scope Input.
+  static ExecutionResult _input(
+      InputNode node,
+      Map<String, dynamic> vars,
+      List<VariableDeclaration> allVars,
+      ) {
+    print('🔵 INIZIO _input');
     final updates = <String, dynamic>{};
-    final declared = allVars.map((v) => v.name).toSet();
+    final messages = <String>[];
+    // Variabili che richiedono un valore dall'utente (espressione vuota)
+    final pendingRuntimeTargets = <String>[];
 
-    for (final varName in node.targetVariables) {
-      if (!declared.contains(varName)) {
-        return ExecutionResult.error('Variabile di input "$varName" non dichiarata nel flowchart');
-      }
-      if (!vars.containsKey(varName)) {
-        updates[varName] = null;
+    // Helper per trovare dichiarazione
+    VariableDeclaration? _findDecl(String name) {
+      try {
+        return allVars.firstWhere((v) => v.name == name);
+      } catch (_) {
+        return null;
       }
     }
 
+    for (final assignment in node.assignments) {
+      final target = assignment.target.trim();
+      if (target.isEmpty) {
+        return ExecutionResult.error('Target di input vuoto');
+      }
+
+      final decl = _findDecl(target);
+      if (decl == null) {
+        return ExecutionResult.error('Variabile "$target" non dichiarata nel flowchart');
+      }
+
+      // VALIDAZIONE: Un nodo Input può assegnare SOLO variabili di scope Input.
+      if (decl.scope != VariableScope.input) {
+        return ExecutionResult.error(
+          'Errore: Il blocco Input può assegnare solo variabili di tipo Input. "$target" è ${decl.scope.name}.',
+          blocking: true,
+        );
+      }
+
+      final expr = (assignment.expression).trim();
+
+      // Logica di runtime assignment (presa da vecchio _assignment)
+      if (expr.isEmpty) {
+        // Se espressione è vuota: runtime assignment
+        // Controlliamo se ha già un valore (es. da step-back)
+        final hasValue = vars.containsKey(target) && vars[target] != null;
+        if (!hasValue) {
+          pendingRuntimeTargets.add(target);
+          // Assicura che la variabile esista per mostrarla (null)
+          if (!vars.containsKey(target)) {
+            updates[target] = null;
+          }
+          print('🟡 Runtime input per: $target (no expr)');
+        } else {
+          print('🟢 Runtime input già valorizzato: $target = ${vars[target]}');
+        }
+        continue;
+      }
+
+      // Logica di valutazione espressione (per valori pre-compilati)
+      print('🟢 Valutando pre-input: $target = $expr');
+      final result = ExpressionParser.evaluate(
+        expr,
+        vars,
+        targetDeclaration: decl,
+      );
+
+      if (!result.isValid) {
+        final msg = result.errorMessage ?? 'espressione non valida';
+        final isTypeMismatch = msg.contains('Tipo incompatibile') || msg.contains('Conversione non permessa');
+        return ExecutionResult.error(
+          'Errore: $target = ${assignment.expression}\n$msg',
+          blocking: !isTypeMismatch,
+        );
+      }
+
+      updates[target] = result.value;
+      print('✅ PRE-ASSEGNATO INPUT: $target = ${result.value}');
+      messages.add('$target = ${result.value}');
+    }
+
+    // Gestione della Pausa (presa da vecchio _assignment)
+    if (pendingRuntimeTargets.isNotEmpty) {
+      print('⏸️ RICHIEDO INPUT per: $pendingRuntimeTargets');
+      return ExecutionResult(
+        success: true,
+        updatedVariables: updates, // include eventuali inizializzazioni a null o pre-compilati
+        requiresUserInput: true,
+        userInputPrompt: 'Inserisci: ${pendingRuntimeTargets.join(', ')}',
+      );
+    }
+
+    print('🎉 _input COMPLETATO (con valori pre-compilati): $updates');
     return ExecutionResult.success(
       updatedVariables: updates,
-      message: updates.isEmpty
-          ? '✓ INPUT già esistenti'
-          : '📥 INPUT dichiarate: ${updates.keys.join(', ')}',
+      message: messages.isEmpty ? '📥 Input pronti' : '📥 ${messages.join(', ')}',
     );
   }
 
   /// ASSIGNMENT NODE: Assegna valori alle variabili
   ///
   /// ESECUZIONE IMMEDIATA: Non appena si entra nel nodo Assignment,
-  /// se tutte le espressioni sono definite, vengono SUBITO valutate e assegnate.
-  /// Se ci sono espressioni vuote (runtime assignment), rimane in DebugAwaitingInput.
+  /// tutte le espressioni vengono SUBITO valutate e assegnate.
+  /// Un'espressione vuota è considerata un ERRORE bloccante.
   ///
   /// TYPE CHECKING: Ogni assegnazione valida il tipo target
   static ExecutionResult _assignment(
-    AssignmentNode node,
-    Map<String, dynamic> vars,
-    List<VariableDeclaration> allVars,
-  ) {
+      AssignmentNode node,
+      Map<String, dynamic> vars,
+      List<VariableDeclaration> allVars,
+      ) {
     print('🔴 INIZIO _assignment');
     final updates = <String, dynamic>{};
     final messages = <String>[];
-    final pendingRuntimeTargets = <String>[]; // target ancora da valorizzare
+    // Rimosso: final pendingRuntimeTargets = <String>[];
 
     // Helper per trovare dichiarazione
     VariableDeclaration? _findDecl(String name) {
@@ -147,6 +228,7 @@ class ExecutionEngine {
       }
 
       // Se è INPUT scope, deve essere già stata dichiarata in Input precedente
+      // (Questa logica è potenzialmente rivedibile, ma la lasciamo per ora)
       if (decl.scope == VariableScope.input && !vars.containsKey(target)) {
         return ExecutionResult.error(
           'Variabile di input "$target" non dichiarata da blocco Input precedente',
@@ -155,23 +237,16 @@ class ExecutionEngine {
 
       final expr = (assignment.expression).trim();
 
-      // Se espressione è vuota: runtime assignment
+      // MODIFICATO: L'espressione vuota ora è un ERRORE
       if (expr.isEmpty) {
-        // Se il valore è già presente (non-null), consideralo completato; altrimenti segna come pending
-        final hasValue = vars.containsKey(target) && vars[target] != null;
-        if (!hasValue) {
-          pendingRuntimeTargets.add(target);
-          // Assicurati che la variabile esista nella sessione per essere mostrata con valore null
-          if (!vars.containsKey(target)) {
-            updates[target] = null;
-          }
-          print('🟡 Runtime assignment per: $target (no expr)');
-        } else {
-          // Già valorizzata dall'utente in un passo precedente: nessuna azione
-          print('🟢 Runtime assignment già valorizzato: $target = ${vars[target]}');
-        }
-        continue;
+        // Se l'espressione è vuota, è un errore bloccante.
+        return ExecutionResult.error(
+          'Errore: Assegnazione obbligatoria per "$target" non definita.',
+          blocking: true,
+        );
       }
+
+      // RIMOSSO: Blocco if (expr.isEmpty) per runtime assignment
 
       // Espressione definita: valuta e assegna IMMEDIATAMENTE con type checking
       print('🟢 Valutando: $target = $expr');
@@ -195,16 +270,7 @@ class ExecutionEngine {
       messages.add('$target = ${result.value}');
     }
 
-    // Se ci sono target con runtime assignment non ancora valorizzati: chiedi input all'utente
-    if (pendingRuntimeTargets.isNotEmpty) {
-      print('⏸️ RICHIEDO INPUT per: $pendingRuntimeTargets');
-      return ExecutionResult(
-        success: true,
-        updatedVariables: updates, // include eventuali inizializzazioni a null o assegnazioni pronte
-        requiresUserInput: true,
-        userInputPrompt: 'Assegna: ${pendingRuntimeTargets.join(', ')}',
-      );
-    }
+    // RIMOSSO: Controllo finale su pendingRuntimeTargets
 
     print('🎉 _assignment COMPLETATO: $updates');
     return ExecutionResult.success(
@@ -212,6 +278,7 @@ class ExecutionEngine {
       message: messages.isEmpty ? '✏️ Assegnazioni pronte' : '✏️ ${messages.join(', ')}',
     );
   }
+
 
   /// OUTPUT NODE: Mostra messaggio con validazione variabili dichiarate e template {{var}}
   static ExecutionResult _output(OutputNode node, Map<String, dynamic> vars, List<VariableDeclaration> allVars) {

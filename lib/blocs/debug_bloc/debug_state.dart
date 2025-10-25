@@ -93,12 +93,14 @@ class DebugAwaitingInput extends DebugState {
   final Flowchart currentFlowchart;
   final String promptMessage;
   final Map<String, Flowchart> projectFlowcharts;
+  final Set<String> targets;
 
   const DebugAwaitingInput({
     required this.session,
     required this.currentFlowchart,
     required this.promptMessage,
     required this.projectFlowcharts,
+    this.targets = const {},
   });
 
   // ✅ CALCOLATO DINAMICAMENTE
@@ -115,6 +117,7 @@ class DebugAwaitingInput extends DebugState {
         currentFlowchart,
         promptMessage,
         projectFlowcharts,
+        targets,
       ];
 }
 

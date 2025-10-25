@@ -216,7 +216,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
   }
 
   Future<void> _onValidateProject(
-    ValidateProject event, Emitter<FileSystemState> emit) async {
+      ValidateProject event, Emitter<FileSystemState> emit) async {
     if (state is! FileSystemLoaded) return;
     final currentState = state as FileSystemLoaded;
 
@@ -246,8 +246,8 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     if (flowchart.nodes.isEmpty) return false; // Un flowchart vuoto non è valido
     final startNode = flowchart.nodes.firstWhere(
         (n) => n.kind == FlowNodeKind.start || n.kind == FlowNodeKind.functionHeader,
-        orElse: () => const StartNode(id: '', x: 0, y: 0, width: 0, height: 0, text: '')
-    );
+        // Usa un nodo concreto per orElse, dato che FlowNode è astratto
+        orElse: () => const StartNode(id: '', x: 0, y: 0, width: 0, height: 0, text: ''));
     if (startNode.id.isEmpty) return false; // Nessun nodo di partenza
 
     final visited = <String>{};
@@ -256,8 +256,10 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     while (queue.isNotEmpty) {
       final currentId = queue.removeAt(0);
+      // Correzione: e.from è già una stringa (ID), non un oggetto con nodeId
       final outgoingEdges = flowchart.edges.where((e) => e.from == currentId);
       for (final edge in outgoingEdges) {
+        // Correzione: edge.to è già una stringa (ID)
         if (!visited.contains(edge.to)) {
           visited.add(edge.to);
           queue.add(edge.to);

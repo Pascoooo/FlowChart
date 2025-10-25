@@ -20,7 +20,6 @@ import '../widgets/export_setting.dart';
 import '../widgets/settings_provider.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/settings_tile.dart';
-import '../widgets/validation_rules_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -532,12 +531,6 @@ class ExportPreferencesSettings extends StatelessWidget {
 class SystemAndInfoSettings extends StatelessWidget {
   const SystemAndInfoSettings({super.key});
 
-  void _showValidationRulesDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => const ValidationRulesDialog(),
-    );
-  }
 
   void _showAppInfoDialog(BuildContext context) {
     AppDialogs.showInfoDialog(context,
@@ -556,12 +549,6 @@ class SystemAndInfoSettings extends StatelessWidget {
           subtitle: 'Versione, build, licenze e crediti',
           icon: FontAwesomeIcons.circleInfo,
           onTap: () => _showAppInfoDialog(context),
-        ),
-        SettingsTile(
-          title: 'Regole Flowchart',
-          subtitle: 'Scopri le regole e linee guida per i diagrammi',
-          icon: FontAwesomeIcons.book,
-          onTap: () => _showValidationRulesDialog(context),
         ),
       ],
     );

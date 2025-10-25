@@ -298,93 +298,253 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
     final expressionPreview = _buildExpression();
 
     return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 800),
-      title: Row(children: [
-        FaIcon(FontAwesomeIcons.codeBranch,
-            color: theme.accentColor.defaultBrushFor(theme.brightness), size: 24),
-        const SizedBox(width: 16),
-        const Text('Configura Nodo Condizione'),
-      ]),
-      content: widget.variables.isEmpty
-          ? Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 48.0),
-          child: Text(
-            'Nessuna variabile definita per creare una condizione.',
-            style: theme.typography.body,
-          ),
+      constraints: const BoxConstraints(maxWidth: 900, maxHeight: 700),
+      title: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.accentColor.defaultBrushFor(theme.brightness).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
         ),
-      )
-          : SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            // Solo selezione modalità (rimossa etichetta manuale).
-            Align(
-              alignment: Alignment.centerLeft,
-              child: InfoLabel(
-                label: 'Modalità di Costruzione',
-                child: Row(
-                  children: [
-                    RadioButton(
-                      checked: _mode == _ConditionMode.simple,
-                      content: const Text('Semplice'),
-                      onChanged: (v) {
-                        if (v) {
-                          setState(() => _mode = _ConditionMode.simple);
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 16),
-                    RadioButton(
-                      checked: _mode == _ConditionMode.advanced,
-                      content: const Text('Avanzata'),
-                      onChanged: (v) {
-                        if (v) _switchToAdvanced();
-                      },
-                    ),
-                  ],
-                ),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.accentColor.defaultBrushFor(theme.brightness),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: FaIcon(
+                FontAwesomeIcons.codeBranch,
+                color: Colors.white,
+                size: 20,
               ),
             ),
-            const SizedBox(height: 24),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              transitionBuilder: (child, animation) =>
-                  FadeTransition(opacity: animation, child: child),
-              child: _mode == _ConditionMode.simple
-                  ? _buildSimpleUI(theme)
-                  : _buildAdvancedUI(theme),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Configura Nodo Condizione',
+                    style: theme.typography.subtitle?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Definisci le condizioni logiche per il flusso decisionale',
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.typography.caption?.color?.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 24),
-            _buildPreview(theme, expressionPreview),
           ],
         ),
       ),
+      content: widget.variables.isEmpty
+          ? _buildEmptyState(theme)
+          : SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 16),
+              _buildModeSelector(theme),
+              const SizedBox(height: 24),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                switchInCurve: Curves.easeInOut,
+                switchOutCurve: Curves.easeInOut,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.0, 0.05),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: _mode == _ConditionMode.simple
+                    ? _buildSimpleUI(theme)
+                    : _buildAdvancedUI(theme),
+              ),
+              const SizedBox(height: 24),
+              _buildPreview(theme, expressionPreview),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
       actions: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Button(
+                onPressed: () => Navigator.of(context).pop(null),
+                style: ButtonStyle(
+                  padding: ButtonState.all(
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 14)),
+                ),
+                child: const Text('Annulla'),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: _confirm,
+                style: ButtonStyle(
+                  padding: ButtonState.all(
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 14)),
+                  backgroundColor: ButtonState.resolveWith((states) {
+                    if (states.isDisabled) return theme.accentColor.withOpacity(0.4);
+                    if (states.isHovering) return theme.accentColor.light;
+                    return theme.accentColor;
+                  }),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    FaIcon(FontAwesomeIcons.check, size: 14, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Conferma'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(FluentThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(64.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Button(
-              onPressed: () => Navigator.of(context).pop(null),
-              style: ButtonStyle(
-                padding: ButtonState.all(
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: theme.resources.cardStrokeColorDefaultSolid,
+                shape: BoxShape.circle,
               ),
-              child: const Text('Annulla'),
+              child: FaIcon(
+                FontAwesomeIcons.triangleExclamation,
+                size: 48,
+                color: theme.resources.systemFillColorCritical,
+              ),
             ),
-            const SizedBox(width: 12),
-            FilledButton(
-              onPressed: _confirm,
-              style: ButtonStyle(
-                padding: ButtonState.all(
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+            const SizedBox(height: 24),
+            Text(
+              'Nessuna variabile disponibile',
+              style: theme.typography.subtitle?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
-              child: const Text('Conferma'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Definisci delle variabili nel progetto prima\ndi creare una condizione.',
+              style: theme.typography.body?.copyWith(
+                color: theme.typography.body?.color?.withOpacity(0.7),
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildModeSelector(FluentThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: theme.resources.cardStrokeColorDefaultSolid.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.resources.cardStrokeColorDefaultSolid,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildModeButton(
+              theme: theme,
+              label: 'Modalità Semplice',
+              icon: FontAwesomeIcons.circle,
+              isSelected: _mode == _ConditionMode.simple,
+              onTap: () => setState(() => _mode = _ConditionMode.simple),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildModeButton(
+              theme: theme,
+              label: 'Modalità Avanzata',
+              icon: FontAwesomeIcons.layerGroup,
+              isSelected: _mode == _ConditionMode.advanced,
+              onTap: _switchToAdvanced,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeButton({
+    required FluentThemeData theme,
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.accentColor.defaultBrushFor(theme.brightness)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: isSelected
+              ? [
+            BoxShadow(
+              color: theme.accentColor.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            )
+          ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            FaIcon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : theme.typography.body?.color,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: theme.typography.body?.copyWith(
+                color: isSelected ? Colors.white : theme.typography.body?.color,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -396,8 +556,17 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
     return Column(
       key: const ValueKey('advanced-ui'),
       children: [
-        ConstrainedBox(
+        Container(
           constraints: const BoxConstraints(maxHeight: 350),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.resources.cardStrokeColorDefaultSolid.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.resources.cardStrokeColorDefaultSolid,
+              width: 1,
+            ),
+          ),
           child: ListView.separated(
             shrinkWrap: true,
             itemCount: _advancedRows.length,
@@ -408,16 +577,45 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
             separatorBuilder: (context, index) {
               if (index < _connectors.length) {
                 return Padding(
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 8.0, horizontal: 60.0),
-                  child: ComboBox<String>(
-                    value: _connectors[index],
-                    isExpanded: true,
-                    items: const [
-                      ComboBoxItem(value: 'AND', child: Text('AND (entrambe vere)')),
-                      ComboBoxItem(value: 'OR', child: Text('OR (almeno una vera)')),
+                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                  child: Row(
+                    children: [
+                      Expanded(child: Divider()),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: theme.accentColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: theme.accentColor.withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: ComboBox<String>(
+                          value: _connectors[index],
+                          items: const [
+                            ComboBoxItem(
+                              value: 'AND',
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Text('AND'),
+                              ),
+                            ),
+                            ComboBoxItem(
+                              value: 'OR',
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Text('OR'),
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) => setState(() => _connectors[index] = val!),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Divider()),
                     ],
-                    onChanged: (val) => setState(() => _connectors[index] = val!),
                   ),
                 );
               }
@@ -426,13 +624,34 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
           ),
         ),
         if (_attemptedSubmit && !_areParenthesesBalanced())
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Text(
-              'Errore: le parentesi non sono bilanciate.',
-              style: theme.typography.caption?.copyWith(
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.resources.systemFillColorCritical.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
                 color: theme.resources.systemFillColorCritical,
+                width: 1,
               ),
+            ),
+            child: Row(
+              children: [
+                FaIcon(
+                  FontAwesomeIcons.circleExclamation,
+                  color: theme.resources.systemFillColorCritical,
+                  size: 16,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Le parentesi non sono bilanciate',
+                    style: theme.typography.body?.copyWith(
+                      color: theme.resources.systemFillColorCritical,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         const SizedBox(height: 16),
@@ -440,10 +659,22 @@ class _DecisionNodeDialogState extends State<_DecisionNodeDialog> {
           alignment: Alignment.centerRight,
           child: Button(
             onPressed: _addRow,
-            child: Row(mainAxisSize: MainAxisSize.min, children: const [
-              FaIcon(FontAwesomeIcons.plus, size: 16),
-              SizedBox(width: 10),
-              Text('Aggiungi Condizione'),
+            style: ButtonStyle(
+              backgroundColor: ButtonState.resolveWith((states) {
+                if (states.isHovering) return theme.accentColor.withOpacity(0.1);
+                return Colors.transparent;
+              }),
+              padding: ButtonState.all(
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              FaIcon(FontAwesomeIcons.plus, size: 14, color: theme.accentColor),
+              const SizedBox(width: 10),
+              Text(
+                'Aggiungi Condizione',
+                style: TextStyle(color: theme.accentColor, fontWeight: FontWeight.w600),
+              ),
             ]),
           ),
         ),

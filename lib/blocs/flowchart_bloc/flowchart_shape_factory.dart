@@ -115,15 +115,17 @@ class FlowNodeFactory {
       // CORRETTO: La logica ora si aspetta una semplice List<String> dal dialogo,
       // rendendo il codice più semplice e robusto.
       FlowNodeKind.input => InputNode(
-        id: _uuid.v4(),
-        x: position.dx,
-        y: position.dy,
-        width: 150.0,
-        height: 60.0,
-        text: text,
-        targetVariables:
-        (initialData?['targetVariables'] as List?)?.cast<String>() ?? [],
-      ),
+            id: _uuid.v4(),
+            x: position.dx,
+            y: position.dy,
+            width: 150.0,
+            height: 60.0,
+            text: text,
+            assignments: (initialData?['assignments'] as List?)
+                    ?.map((a) => Assignment.fromMap(a as Map<String, dynamic>))
+                    .toList() ??
+                [],
+          ),
 
       // CORRETTO: La logica qui era già giusta. Legge i nomi delle variabili
       // e li "risolve" cercando l'oggetto completo nella lista globale.
