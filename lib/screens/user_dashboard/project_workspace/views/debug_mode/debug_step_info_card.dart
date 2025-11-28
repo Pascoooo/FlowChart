@@ -1,7 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../../../../blocs/debug_bloc/debug_bloc_exports.dart';
+import '../../../../../blocs/debug_bloc/debug_bloc.dart';
+import '../../../../../blocs/debug_bloc/debug_state.dart';
 
 /// 📊 Step Info Card - Mostra il progresso corrente del debug
 class DebugStepInfoCard extends StatelessWidget {

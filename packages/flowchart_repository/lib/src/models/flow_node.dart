@@ -1128,6 +1128,9 @@ class ReturnNode extends FlowNode {
   }
 }
 
+/// Rappresenta un collegamento direzionato tra due nodi nel flowchart.
+/// Collega un nodo sorgente (from) a un nodo destinazione (to).
+/// Il campo 'port' opzionale specifica quale uscita del nodo usa (es. 'true'/'false' per decisioni).
 class FlowchartEdge extends Equatable {
   final String from;
   final String to;

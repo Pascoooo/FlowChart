@@ -23,7 +23,6 @@ class _InputNodeDialog extends StatefulWidget {
 }
 
 class _InputNodeDialogState extends State<_InputNodeDialog> {
-  final _labelController = TextEditingController();
   final List<_InputRowData> _assignments = [];
   bool _attemptedSubmit = false;
 
@@ -37,7 +36,6 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
 
   @override
   void dispose() {
-    _labelController.dispose();
     for (final a in _assignments) {
       a.dispose();
     }
@@ -180,7 +178,7 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
         .join('; ');
 
     Navigator.of(context).pop({
-      'text': _labelController.text.trim().isEmpty ? summary : _labelController.text.trim(),
+      'text': summary,
       'assignments': assignmentsList,
     });
   }
@@ -202,14 +200,6 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
             const SizedBox(height: 20),
             if (!hasVariables) _buildNoVariablesInfo(theme),
             if (hasVariables) ...[
-              InfoLabel(
-                label: 'Etichetta Nodo (opzionale)',
-                child: TextBox(
-                  controller: _labelController,
-                  placeholder: 'Es. Inserisci i dati',
-                ),
-              ),
-              const SizedBox(height: 24),
               _buildAssignmentHeader(theme),
               const SizedBox(height: 16),
               Expanded(
@@ -414,8 +404,6 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
                         if (_attemptedSubmit) _validateForm();
                       }
                     }),
-                  ),
-                ],
               ),
               const SizedBox(width: 12),
               IconButton(
@@ -469,8 +457,10 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
             _buildErrorMessages(a),
         ],
       ),
+        ],    ),
     );
   }
+
 
   String _getHintForVariable(String variableName) {
     final variable = widget.availableVariables.firstWhere(
@@ -566,4 +556,3 @@ class _InputRowData {
     valueController.dispose();
   }
 }
-

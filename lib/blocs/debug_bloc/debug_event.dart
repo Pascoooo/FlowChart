@@ -1,3 +1,6 @@
+/// Eventi del Debug BLoC.
+/// Rappresentano le azioni di debugging: start, stop, step avanti/indietro,
+/// input utente, step into/out sottoprogrammi e aggiornamento variabili.
 import 'package:equatable/equatable.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 

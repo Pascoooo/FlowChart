@@ -9,7 +9,6 @@ import '../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../blocs/auth_bloc/authentication_state.dart';
 import '../../blocs/project_bloc/project_bloc.dart';
 import '../../screens/auth/views/auth_page.dart';
-import '../../screens/user_dashboard/project_workspace/drawing_page/drawing_editor_page.dart';
 import '../error/error_page.dart';
 
 class AppRoutes {
@@ -17,13 +16,11 @@ class AppRoutes {
   static const String authName = 'auth';
   static const String settingsName = 'settings';
   static const String errorName = 'error';
-  static const String drawingEditorName = 'drawing-editor';
 
   static const String homePath = '/';
   static const String authPath = '/auth';
   static const String settingsPath = '/settings';
   static const String errorPath = '/error';
-  static const String drawingEditorPath = '/drawing-editor';
 }
 
 class AppRouter {
@@ -68,11 +65,6 @@ class AppRouter {
               path: AppRoutes.settingsPath,
               name: AppRoutes.settingsName,
               builder: (context, state) => const SettingsPage(),
-            ),
-            GoRoute(
-              path: AppRoutes.drawingEditorPath,
-              name: AppRoutes.drawingEditorName,
-              builder: (context, state) => const DrawingEditorPage(),
             ),
           ],
         ),

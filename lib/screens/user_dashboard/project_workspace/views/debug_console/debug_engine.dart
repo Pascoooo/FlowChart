@@ -315,8 +315,13 @@ class DebugEngine {
     _history.add(ConsoleEntry(type: ConsoleEntryType.success, text: message));
   }
 
-  void _addErrorMessage(String message) {
-    _history.add(ConsoleEntry(type: ConsoleEntryType.error, text: message));
+  /// Aggiunge un messaggio di errore alla console.
+  /// [blocking]: true per errori bloccanti (rosso), false per warning (arancione)
+  void _addErrorMessage(String message, {bool blocking = false}) {
+    _history.add(ConsoleEntry(
+      type: blocking ? ConsoleEntryType.blockingError : ConsoleEntryType.error,
+      text: message,
+    ));
   }
 
   void _addSystemMessage(String message) {
@@ -350,20 +355,23 @@ class DebugEngine {
 
   /// Chiamato dal widget quando il DebugBloc emette un nuovo stato
   /// dopo l'esecuzione di un nodo.
+  /// [blocking]: indica se l'errore è bloccante (true) o warning (false)
   void showExecutionResult({
     required bool success,
     String? message,
     Map<String, dynamic>? updatedVariables,
+    bool blocking = false,
   }) {
     if (success) {
       if (message != null && message.isNotEmpty) {
         _addSuccessMessage(message);
       }
       if (updatedVariables != null && updatedVariables.isNotEmpty) {
-        _addInfoMessage('Variabili aggiornate: ${updatedVariables.keys.join(', ')}');
+        // ✅ OTTIMIZZATO: Non mostrare "Variabili aggiornate" (ridondante)
+        // Le variabili sono già visibili nel pannello laterale
       }
     } else {
-      _addErrorMessage(message ?? 'Errore durante l\'esecuzione');
+      _addErrorMessage(message ?? 'Errore durante l\'esecuzione', blocking: blocking);
     }
 
     _state = ConsoleState.completed;
@@ -371,7 +379,8 @@ class DebugEngine {
     _notifyUpdate();
   }
 
-  /// Mostra il risultato di una decisione
+  /// Mostra il risultato di una decisione (deprecato, non più usato)
+  @deprecated
   void showDecisionResult({
     required bool result,
     required String condition,
@@ -384,8 +393,9 @@ class DebugEngine {
   }
 
   /// Mostra messaggi di errore da eventi esterni
-  void showError(String message) {
-    _addErrorMessage(message);
+  /// [blocking]: true per errori bloccanti (rosso critico)
+  void showError(String message, {bool blocking = false}) {
+    _addErrorMessage(message, blocking: blocking);
     _state = ConsoleState.error;
     _notifyUpdate();
   }

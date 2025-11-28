@@ -1,3 +1,5 @@
+/// Individual project card widget displaying project name and icon with hover effects.
+/// Includes contextual popup menu for project actions (rename, delete).
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
@@ -19,6 +21,7 @@ class ProjectCard extends StatelessWidget {
     required this.onRenamed,
   });
 
+  /// Builds project card with gradient background, folder icon, and popup menu.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);

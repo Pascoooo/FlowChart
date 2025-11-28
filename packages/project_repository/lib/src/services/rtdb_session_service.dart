@@ -14,10 +14,22 @@ class RtdbSessionService {
 
 
   // --- Workspace Session ---
+
+  /// Ottiene uno snapshot completo di tutte le sessioni attive dell'utente.
+  /// Restituisce i dati RTDB del nodo /sessions/{uid}.
   Future<DataSnapshot> getSessionSnapshot() => _rtdbSessionRef.get();
+
+  /// Rimuove la sessione di un singolo progetto dal RTDB.
+  /// Elimina tutti i dati sotto /sessions/{uid}/{projectId}.
   Future<void> removeProjectSession(String projectId) =>
       _rtdbSessionRef.child(projectId).remove();
+
+  /// Rimuove tutte le sessioni dell'utente dal RTDB.
+  /// Cancella completamente il nodo /sessions/{uid}.
   Future<void> clearAllSessions() => _rtdbSessionRef.remove();
+
+  /// Avvia una nuova sessione di lavoro per un progetto.
+  /// Cancella eventuali sessioni precedenti e salva i file iniziali su RTDB.
   Future<void> startSession(
       String projectId, Map<String, dynamic> filesData) async {
     await clearAllSessions();
@@ -29,6 +41,9 @@ class RtdbSessionService {
   }
 
   // --- File nella Sessione Live ---
+
+  /// Restituisce uno stream del contenuto live di un file.
+  /// Emette aggiornamenti in tempo reale ogni volta che il contenuto cambia su RTDB.
   Stream<String?> liveFileContent(String projectId, String fileId) {
     return _rtdbSessionRef
         .child(projectId)
@@ -39,6 +54,8 @@ class RtdbSessionService {
         .map((event) => event.snapshot.value as String?);
   }
 
+  /// Aggiorna il contenuto live di un file nella sessione RTDB.
+  /// Le modifiche vengono propagate in tempo reale a tutti i listener attivi.
   Future<void> updateLiveFileContent(
       String projectId, String fileId, String content) =>
       _rtdbSessionRef
@@ -48,12 +65,16 @@ class RtdbSessionService {
           .child('content')
           .set(content);
 
+  /// Aggiunge un nuovo file alla sessione RTDB corrente.
+  /// Il file diventa immediatamente disponibile per editing live.
   Future<void> addFileToSession(String projectId, MyFile file) => _rtdbSessionRef
       .child(projectId)
       .child('files')
       .child(file.fileId)
       .set({'name': file.name, 'content': file.content});
 
+  /// Rimuove un file dalla sessione RTDB.
+  /// Se è l'ultimo file, rimuove l'intera sessione del progetto.
   Future<void> removeFileFromSession(String projectId, String fileId) async {
     final fileNode =
     _rtdbSessionRef.child(projectId).child('files').child(fileId);
@@ -67,6 +88,8 @@ class RtdbSessionService {
     }
   }
 
+  /// Rinomina un file nella sessione RTDB.
+  /// Aggiorna solo il campo 'name' mantenendo il contenuto invariato.
   Future<void> renameFileInSession(
       String projectId, String fileId, String newName) =>
       _rtdbSessionRef
@@ -75,7 +98,8 @@ class RtdbSessionService {
           .child(fileId)
           .update({'name': newName});
 
-  /// Aggiunge lo stato di debug alla sessione di lavoro esistente. (dal tuo codice)
+  /// Inizializza lo stato di debug nella sessione RTDB corrente.
+  /// Salva le variabili iniziali e le dichiarazioni opzionali per il debugging.
   Future<void> initializeDebugSession(
     String projectId,
     Map<String, dynamic> initialVariables, {
@@ -91,7 +115,8 @@ class RtdbSessionService {
     return debugRef.set(payload);
   }
 
-  /// Aggiorna le variabili nello stato di debug della sessione corrente. (dal tuo codice)
+  /// Aggiorna le variabili nello stato di debug della sessione corrente.
+  /// Mergia i nuovi valori con quelli esistenti senza sovrascrivere tutto.
   Future<void> updateDebugVariables(String projectId, Map<String, dynamic> newValues) {
     return _rtdbSessionRef
         .child(projectId)
@@ -100,9 +125,9 @@ class RtdbSessionService {
         .update(newValues);
   }
 
-  /// Ascolta le modifiche nel nodo delle variabili di debug. (dal tuo codice)
+  /// Ascolta le modifiche alle variabili di debug in tempo reale.
+  /// Emette aggiornamenti ogni volta che le variabili cambiano durante il debugging.
   Stream<Map<String, dynamic>> watchDebugVariables(String projectId) {
-    // Ascolta .../sessions/{uid}/{projectId}/debugState/variables
     return _rtdbSessionRef
         .child(projectId)
         .child('debugState')
@@ -116,13 +141,14 @@ class RtdbSessionService {
     });
   }
 
-  /// Rimuove lo stato di debug dalla sessione corrente. (dal tuo codice)
+  /// Rimuove lo stato di debug dalla sessione corrente.
+  /// Cancella tutte le variabili e le dichiarazioni salvate per il debug.
   Future<void> clearDebugSession(String projectId) {
     return _rtdbSessionRef.child(projectId).child('debugState').remove();
   }
 
   /// Legge una sola volta lo stato corrente delle variabili di debug.
-  /// FIX: Aggiornato per usare la nuova struttura dati.
+  /// Snapshot sincrono per ottenere i valori attuali senza stream.
   Future<Map<String, dynamic>> getCurrentDebugVariables(String projectId) async {
     final snapshot = await _rtdbSessionRef
         .child(projectId)
@@ -138,6 +164,7 @@ class RtdbSessionService {
   }
 
   /// Legge le variabili dichiarate salvate nella sessione di debug.
+  /// Restituisce le dichiarazioni con i loro metadati (tipo, scope, etc.).
   Future<Map<String, Map<String, dynamic>>> getDeclaredVariables(String projectId) async {
     final snapshot = await _rtdbSessionRef
         .child(projectId)

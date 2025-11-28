@@ -1,3 +1,5 @@
+/// Modern loading indicator with fade-in animation and progress bar.
+/// Displays "Loading Projects" message with icon and animated entrance.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 

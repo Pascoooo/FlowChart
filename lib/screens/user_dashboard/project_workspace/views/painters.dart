@@ -1,7 +1,10 @@
+/// Custom painters for flowchart canvas: grid background, diamond shapes, and node connections.
+/// ConnectionPainter handles complex edge routing including do-while loops and nested loop closures.
 import 'dart:math';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
+/// Paints grid background with minor and major lines for canvas alignment.
 class GridPainter extends CustomPainter {
   final Color minorColor, majorColor;
   final double spacing, minorWidth, majorWidth;
@@ -16,6 +19,7 @@ class GridPainter extends CustomPainter {
     this.majorEvery = 4,
   });
 
+  /// Creates grid painter with theme-aware colors for light/dark modes.
   factory GridPainter.fromTheme(BuildContext context) {
     final theme = FluentTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -27,6 +31,7 @@ class GridPainter extends CustomPainter {
     );
   }
 
+  /// Draws grid with alternating minor and major lines at specified spacing.
   @override
   void paint(Canvas canvas, Size size) {
     final minor = Paint()
@@ -53,6 +58,7 @@ class GridPainter extends CustomPainter {
       old.minorColor != minorColor || old.majorColor != majorColor;
 }
 
+/// Paints diamond shape for decision/conditional nodes with fill and border.
 class DiamondPainter extends CustomPainter {
   final Color color, borderColor;
   final double strokeWidth;
@@ -63,6 +69,7 @@ class DiamondPainter extends CustomPainter {
     required this.strokeWidth,
   });
 
+  /// Draws diamond path with fill and stroke based on provided colors.
   @override
   void paint(Canvas canvas, Size size) {
     final path = Path()
@@ -89,6 +96,8 @@ class DiamondPainter extends CustomPainter {
           old.strokeWidth != strokeWidth;
 }
 
+/// Paints connections between flowchart nodes with intelligent routing for loops and branches.
+/// Handles do-while body connections and loop closure arcs with nesting awareness.
 class ConnectionPainter extends CustomPainter {
   final List<FlowNode> nodes;
   final List<FlowchartEdge> edges;
@@ -100,11 +109,12 @@ class ConnectionPainter extends CustomPainter {
     required this.theme,
   });
 
-  // Helper per ottenere il centro di un nodo (aggiunto per pulizia)
+  /// Returns center offset of given node for connection calculations.
   Offset _getNodeCenter(FlowNode node) {
     return Offset(node.x + node.width / 2, node.y + node.height / 2);
   }
 
+  /// Paints all edges with special handling for loop closures and do-while body connections.
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()

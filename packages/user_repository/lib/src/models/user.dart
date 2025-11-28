@@ -2,6 +2,8 @@ import '../entities/entities.dart';
 import 'package:equatable/equatable.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Rappresenta un utente dell'applicazione con profilo e impostazioni.
+/// Include dati di autenticazione e informazioni di profilo (nome, foto).
 class MyUser extends Equatable {
   final String userId;
   final String email;
@@ -9,7 +11,6 @@ class MyUser extends Equatable {
   final String photoURL;
   final Timestamp? nameLastUpdatedAt;
   final Timestamp? photoLastUpdatedAt;
-  final bool driveConnected; // NUOVO CAMPO
 
   const MyUser({
     required this.userId,
@@ -18,7 +19,6 @@ class MyUser extends Equatable {
     required this.photoURL,
     this.nameLastUpdatedAt,
     this.photoLastUpdatedAt,
-    this.driveConnected = false, // VALORE DI DEFAULT
   });
 
   static const empty = MyUser(
@@ -26,11 +26,13 @@ class MyUser extends Equatable {
     email: '',
     name: '',
     photoURL: '',
-    driveConnected: false, // AGGIUNTO QUI
   );
 
   bool get isEmpty => this == MyUser.empty;
 
+  /// Crea una copia di MyUser con i campi specificati aggiornati.
+  /// Tutti i parametri sono opzionali; i campi non specificati mantengono
+  /// il valore corrente.
   MyUser copyWith({
     String? userId,
     String? email,
@@ -38,7 +40,6 @@ class MyUser extends Equatable {
     String? photoURL,
     Timestamp? nameLastUpdatedAt,
     Timestamp? photoLastUpdatedAt,
-    bool? driveConnected, // AGGIUNTO QUI
   }) {
     return MyUser(
       userId: userId ?? this.userId,
@@ -47,10 +48,11 @@ class MyUser extends Equatable {
       photoURL: photoURL ?? this.photoURL,
       nameLastUpdatedAt: nameLastUpdatedAt ?? this.nameLastUpdatedAt,
       photoLastUpdatedAt: photoLastUpdatedAt ?? this.photoLastUpdatedAt,
-      driveConnected: driveConnected ?? this.driveConnected, // AGGIUNTO QUI
     );
   }
 
+  /// Converte il modello MyUser in MyUserEntity per la persistenza.
+  /// MyUserEntity viene usato per serializzare i dati verso Firestore.
   MyUserEntity toEntity() {
     return MyUserEntity(
       userId: userId,
@@ -59,10 +61,11 @@ class MyUser extends Equatable {
       photoURL: photoURL,
       nameLastUpdatedAt: nameLastUpdatedAt,
       photoLastUpdatedAt: photoLastUpdatedAt,
-      driveConnected: driveConnected, // AGGIUNTO QUI
     );
   }
 
+  /// Converte MyUserEntity (dal database) in un'istanza di MyUser.
+  /// Utilizzato per deserializzare i dati ricevuti da Firestore nel modello di dominio.
   static MyUser fromEntity(MyUserEntity entity) {
     return MyUser(
       userId: entity.userId,
@@ -71,7 +74,6 @@ class MyUser extends Equatable {
       photoURL: entity.photoURL,
       nameLastUpdatedAt: entity.nameLastUpdatedAt,
       photoLastUpdatedAt: entity.photoLastUpdatedAt,
-      driveConnected: entity.driveConnected, // AGGIUNTO QUI
     );
   }
 
@@ -83,6 +85,5 @@ class MyUser extends Equatable {
     photoURL,
     nameLastUpdatedAt,
     photoLastUpdatedAt,
-    driveConnected, // AGGIUNTO QUI
   ];
 }

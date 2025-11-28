@@ -1,3 +1,6 @@
+/// Header del card di autenticazione con logo, titolo e toggle tema.
+/// Mostra opzionalmente un back button e anima i testi per un ingresso morbido.
+/// Pensato per mantenere coerenza di brand tra versioni light/dark.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show Icons;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -19,6 +22,8 @@ class AuthHeader extends StatelessWidget {
     this.showBackButton = false,
   });
 
+  /// Rende l'intestazione con logo animato, testi e azione tema/back.
+  /// Adatta i colori al tema corrente e gestisce animazioni di ingresso.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);

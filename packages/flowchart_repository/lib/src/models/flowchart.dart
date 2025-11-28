@@ -3,8 +3,8 @@ import '../entities/flowchart_entity.dart';
 import 'flow_node.dart';
 import 'flowchart_type.dart';
 
-/// Rappresenta i parametri e il tipo di ritorno di un flowchart,
-/// definendo la sua firma come se fosse una funzione.
+/// Rappresenta la firma di un flowchart (parametri e tipo di ritorno).
+/// Definisce l'interfaccia del flowchart come una funzione richiamabile.
 class FlowchartSignature extends Equatable {
   final List<FunctionParam> parameters;
   final String returnType;
@@ -18,6 +18,9 @@ class FlowchartSignature extends Equatable {
   List<Object?> get props => [parameters, returnType];
 }
 
+/// Rappresenta un flowchart completo con nodi, collegamenti e metadati.
+/// Può essere di tipo 'main' (programma principale) o 'function' (sottoprogramma).
+/// Include la signature per flowchart richiamabili e la lista di variabili dichiarate.
 class Flowchart extends Equatable {
   final String flowchartId;
   final String name;
@@ -45,6 +48,8 @@ class Flowchart extends Equatable {
   /// Verifica se il flowchart è un sottoprogramma
   bool get isFunction => type == FlowchartType.function;
 
+  /// Crea una copia del Flowchart con i campi specificati aggiornati.
+  /// Tutti i parametri sono opzionali; i campi non specificati mantengono il valore corrente.
   Flowchart copyWith({
     String? flowchartId,
     String? name,
@@ -67,6 +72,8 @@ class Flowchart extends Equatable {
     );
   }
 
+  /// Converte il Flowchart in FlowchartEntity per la persistenza.
+  /// Serializza tutti i nodi e gli edge nelle loro rappresentazioni entity.
   FlowchartEntity toEntity() {
     return FlowchartEntity(
       flowchartId: flowchartId,
@@ -80,6 +87,8 @@ class Flowchart extends Equatable {
     );
   }
 
+  /// Crea un Flowchart da FlowchartEntity (deserializzazione).
+  /// Ricostruisce tutti i nodi dal loro formato entity usando il factory pattern.
   static Flowchart fromEntity(FlowchartEntity entity) {
     final allVariables = entity.variables;
     return Flowchart(

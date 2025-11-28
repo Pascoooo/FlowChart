@@ -11,15 +11,19 @@ class ExecutionResult extends Equatable {
   final bool requiresUserInput;
   final String? userInputPrompt;
 
-  // 🔴 FIX CRITICO #2: Comunicazione esplicita dello stato del percorso
-  final bool isEndOfPath;  // Il percorso è terminato (End node raggiunto)
-  final String? decisionBranch;  // 'true', 'false', 'loop', null se non è una decisione
+  /// Indica se il percorso di esecuzione è terminato (End node raggiunto)
+  final bool isEndOfPath;
 
-  // 🟠 FIX MAGGIORE #4: Supporto per sottoprogrammi
-  final bool isSubprogramCall;  // Questo nodo chiama un sottoprogramma
-  final String? subprogramName;  // Nome del sottoprogramma da chiamare
+  /// Specifica il branch di decisione preso: 'true', 'false', 'loop', o null
+  final String? decisionBranch;
 
-  // 🆕 Classificazione errore: bloccante vs non-bloccante
+  /// Indica se questo nodo esegue una chiamata a un sottoprogramma
+  final bool isSubprogramCall;
+
+  /// Nome del sottoprogramma da invocare (se isSubprogramCall è true)
+  final String? subprogramName;
+
+  /// Classifica l'errore come bloccante (true) o non-bloccante (false)
   final bool isBlockingError;
 
   const ExecutionResult({

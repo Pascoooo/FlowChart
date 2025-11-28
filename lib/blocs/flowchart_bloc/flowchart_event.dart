@@ -1,3 +1,6 @@
+/// Eventi del Flowchart BLoC.
+/// Rappresentano tutte le operazioni di editing: caricamento, aggiunta/rimozione nodi,
+/// collegamenti, modalità connettore, gestione cicli, undo/redo, variabili globali e debug mode.
 import 'package:equatable/equatable.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter/material.dart';

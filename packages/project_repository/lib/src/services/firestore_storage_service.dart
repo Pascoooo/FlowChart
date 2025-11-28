@@ -17,6 +17,8 @@ class FirestoreStorageService {
 
   // --- Gestione Progetti ---
 
+  /// Restituisce uno stream di tutti i progetti dell'utente, ordinati per ultimo accesso.
+  /// Emette una nuova lista ogni volta che i dati cambiano su Firestore.
   Stream<List<MyProject>> projects() {
     return projectCollection
         .orderBy('updatedAt', descending: true)
@@ -26,10 +28,14 @@ class FirestoreStorageService {
             .toList());
   }
 
+  /// Ottiene il documento Firestore di un singolo progetto.
+  /// Utilizzato per verificare l'esistenza o leggere i metadati del progetto.
   Future<DocumentSnapshot<Map<String, dynamic>>> getProjectDoc(String projectId) {
     return projectCollection.doc(projectId).get();
   }
 
+  /// Crea un nuovo progetto con il nome specificato.
+  /// Genera automaticamente un UUID, imposta la data corrente e lo marca come privato.
   Future<MyProject> createProject({required String name}) async {
     final projectId = const Uuid().v4();
     final now = DateTime.now();
@@ -44,7 +50,8 @@ class FirestoreStorageService {
     return MyProject.fromEntity(newProjectEntity);
   }
 
-
+  /// Elimina un progetto e tutti i suoi file associati.
+  /// Usa un'operazione batch per garantire atomicità (tutto o niente).
   Future<void> deleteProject({required String projectId}) async {
     final projectRef = projectCollection.doc(projectId);
     final filesSnapshot = await projectRef.collection('files').get();
@@ -56,6 +63,8 @@ class FirestoreStorageService {
     await batch.commit();
   }
 
+  /// Rinomina un progetto esistente.
+  /// Aggiorna solo il campo 'name' senza modificare altri metadati.
   Future<void> renameProject(
       {required String projectId, required String newName}) async {
     await projectCollection.doc(projectId).update({'name': newName});
@@ -68,6 +77,8 @@ class FirestoreStorageService {
 
   // --- Gestione File ---
 
+  /// Ottiene tutti i file di un progetto come lista di modelli MyFile.
+  /// Carica l'intero contenuto di ogni file dalla subcollection 'files'.
   Future<List<MyFile>> getProjectFiles({required String projectId}) async {
     final snapshot =
     await projectCollection.doc(projectId).collection('files').get();
@@ -76,11 +87,15 @@ class FirestoreStorageService {
         .toList();
   }
 
+  /// Ottiene tutti i file di un progetto come mappa {fileId -> dati grezzi}.
+  /// Formato ottimizzato per inizializzare sessioni RTDB o operazioni batch.
   Future<Map<String, Map<String, dynamic>>> getProjectFilesAsMap({required String projectId}) async {
     final snapshot = await projectCollection.doc(projectId).collection('files').get();
     return {for (var doc in snapshot.docs) doc.id: doc.data()};
   }
 
+  /// Aggiunge un nuovo file al progetto specificato.
+  /// Genera automaticamente un UUID per il file e lo salva in Firestore.
   Future<MyFile> addFileToProject(
       {required String projectId,
         required String fileName,
@@ -96,6 +111,8 @@ class FirestoreStorageService {
     return MyFile.fromEntity(newFileEntity);
   }
 
+  /// Elimina un file da un progetto.
+  /// Rimuove solo il file specificato, senza toccare altri file o il progetto.
   Future<void> deleteFile(
       {required String projectId, required String fileId}) async {
     await projectCollection
@@ -105,6 +122,8 @@ class FirestoreStorageService {
         .delete();
   }
 
+  /// Rinomina un file esistente.
+  /// Aggiorna solo il campo 'name' senza modificare il contenuto.
   Future<void> renameFile(
       {required String projectId,
         required String fileId,
@@ -135,6 +154,8 @@ class FirestoreStorageService {
     await batch.commit();
   }
 
+  /// Aggiorna il contenuto di un singolo file e il timestamp del progetto.
+  /// Usa un batch per garantire che entrambe le operazioni avvengano insieme.
   Future<void> updateFileContent(
       {required String projectId,
         required String fileId,
@@ -222,6 +243,8 @@ class FirestoreStorageService {
     }
   }
 
+  /// Recupera un progetto pubblico dal suo ID.
+  /// Cerca nella collection 'publicProjects' separata. Restituisce null se non trovato.
   Future<MyProject?> getPublicProjectById(String projectId) async {
     final cleanProjectId = projectId.trim();
     if (cleanProjectId.isEmpty) {
@@ -239,11 +262,12 @@ class FirestoreStorageService {
         return null;
       }
     } catch (e) {
-      print('Errore in getPublicProjectById: $e');
       rethrow;
     }
   }
 
+  /// Recupera un progetto pubblico con tutti i suoi file.
+  /// Restituisce una mappa {project: MyProject, files: List<MyFile>} o null se non trovato/privato.
   Future<Map<String, dynamic>?> getPublicProjectWithFiles(String projectId) async {
     final cleanId = projectId.trim();
     if (cleanId.isEmpty) return null;
@@ -261,7 +285,6 @@ class FirestoreStorageService {
       return {'project': project, 'files': files};
 
     } catch (e) {
-      print('Errore in getPublicProjectWithFiles: $e');
       rethrow;
     }
   }

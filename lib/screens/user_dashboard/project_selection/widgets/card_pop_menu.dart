@@ -1,3 +1,6 @@
+/// Contextual popup menu for project card actions.
+/// Provides rename, share/visibility toggle, copy public ID, and delete options.
+/// Menu adapts based on project's public/private status.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
@@ -23,14 +26,13 @@ class CardPopupMenu extends StatelessWidget {
     required this.onRenamed,
   });
 
+  /// Builds flyout menu button with dynamic items based on project visibility status.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
     final projectBloc = context.read<ProjectBloc>();
     final bool isCurrentlyPublic = project.isPublic;
     final flyoutController = FlyoutController();
-
-    // Salvo il contesto esterno per usarlo dopo aver chiuso il flyout
     final outerContext = context;
 
     return FlyoutTarget(

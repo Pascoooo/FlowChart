@@ -1,3 +1,6 @@
+/// Eventi del Project BLoC.
+/// Rappresentano tutte le operazioni sui progetti (CRUD), gestione sessioni di lavoro,
+/// recupero/scarto modifiche non salvate da RTDB e caricamento workspace statici.
 import 'package:equatable/equatable.dart';
 import 'package:project_repository/project_repository.dart';
 

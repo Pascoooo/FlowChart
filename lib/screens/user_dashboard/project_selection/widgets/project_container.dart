@@ -1,9 +1,13 @@
+/// Main container for project grid displaying all projects in a carousel.
+/// Features animated entrance, header with icon, "Open with ID" button for shared projects.
+/// Shows empty state with floating animation when no projects exist.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:project_repository/project_repository.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
+import '../../../../config/constants/app_constants.dart';
 import '../../../../config/constants/themes.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import 'project_carousel.dart';
@@ -39,6 +43,7 @@ class ProjectContainerState extends State<ProjectContainer>
     _containerController.forward();
   }
 
+  /// Initializes container and header slide animations for entrance effect.
   void _initializeAnimations() {
     _containerController = AnimationController(
       duration: AppConstants.animationDuration,
@@ -62,6 +67,7 @@ class ProjectContainerState extends State<ProjectContainer>
     super.dispose();
   }
 
+  /// Builds animated container with header, project carousel, and "Open with ID" button.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
@@ -105,6 +111,7 @@ class ProjectContainerState extends State<ProjectContainer>
   }
 
 
+  /// Renders button for opening shared projects via project ID input dialog.
   Widget _buildViewSharedButton(BuildContext context, FluentThemeData theme) {
     return Tooltip(
       message: "Apri progetto condiviso",
@@ -155,6 +162,7 @@ class ProjectContainerState extends State<ProjectContainer>
     );
   }
 
+  /// Creates gradient decoration with borders and shadows for container.
   BoxDecoration _buildContainerDecoration(FluentThemeData theme) {
     return BoxDecoration(
       borderRadius: BorderRadius.circular(AppStyles.borderRadiusLarge),
@@ -189,6 +197,7 @@ class ProjectContainerState extends State<ProjectContainer>
     );
   }
 
+  /// Builds animated header with folder icon and "Your Projects" title.
   Widget _buildEnhancedHeader(FluentThemeData theme) {
     return SlideTransition(
       position: _headerSlideAnimation,
@@ -231,6 +240,7 @@ class ProjectContainerState extends State<ProjectContainer>
     );
   }
 
+  /// Returns carousel with projects if available, otherwise shows empty state.
   Widget _buildContent() {
     return widget.projects.isNotEmpty
         ? ProjectCarousel(
@@ -243,6 +253,8 @@ class ProjectContainerState extends State<ProjectContainer>
   }
 }
 
+/// Empty state widget with floating icon animation shown when no projects exist.
+/// Features inspirational message encouraging user to create first project.
 class EnhancedEmptyState extends StatefulWidget {
   const EnhancedEmptyState({super.key});
 
@@ -255,6 +267,7 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
   late AnimationController _floatingController;
   late Animation<double> _floatingAnimation;
 
+  /// Sets up continuous floating animation for empty state icon.
   @override
   void initState() {
     super.initState();
@@ -278,6 +291,7 @@ class _EnhancedEmptyStateState extends State<EnhancedEmptyState>
     super.dispose();
   }
 
+  /// Builds empty state with floating folder icon and motivational message.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);

@@ -1,11 +1,16 @@
+/// Interactive flowchart canvas rendering nodes, edges, and grid overlay.
+/// Handles debug mode auto-selection, connector mode tap behavior, and read-only constraints.
+/// Uses BlocListener for side effects and BlocBuilder for dynamic rendering.
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../../../blocs/debug_bloc/debug_bloc.dart';
+import '../../../../blocs/debug_bloc/debug_event.dart';
+import '../../../../blocs/debug_bloc/debug_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
-import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 import 'node_widget.dart';
 import 'painters.dart';
 import 'node_creation_service.dart';
@@ -22,12 +27,12 @@ class FlowchartCanvas extends StatelessWidget {
     this.allowDragInReadOnly = false,
   });
 
+  /// Builds canvas with listeners for debug/flowchart events and renders nodes/edges dynamically.
   @override
   Widget build(BuildContext context) {
     return BlocListener<FlowchartBloc, FlowchartState>(
       listener: (context, state) {
         if (state is FlowchartActionFailure) {
-          // Log in console invece di mostrare un dialogo
           debugPrint('Flowchart error: \\n- ${state.title}: ${state.message}');
         }
       },

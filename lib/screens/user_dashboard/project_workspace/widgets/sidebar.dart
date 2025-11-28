@@ -1,3 +1,6 @@
+/// Project sidebar with file navigation, animated header, and file management controls.
+/// Displays project files, allows creating/selecting files, and provides back navigation.
+/// Features theme toggle and settings access in bottom actions.
 import 'package:file_repository/file_repository.dart';
 import 'package:flowchart_thesis/config/constants/theme_switch.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -9,11 +12,43 @@ import 'package:flowchart_repository/flowchart_repository.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
+import 'dart:convert';
+import '../../../../blocs/project_bloc/project_state.dart';
 import '../../../../config/router/app_router.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/dialog_service/node_dialogs/create_function_dialog.dart';
+
+/// Esegue un flush del flowchart corrente salvandolo su RTDB.
+/// Usato prima di lasciare il progetto per non perdere modifiche.
+Future<void> _flushCurrentFlowchart(BuildContext context) async {
+  try {
+    final flowState = context.read<FlowchartBloc>().state;
+    final fileState = context.read<FileSystemBloc>().state;
+    final projectState = context.read<ProjectBloc>().state;
+
+    if (flowState is FlowchartLoaded &&
+        fileState is FileSystemLoaded &&
+        projectState is ProjectsLoaded &&
+        projectState.selectedProject != null) {
+      final flowchart = flowState.flowchart;
+      final jsonContent = jsonEncode(flowchart.toEntity().toDocument());
+
+      if (jsonContent.trim().isNotEmpty && fileState.activeFileId != null) {
+        await context.read<ProjectBloc>().projectRepository.updateLiveFileContent(
+          projectState.selectedProject!.projectId,
+          fileState.activeFileId!,
+          jsonContent,
+        );
+      }
+    }
+  } catch (e) {
+    // Errore silenzioso: il salvataggio avverrÃ  comunque in endWorkspaceSession
+  }
+}
 
 class ProjectSidebar extends StatefulWidget {
   final MyProject selectedProject;
@@ -86,6 +121,7 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
       ),
     );
   }
+
 }
 
 /// Header della Sidebar.
@@ -133,7 +169,10 @@ class _SidebarHeaderState extends State<_SidebarHeader>
       child: Row(
         children: [
           IconButton(
-            onPressed: () {
+            onPressed: () async {
+              // ✅ FIX: Flush immediato del flowchart prima di uscire
+              await _flushCurrentFlowchart(context);
+              if (!mounted) return;
               context.read<ProjectBloc>().add(const LeaveProject());
             },
             style: ButtonStyle(

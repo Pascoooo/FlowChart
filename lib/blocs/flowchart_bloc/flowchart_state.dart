@@ -1,3 +1,7 @@
+/// Stati del Flowchart BLoC.
+/// FlowchartLoaded contiene il diagramma corrente e utilities per navigazione grafo:
+/// BFS/DFS, validazione cicli, rilevamento nodi foglia, gestione corpo cicli while/do-while.
+/// Include modalità connettore, debug mode e riferimenti ai flowchart del progetto.
 import 'dart:convert';
 import 'dart:developer';
 import 'package:equatable/equatable.dart';
@@ -68,6 +72,7 @@ class FlowchartLoaded extends FlowchartState {
     );
   }
 
+  /// Trova un nodo per ID. Ritorna null se non esiste.
   FlowNode? getNodeById(String id) {
     try {
       return flowchart.nodes.firstWhere((node) => node.id == id);
@@ -76,10 +81,12 @@ class FlowchartLoaded extends FlowchartState {
     }
   }
 
+  /// Restituisce tutti gli archi in uscita da un nodo.
   List<FlowchartEdge> getOutgoingEdges(String nodeId) {
     return flowchart.edges.where((edge) => edge.from == nodeId).toList();
   }
 
+  /// Restituisce tutti gli archi in entrata verso un nodo.
   List<FlowchartEdge> getIncomingEdges(String nodeId) {
     return flowchart.edges.where((edge) => edge.to == nodeId).toList();
   }
@@ -104,10 +111,13 @@ class FlowchartLoaded extends FlowchartState {
     return ancestors;
   }
 
+  /// Verifica se un nodo è foglia (senza archi in uscita).
   bool isLeafNode(String nodeId) {
     return !flowchart.edges.any((edge) => edge.from == nodeId);
   }
 
+  /// Verifica se un nodo può avere ulteriori connessioni in uscita.
+  /// Decision/loop hanno max 2 connessioni, End nessuna, altri max 1.
   bool canAddOutgoingConnection(String nodeId) {
     final node = getNodeById(nodeId);
     if (node == null) return false;
@@ -197,6 +207,7 @@ class FlowchartLoaded extends FlowchartState {
   }
 
   /// Verifica se un nodo è dentro un ciclo
+  /// Verifica se un nodo è all'interno di un ciclo (while o do-while).
   bool isInsideLoop(String nodeId) {
     return getParentLoopNodeId(nodeId) != null;
   }
@@ -423,11 +434,14 @@ class FlowchartLoaded extends FlowchartState {
     }
   }
 
+  /// Serializza lo stato del flowchart in JSON.
   String toJson() {
     final entity = flowchart.toEntity();
     return jsonEncode(entity.toDocument());
   }
 
+  /// Crea una copia dello stato con modifiche selettive.
+  /// clearSelection e clearConnectorSource consentono di pulire esplicitamente i campi.
   FlowchartLoaded copyWith({
     Flowchart? flowchart,
     String? selectedNodeId,

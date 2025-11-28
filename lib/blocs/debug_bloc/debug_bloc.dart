@@ -1,18 +1,8 @@
-// ============================================================================
-// 🎨 DEBUG BLOC - COORDINAMENTO UI (Presentation Logic)
-// ============================================================================
-//
-// RESPONSABILITÀ:
-// ✅ Coordinare eventi debug
-// ✅ Tradurre repository → UI state
-// ✅ Emettere stati per la UI
-// ❌ NON esegue logica nodi
-// ❌ NON gestisce variabili direttamente
-//
-// REGOLA D'ORO: Delega TUTTO al repository, emetti stati puliti
-//
-// ============================================================================
-
+/// Debug BLoC gestisce il ciclo di vita del debugging dei flowchart.
+/// Coordina l'esecuzione step-by-step, navigazione avanti/indietro,
+/// gestione input utente (decisioni/assignment), step into/out sottoprogrammi.
+/// Delega tutta la logica di esecuzione nodi al DebugRepository e traduce risultati in stati UI.
+/// Mantiene cache del contesto per resilienza e risolve il flowchart corretto in caso di chiamate.
 import 'package:bloc/bloc.dart';
 import 'package:debug_repository/debug_repository.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
@@ -28,6 +18,8 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
   Flowchart? _lastFlowchart;
   Map<String, Flowchart> _lastProjectFlowcharts = const {};
 
+  /// Inizializza il BLoC con DebugRepository e registra tutti gli event handler.
+  /// Gestisce start/stop, step avanti/indietro, input utente, step into/out e aggiornamento variabili.
   DebugBloc({required this.debugRepository}) : super(const DebugInitial()) {
     on<DebugStart>(_onStart);
     on<DebugNext>(_onNext);
@@ -40,6 +32,9 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     on<DebugStepOut>(_onStepOut);
   }
 
+  /// Risolve il flowchart corrente in base al call stack della sessione.
+  /// Se siamo in un sottoprogramma, cerca nel call stack; altrimenti usa il flowchart principale.
+  /// Implementa fallback multipli per resilienza: ID, nome, primo match.
   Flowchart _resolveCurrentFlowchart(Flowchart fallback, Map<String, Flowchart> projectFlowcharts, DebugSession session) {
     // Se siamo dentro un sottoprogramma, usa il flowchart dal top del call stack
     if (session.callStack.isNotEmpty) {
@@ -80,7 +75,9 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     return fallback;
   }
 
-  /// ✅ Validazione preliminare: impedisce l'avvio del debug se la struttura è invalida
+  /// Valida la struttura del flowchart prima di avviare il debug.
+  /// Verifica do-while con corpo non definito, while con corpo ma senza chiusura, nodo Fine nel corpo while.
+  /// Blocca debug se rileva incongruenze strutturali.
   bool _validateStructureForDebug(Flowchart flowchart) {
     final s = FlowchartLoaded(flowchart: flowchart);
 
@@ -119,10 +116,8 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     return true;
   }
 
-  // ==========================================================================
-  // 🚀 START
-  // ==========================================================================
-
+  /// Avvia una nuova sessione di debug.
+  /// Valida struttura, sincronizza flowchart progetto, costruisce debug path ed esegue automaticamente il primo step.
   Future<void> _onStart(DebugStart event, Emitter<DebugState> emit) async {
     try {
       debugPrint('🎬 Debug Start');
@@ -168,13 +163,9 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     }
   }
 
-  // ==========================================================================
-  // 🛠️ UTILITY: Costruisce il debug path seguendo gli edge
-  // ==========================================================================
-
-  /// Costruisce il debug path completo seguendo gli edge del flowchart.
-  /// Questa logica era precedentemente nella UI (ProjectWorkspace), ma è stata
-  /// spostata qui perché è logica di business pura.
+  /// Costruisce il debug path completo seguendo gli archi del flowchart.
+  /// Parte dal nodo Start e segue gli edge di uscita predefiniti fino al nodo End.
+  /// Previene loop infiniti con set visited e gestisce priorità edge (null > non-loop).
   List<String> _buildDebugPath(Flowchart flowchart) {
     final path = <String>[];
     final visited = <String>{};
@@ -243,10 +234,8 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     return path;
   }
 
-  // ==========================================================================
-  // 🔄 RESET FIRST STEP (dopo zoom iniziale)
-  // ==========================================================================
-
+  /// Resetta il flag isFirstStep dopo il rendering iniziale con zoom.
+  /// Previene zoom ripetuto su UI refresh.
   Future<void> _onResetFirstStep(DebugResetFirstStep event, Emitter<DebugState> emit) async {
     if (state is! DebugInProgress) return;
     final currentState = state as DebugInProgress;
@@ -257,10 +246,9 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     }
   }
 
-  // ==========================================================================
-  // ➡️ NEXT (Il più importante!) - MODIFICATO PER AUTO-ESECUZIONE
-  // ==========================================================================
-
+  /// Esegue il prossimo step del debug.
+  /// Delega esecuzione al repository, gestisce risultati (successo/errore/input richiesto/fine percorso).
+  /// Previene re-entrancy con flag isProcessing. Auto-esegue primo step se isAutoStart.
   Future<void> _onNext(DebugNext event, Emitter<DebugState> emit) async {
     // Evita re-entrancy: se stiamo già elaborando, ignora
     if (state is DebugInProgress) {
@@ -404,10 +392,8 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     }
   }
 
-  // ==========================================================================
-  // ⬅️ PREVIOUS
-  // ==========================================================================
-
+  /// Torna allo step precedente (undo).
+  /// Previene navigazione indietro se non possibile e gestisce lock isProcessing.
   Future<void> _onPrevious(DebugPrevious event, Emitter<DebugState> emit) async {
     if (state is! DebugInProgress) return;
     final s = state as DebugInProgress;
@@ -438,10 +424,7 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     }
   }
 
-  // ==========================================================================
-  // 🛑 STOP
-  // ==========================================================================
-
+  /// Termina la sessione di debug corrente e ritorna allo stato iniziale.
   Future<void> _onStop(DebugStop event, Emitter<DebugState> emit) async {
     try {
       await debugRepository.endSession();
@@ -462,10 +445,8 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     debugPrint('🎲 Decisione valutata: ${event.result}');
   }
 
-  // ==========================================================================
-  // 🔄 UPDATE VARIABLES
-  // ==========================================================================
-
+  /// Aggiorna le variabili durante il debug (input utente per assignment/input node).
+  /// Delega aggiornamento al repository e ri-emette stato corrente con variabili aggiornate.
   Future<void> _onUpdateVariables(DebugUpdateVariables event, Emitter<DebugState> emit) async {
     try {
       await debugRepository.updateVariables(event.variables);
@@ -499,10 +480,8 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     }
   }
 
-  // ==========================================================================
-  // ⬇️ STEP INTO (Sottoprogramma)
-  // ==========================================================================
-
+  /// Entra nel sottoprogramma chiamato dal nodo ProcessNode corrente.
+  /// Delega gestione call stack al repository e aggiorna stato.
   Future<void> _onStepInto(DebugStepInto event, Emitter<DebugState> emit) async {
     if (state is! DebugInProgress) return;
 
@@ -529,10 +508,8 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     }
   }
 
-  // ==========================================================================
-  // ⬆️ STEP OUT (Ritorno da Sottoprogramma)
-  // ==========================================================================
-
+  /// Ritorna dal sottoprogramma corrente al chiamante con valore di ritorno.
+  /// Delega gestione call stack al repository e aggiorna stato.
   Future<void> _onStepOut(DebugStepOut event, Emitter<DebugState> emit) async {
     if (state is! DebugInProgress) return;
 
@@ -559,10 +536,8 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
     }
   }
 
-  // ==========================================================================
-  // 🛠️ UTILITY: Emetti stato running pulito
-  // ==========================================================================
-
+  /// Emette stato DebugInProgress pulito con sessione corrente.
+  /// Risolve il flowchart effettivo (callee se in sottoprogramma) e gestisce indice negativo o fine percorso.
   Future<void> _emitRunningState(
       Emitter<DebugState> emit,
       Flowchart flowchart,

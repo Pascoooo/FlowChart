@@ -5,7 +5,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../user_dashboard/project_workspace/views/painters.dart';
 
-/// Preview statica di un flowchart (solo visualizzazione).
+/// Static flowchart preview widget for read-only visualization.
+/// Automatically scales content to fit viewport with configurable grid and border emphasis.
 class FlowchartPreview extends StatelessWidget {
   final String flowchartContent;
   final bool showGrid;
@@ -20,6 +21,7 @@ class FlowchartPreview extends StatelessWidget {
     this.showUnsavedBadge = false,
   });
 
+  /// Parses flowchart JSON content, returning empty state on failure.
   FlowchartLoaded _parse(String raw) {
     if (raw.trim().isEmpty) return FlowchartLoaded.empty();
     try {
@@ -30,6 +32,7 @@ class FlowchartPreview extends StatelessWidget {
     }
   }
 
+  /// Builds preview with themed borders, shadows, optional grid, and unsaved badge.
   @override
   Widget build(BuildContext context) {
     final state = _parse(flowchartContent);
@@ -103,8 +106,11 @@ class FlowchartPreview extends StatelessWidget {
   }
 }
 
+/// Badge indicating unsaved changes displayed in preview corner.
 class _UnsavedBadge extends StatelessWidget {
   const _UnsavedBadge();
+
+  /// Builds red warning badge with icon and text.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
@@ -144,6 +150,7 @@ class _UnsavedBadge extends StatelessWidget {
   }
 }
 
+/// Viewport for rendering static flowchart nodes and edges with auto-scaling.
 class _StaticFlowchartViewport extends StatelessWidget {
   final List<FlowNode> nodes;
   final List<FlowchartEdge> edges;
@@ -157,6 +164,7 @@ class _StaticFlowchartViewport extends StatelessWidget {
     required this.emphasized,
   });
 
+  /// Renders flowchart with automatic bounds calculation and responsive scaling.
   @override
   Widget build(BuildContext context) {
     if (nodes.isEmpty) {
@@ -247,6 +255,7 @@ class _StaticFlowchartViewport extends StatelessWidget {
     );
   }
 
+  /// Creates grid painter with emphasis-aware styling for preview background.
   GridPainter _previewGrid(BuildContext context, bool emphasized) {
     final theme = FluentTheme.of(context);
     if (!emphasized) return GridPainter.fromTheme(context);
@@ -263,13 +272,14 @@ class _StaticFlowchartViewport extends StatelessWidget {
   }
 }
 
+/// Wrapper for rendering individual flowchart nodes in preview mode.
 class _StaticNode extends StatelessWidget {
   final FlowNode node;
   const _StaticNode({required this.node});
 
+  /// Builds node using centralized renderer in preview mode.
   @override
   Widget build(BuildContext context) {
-    // Ora usiamo il renderer centralizzato in modalità anteprima
     return NodeRenderer(
       node: node,
       isPreview: true,

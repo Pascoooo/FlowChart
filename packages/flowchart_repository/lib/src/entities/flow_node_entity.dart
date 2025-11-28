@@ -1,8 +1,8 @@
-// Questo file non ha richiesto modifiche.
-
 import 'package:flowchart_repository/flowchart_repository.dart';
 
-/// Rappresenta un singolo nodo come viene salvato in Firestore.
+/// Rappresenta un singolo nodo flowchart nel formato Firestore.
+/// Serializza la posizione, il tipo e i dati specifici del nodo.
+/// Il campo 'data' contiene informazioni tipo-specifiche (es. condizioni, assegnazioni).
 class FlowNodeEntity {
   final String id;
   final FlowNodeKind kind;
@@ -23,6 +23,8 @@ class FlowNodeEntity {
     this.metadata,
   });
 
+  /// Converte FlowNodeEntity in una mappa per Firestore.
+  /// Omette i campi vuoti/null per ridurre lo spazio di storage.
   Map<String, dynamic> toDocument() {
     return {
       'id': id,
@@ -37,6 +39,8 @@ class FlowNodeEntity {
     };
   }
 
+  /// Crea FlowNodeEntity da un documento Firestore.
+  /// Gestisce la conversione dei numeri in double e il parsing del tipo enum.
   static FlowNodeEntity fromDocument(Map<String, dynamic> doc) {
     return FlowNodeEntity(
       id: doc['id'],
@@ -53,7 +57,8 @@ class FlowNodeEntity {
   }
 }
 
-/// Rappresenta una singola connessione come viene salvata in Firestore.
+/// Rappresenta un collegamento tra nodi nel formato Firestore.
+/// Serializza la connessione sorgente-destinazione con l'eventuale porta di uscita.
 class EdgeEntity {
   final String from;
   final String to;

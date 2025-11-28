@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Entity che rappresenta i dati utente nel formato Firestore.
+/// Utilizzata per serializzare/deserializzare documenti dalla collection 'users'.
+/// Questa classe separa il livello di persistenza dal modello di dominio (MyUser).
 class MyUserEntity {
   final String userId;
   final String email;
@@ -7,7 +10,6 @@ class MyUserEntity {
   final String photoURL;
   final Timestamp? nameLastUpdatedAt;
   final Timestamp? photoLastUpdatedAt;
-  final bool driveConnected;
 
   const MyUserEntity({
     required this.userId,
@@ -16,9 +18,11 @@ class MyUserEntity {
     required this.photoURL,
     this.nameLastUpdatedAt,
     this.photoLastUpdatedAt,
-    this.driveConnected = false,
   });
 
+  /// Crea un'istanza di MyUserEntity da un documento Firestore.
+  /// Converte i dati grezzi dal database nel formato entity, gestendo
+  /// i cast e i valori di default per campi opzionali.
   static MyUserEntity fromDocument(Map<String, dynamic> doc) {
     return MyUserEntity(
       userId: doc['userId'] as String,
@@ -27,10 +31,12 @@ class MyUserEntity {
       photoURL: doc['photoURL'] as String,
       nameLastUpdatedAt: doc['nameLastUpdatedAt'] as Timestamp?,
       photoLastUpdatedAt: doc['photoLastUpdatedAt'] as Timestamp?,
-      driveConnected: doc['driveConnected'] as bool? ?? false,
     );
   }
 
+  /// Converte MyUserEntity in una mappa per la scrittura su Firestore.
+  /// Tutti i campi vengono serializzati nel formato compatibile con
+  /// il database (Timestamp, primitive types).
   Map<String, Object?> toDocument() {
     return {
       'userId': userId,
@@ -39,7 +45,6 @@ class MyUserEntity {
       'photoURL': photoURL,
       'nameLastUpdatedAt': nameLastUpdatedAt,
       'photoLastUpdatedAt': photoLastUpdatedAt,
-      'driveConnected': driveConnected,
     };
   }
 }

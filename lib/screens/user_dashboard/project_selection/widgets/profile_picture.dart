@@ -1,3 +1,5 @@
+/// User profile picture widget with flyout menu for settings and logout.
+/// Displays cached network image with fallback icon, wrapped in hero animation.
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -10,6 +12,7 @@ import '../../../../config/services/dialog_service/app_dialogs.dart';
 class ProfileMenu extends StatelessWidget {
   const ProfileMenu({super.key});
 
+  /// Builds circular profile picture with border, shadow, and flyout menu for actions.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);

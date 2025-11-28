@@ -1,3 +1,6 @@
+/// Tile riutilizzabile per voci di impostazione con icona, titolo, sottotitolo e trailing.
+/// Supporta stati distruttivi, hover e trailing custom o indicatore di navigazione.
+
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -23,17 +26,16 @@ class SettingsTile extends StatelessWidget {
     this.isDestructive = false,
   });
 
+  /// Costruisce il tile impostazioni con feedback visivo e gestione del trailing.
+  /// Include colori specifici per azioni distruttive e il caret di default quando onTap è presente.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
 
     final destructiveColor = theme.resources.systemFillColorCritical;
-    final finalIconColor = isDestructive
-        ? destructiveColor
-        : (iconColor ?? theme.accentColor);
-    final finalTitleColor = isDestructive
-        ? destructiveColor
-        : titleColor;
+    final finalIconColor =
+        isDestructive ? destructiveColor : (iconColor ?? theme.accentColor);
+    final finalTitleColor = isDestructive ? destructiveColor : titleColor;
 
     return HoverButton(
       onPressed: onTap,
@@ -85,8 +87,7 @@ class SettingsTile extends StatelessWidget {
                   padding: const EdgeInsets.all(6), // Padding ridotto
                   decoration: BoxDecoration(
                     color: theme.accentColor.withValues(
-                        alpha: states.isHovered ? 0.1 : 0.05
-                    ),
+                        alpha: states.isHovered ? 0.1 : 0.05),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: const FaIcon(
@@ -102,7 +103,10 @@ class SettingsTile extends StatelessWidget {
     );
   }
 
-  Widget _buildIconContainer(BuildContext context, Color iconColor, Set<WidgetState> states) {
+  /// Disegna il contenitore dell'icona applicando hover border e dimensioni ridotte.
+  /// Restituisce un widget pronto per essere inserito nella row principale.
+  Widget _buildIconContainer(
+      BuildContext context, Color iconColor, Set<WidgetState> states) {
     return Container(
       width: 40, // Dimensione ridotta
       height: 40,
@@ -123,7 +127,10 @@ class SettingsTile extends StatelessWidget {
     );
   }
 
-  Color _getBackgroundColor(FluentThemeData theme, Set<WidgetState> states, bool isDestructive) {
+  /// Determina il colore di background del tile in base allo stato e al flag distruttivo.
+  /// Rende più evidente l'azione su hover/press e mantiene lo sfondo neutro altrimenti.
+  Color _getBackgroundColor(
+      FluentThemeData theme, Set<WidgetState> states, bool isDestructive) {
     if (isDestructive) {
       final destructiveColor = theme.resources.systemFillColorCritical;
       if (states.isPressed) return destructiveColor.withValues(alpha: 0.1);

@@ -1,3 +1,6 @@
+/// Main project workspace orchestrating sidebar, work area, and debug mode views.
+/// Handles export functionality, debug session initiation, and animated view transitions.
+/// Integrates with FileSystemBloc, FlowchartBloc, and DebugBloc for comprehensive project management.
 import 'dart:async';
 import 'dart:convert';
 import 'package:collection/collection.dart';
@@ -6,26 +9,25 @@ import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_bloc.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_event.dart';
 import 'package:flowchart_thesis/blocs/flowchart_bloc/flowchart_state.dart';
-import 'package:flowchart_thesis/blocs/debug_bloc/debug_bloc_exports.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/sidebar.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:universal_html/html.dart' as html;
-import '../../../../blocs/auth_bloc/authentication_bloc.dart';
-import '../../../../blocs/auth_bloc/authentication_event.dart';
-import '../../../../blocs/auth_bloc/authentication_state.dart';
+import '../../../../blocs/debug_bloc/debug_bloc.dart';
+import '../../../../blocs/debug_bloc/debug_event.dart';
+import '../../../../blocs/debug_bloc/debug_state.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
+import '../../../../config/services/dialog_service/service_dialog.dart';
 import '../../../../config/services/export_service.dart';
 import '../../../settings/widgets/settings_provider.dart';
 import '../views/debug_mode_view.dart';
 import '../views/workarea.dart';
-import '../../../../config/services/dialog_service/service_dialog.dart';
 
 
 class ProjectWorkspace extends StatefulWidget {
@@ -104,24 +106,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
     return 'unichart_diagram';
   }
 
-  void _onEdit() async {
-    try {
-      final pngBytes = await ExportService.generatePngBytes(key: _workareaKey);
-      if (pngBytes != null) {
-        final b64 = base64Encode(pngBytes);
-        html.window.localStorage['editor_last_screenshot'] = b64;
-      }
-    } catch (_) {}
-    final String path = Uri.base.toString().split('#')[0];
-    final Uri url = Uri.parse('$path#/drawing-editor');
-    html.WindowBase popup =
-    html.window.open(url.toString(), 'editor', 'width=1200,height=800');
-    if (popup.closed ?? true) {
-      BannerService.showError(
-          context, 'Popup bloccati. Abilita i popup per continuare.');
-    }
-  }
-
   Future<void> _handleExport(BuildContext innerContext) async {
     if (!mounted || !(innerContext.mounted)) return;
     final fileState = innerContext.read<FileSystemBloc>().state;
@@ -133,25 +117,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
           BannerService.showError(innerContext, "Errore durante la creazione dell'immagine.");
         }
         return;
-      }
-      final settingsProvider = innerContext.read<SettingsProvider>();
-      final authState = innerContext.read<AuthenticationBloc>().state;
-      final exportPreference = settingsProvider.exportPreference;
-
-      switch (exportPreference) {
-        case ExportPreference.local:
-          await ExportService.downloadFileWithDialog(context: innerContext, bytes: pngBytes, fileName: fileName);
-          break;
-        case ExportPreference.drive:
-          if (authState.user.driveConnected) {
-            innerContext.read<AuthenticationBloc>().add(ExportFlowchartToDriveRequested(fileName: '$fileName.png', fileBytes: pngBytes));
-          } else {
-            await AppDialogs.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
-          }
-          break;
-        case ExportPreference.alwaysAsk:
-          await AppDialogs.showExportLocationDialog(context: innerContext, pngBytes: pngBytes, fileName: fileName);
-          break;
       }
     } else {
       if (!mounted || !(innerContext.mounted)) return;
@@ -389,21 +354,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                       // Non c'è bisogno di notificare il FileSystemBloc
                     },
                   ),
-                  BlocListener<AuthenticationBloc, AuthenticationState>(
-                    listenWhen: (p, c) => p.driveExportStatus != c.driveExportStatus,
-                    listener: (context, state) {
-                      if (!mounted || !(context.mounted)) return; // guardia contro contesto deattivato
-                      if (state.driveExportStatus == DriveExportStatus.success) {
-                        BannerService.showSuccess(context, "Diagramma esportato con successo su Google Drive!");
-                      } else if (state.driveExportStatus == DriveExportStatus.failure) {
-                        BannerService.showError(context, state.errorMessage ?? "Esportazione fallita.");
-                      }
-                      if(state.driveExportStatus != DriveExportStatus.initial){
-                        context.read<AuthenticationBloc>().add(const ClearDriveExportStatus());
-                      }
-                    },
-                  ),
-
                   // ==========================================================
                   // 💾 SALVATAGGIO FLOWCHART: usa FlowchartBloc.activeFileId
                   // ==========================================================
@@ -436,6 +386,9 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
                         final jsonContent = state.toJson();
                         if (jsonContent.trim().isEmpty) return;
+
+                        // ✅ Invalida build immediatamente quando flowchart cambia
+                        context.read<FileSystemBloc>().add(const InvalidateBuild());
 
                         _debounce?.cancel();
                         final projectRepo = context.read<ProjectBloc>().projectRepository;
@@ -638,7 +591,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                           fadeAnimation: _fadeAnimation,
                           selectedProject: widget.selectedProject,
                           workareaKey: _workareaKey,
-                          onEdit: _onEdit,
                           onExport: () => _handleExport(innerContext),
                           showGrid: _showGrid,
                           toggleGrid: () { if (!mounted) return; setState(() => _showGrid = !_showGrid); },
@@ -667,7 +619,6 @@ class _WorkspaceLayout extends StatelessWidget {
   final Animation<double> fadeAnimation;
   final MyProject selectedProject;
   final GlobalKey workareaKey;
-  final VoidCallback onEdit;
   final VoidCallback onExport;
   final bool showGrid;
   final VoidCallback toggleGrid;
@@ -682,7 +633,6 @@ class _WorkspaceLayout extends StatelessWidget {
     required this.fadeAnimation,
     required this.selectedProject,
     required this.workareaKey,
-    required this.onEdit,
     required this.onExport,
     required this.showGrid,
     required this.toggleGrid,
@@ -717,7 +667,6 @@ class _WorkspaceLayout extends StatelessWidget {
                     showGrid: showGrid,
                     onToggleGrid: toggleGrid,
                     isReadOnly: isReadOnly,
-                    onEdit: onEdit,
                     onExport: onExport,
                     onStartDebug: onStartDebug,
                     onLeave: onLeave,

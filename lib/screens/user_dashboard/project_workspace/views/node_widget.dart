@@ -1,11 +1,15 @@
+/// Interactive flowchart node widget with drag-and-drop, resizing, and connector handles.
+/// Supports connector mode for linking nodes, debug mode highlighting, and do-while body selection.
+/// Disables interactions when in read-only or debug mode.
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../../../blocs/debug_bloc/debug_bloc.dart';
+import '../../../../blocs/debug_bloc/debug_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
-import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import 'painters.dart';
 import 'node_creation_service.dart';
@@ -62,6 +66,7 @@ class _NodeWidgetState extends State<NodeWidget> {
   double _clampY(double y) => y.clamp(
       10.0, widget.canvasConstraints.maxHeight - widget.node.height - 10.0);
 
+  /// Builds node with conditional rendering based on connector mode, debug mode, and selection state.
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<FlowchartBloc, FlowchartState>(
@@ -70,7 +75,6 @@ class _NodeWidgetState extends State<NodeWidget> {
           return const SizedBox.shrink();
         }
 
-        // ✅ NUOVO: Verifica se siamo in debug mode
         final debugState = context.watch<DebugBloc>().state;
         final isInDebugMode = debugState is DebugInProgress || debugState is DebugAwaitingInput;
 

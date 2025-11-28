@@ -1,7 +1,9 @@
-import 'package:equatable/equatable.dart'; // ✨ 1. Importa il pacchetto Equatable
+import 'package:equatable/equatable.dart';
 import '../entities/file_entity.dart';
 
-// ✨ 2. Estendi Equatable per confronti affidabili
+/// Rappresenta un file di testo all'interno di un progetto.
+/// Include identificatore univoco, nome e contenuto completo.
+/// Usa Equatable per confronti affidabili basati sul valore.
 class MyFile extends Equatable {
   final String fileId;
   final String name;
@@ -19,9 +21,8 @@ class MyFile extends Equatable {
     content: '',
   );
 
-  // ✨ 3. AGGIUNTO IL METODO `copyWith`
-  // Questo metodo è essenziale per la programmazione con stati immutabili (come in BLoC).
-  // Crea una copia dell'oggetto, permettendo di modificare solo i campi desiderati.
+  /// Crea una copia di MyFile con i campi specificati aggiornati.
+  /// Essenziale per la programmazione con stati immutabili (pattern usato con BLoC).
   MyFile copyWith({
     String? fileId,
     String? name,
@@ -34,6 +35,7 @@ class MyFile extends Equatable {
     );
   }
 
+  /// Converte MyFile in MyFileEntity per la persistenza su Firestore.
   MyFileEntity toEntity() {
     return MyFileEntity(
       fileId: fileId,
@@ -42,6 +44,7 @@ class MyFile extends Equatable {
     );
   }
 
+  /// Crea un'istanza di MyFile da MyFileEntity (deserializzazione).
   static MyFile fromEntity(MyFileEntity entity) {
     return MyFile(
       fileId: entity.fileId,

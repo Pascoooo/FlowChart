@@ -1,3 +1,6 @@
+/// Bottone animato per l'autenticazione social.
+/// Gestisce stati di loading, pressione e shimmer per call-to-action primaria.
+/// Ottimizzato per Flutter web con feedback chiari e disabilitazioni sicure.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -33,12 +36,16 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
   late Animation<double> _shimmerAnimation;
   bool _isPressed = false;
 
+  /// Avvia i controller e setup animazioni per scale/shimmer del bottone.
+  /// Richiamato una sola volta per prevenire stutter nelle animazioni.
   @override
   void initState() {
     super.initState();
     _initAnimations();
   }
 
+  /// Configura tween e loop animati per shimmer e pressione.
+  /// Se il bottone è primario avvia lo shimmer by default.
   void _initAnimations() {
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 100),
@@ -70,6 +77,8 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     }
   }
 
+  /// Aggiorna gli stati animati quando cambiano le proprietà widget.
+  /// Ferma o riavvia lo shimmer in base a loading e flag primario.
   @override
   void didUpdateWidget(SocialAuthButton oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -85,6 +94,8 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     }
   }
 
+  /// Rilascia le risorse dei controller per evitare leak.
+  /// Chiamato quando il widget esce dall'albero.
   @override
   void dispose() {
     _scaleController.dispose();
@@ -92,6 +103,8 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     super.dispose();
   }
 
+  /// Gestisce il press iniziale abbassando la scala se cliccabile.
+  /// Evita input quando in loading o disabilitato.
   void _onPointerDown(PointerDownEvent event) {
     if (widget.isEnabled && !widget.isLoading) {
       setState(() => _isPressed = true);
@@ -99,6 +112,8 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     }
   }
 
+  /// Rilascia il press e invoca onPressed dopo l'animazione di ritorno.
+  /// Protegge da tap multipli durante fasi di loading.
   void _onPointerUp(PointerUpEvent event) {
     if (_isPressed) {
       setState(() => _isPressed = false);
@@ -110,6 +125,8 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     }
   }
 
+  /// Ripristina lo stato premuto quando il puntatore viene annullato.
+  /// Mantiene coerenza visiva in caso di drag fuori area.
   void _onPointerCancel(PointerCancelEvent event) {
     if (_isPressed) {
       setState(() => _isPressed = false);
@@ -118,11 +135,12 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
   }
 
 
+  /// Costruisce il bottone con animazione di scala e gesture listener.
+  /// Usa stack per shimmer opzionale e centra contenuto dinamico.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
     return AnimatedBuilder(
       animation: _scaleAnimation,
       builder: (context, child) {
@@ -215,6 +233,8 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     );
   }
 
+  /// Rende il contenuto interno: spinner in loading o icona+testo standard.
+  /// Adatta colori al tema corrente e stato primario/disabled.
   Widget _buildContent(FluentThemeData theme) {
     if (widget.isLoading) {
       final textColor =

@@ -1,7 +1,12 @@
+/// Debug mode view orchestrating console, variables panel, and step-by-step execution.
+/// Features resizable panels, automatic grid state preservation, and file snapshot restoration.
+/// Integrates debug console, session variables, and work area for comprehensive debugging experience.
 import 'package:file_repository/file_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
+import '../../../../blocs/debug_bloc/debug_bloc.dart';
+import '../../../../blocs/debug_bloc/debug_event.dart';
+import '../../../../blocs/debug_bloc/debug_state.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';

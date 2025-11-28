@@ -1,3 +1,6 @@
+/// Eventi di autenticazione per AuthenticationBloc.
+/// Rappresentano tutte le azioni che l'utente può eseguire relativamente all'autenticazione
+/// e gestione profilo.
 import 'dart:typed_data';
 import 'package:equatable/equatable.dart';
 import 'package:user_repository/user_repository.dart';
@@ -42,31 +45,6 @@ class AuthenticationPhotoUpdateRequested extends AuthenticationEvent {
 
   @override
   List<Object?> get props => [photoFileBytes];
-}
-
-class AuthenticationDrivePermissionRequested extends AuthenticationEvent {
-  const AuthenticationDrivePermissionRequested();
-}
-
-class AuthenticationDrivePermissionRevoked extends AuthenticationEvent {
-  const AuthenticationDrivePermissionRevoked();
-}
-
-class ExportFlowchartToDriveRequested extends AuthenticationEvent {
-  final String fileName;
-  final Uint8List fileBytes;
-
-  const ExportFlowchartToDriveRequested({
-    required this.fileName,
-    required this.fileBytes,
-  });
-
-  @override
-  List<Object?> get props => [fileName, fileBytes];
-}
-
-class ClearDriveExportStatus extends AuthenticationEvent {
-  const ClearDriveExportStatus();
 }
 
 class AuthenticationErrorCleared extends AuthenticationEvent {

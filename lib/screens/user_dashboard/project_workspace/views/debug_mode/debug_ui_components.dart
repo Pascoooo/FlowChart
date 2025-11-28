@@ -1,3 +1,5 @@
+/// UI components for debug mode including variable rows and status indicators.
+/// Provides styled, theme-aware widgets for displaying debug session information.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 

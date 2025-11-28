@@ -9,9 +9,6 @@ class AppConstants {
   // Regione Firebase Functions per le chiamate HTTP.
   static const String kFunctionsRegion = 'europe-west8';
 
-  // Scope di Google Drive per consentire la creazione di file.
-  static const String kDriveScope = 'https://www.googleapis.com/auth/drive.file';
-
   // Nome della Cloud Function per l'eliminazione dell'utente.
   static const String kDeleteUserFunctionName = 'deleteUserAuthHttp';
 

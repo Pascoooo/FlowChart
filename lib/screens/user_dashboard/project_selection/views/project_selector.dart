@@ -1,3 +1,6 @@
+/// Project selection screen displaying all user projects in a sortable grid.
+/// Allows creating new projects, selecting existing ones, and managing project actions.
+/// Includes welcome header, profile menu, and theme toggle button.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
@@ -23,14 +26,14 @@ class ProjectSelector extends StatelessWidget {
     required this.onCreateProject,
   });
 
+  /// Builds project selector UI with sorted projects, welcome header, and action buttons.
+  /// Projects are sorted by most recently updated first for optimal user experience.
   @override
   Widget build(BuildContext context) {
-    // ✅ FIX DEFINITIVO: Applica l'ordinamento direttamente nella UI.
-    // Questo garantisce un ordine visivo stabile a ogni rebuild,
-    // eliminando il "rimbalzo" causato dal timing degli aggiornamenti del BLoC.
     final sortedProjects = List<MyProject>.from(projects)
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
+    /// Shows dialog for creating a new project with name validation.
     Future<void> showCreateProjectDialog() async {
       final String? projectName = await AppDialogs.showInputDialog(
         context,

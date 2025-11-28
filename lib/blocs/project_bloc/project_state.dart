@@ -1,3 +1,6 @@
+/// Stati del Project BLoC.
+/// Rappresenta i diversi stati del progetto: iniziale, caricamento, errore, lista progetti caricata,
+/// modifiche non salvate trovate e workspace statico caricato (read-only).
 import 'package:equatable/equatable.dart';
 import 'package:file_repository/file_repository.dart';
 import 'package:project_repository/project_repository.dart';
@@ -56,10 +59,12 @@ class ProjectsLoaded extends ProjectState {
     this.error,
   });
 
+  /// Crea una copia dello stato con modifiche selettive.
+  /// clearSelectedProject e clearError consentono di pulire esplicitamente i campi.
   ProjectsLoaded copyWith({
     List<MyProject>? projects,
     MyProject? selectedProject,
-    bool? isReadOnlyView, // <-- AGGIUNTO
+    bool? isReadOnlyView,
     bool clearSelectedProject = false,
     String? error,
     bool clearError = false,

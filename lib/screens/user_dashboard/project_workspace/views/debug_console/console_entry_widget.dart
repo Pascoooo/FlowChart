@@ -48,10 +48,10 @@ class ConsoleEntryWidget extends StatelessWidget {
                 style: TextStyle(
                   color: style.color,
                   fontFamily: 'Consolas',
-                  fontSize: 13,
-                  height: 1.5,
+                  fontSize: 15, // ✅ Aumentato da 13 a 15px per leggibilità
+                  height: 1.6,
                   fontWeight: style.bold ? FontWeight.bold : FontWeight.normal,
-                  letterSpacing: 0.3,
+                  letterSpacing: 0.4,
                 ),
               ),
             ],
@@ -64,12 +64,12 @@ class ConsoleEntryWidget extends StatelessWidget {
   _ConsoleEntryStyle _getStyleForEntry(FluentThemeData theme, ConsoleEntryType type) {
     final isDark = theme.brightness == Brightness.dark;
 
-    // Colore blu/celestino uniforme per tutti i messaggi della console
-    final consoleColor = isDark ? const Color(0xFF4FC3F7) : const Color(0xFF0288D1);
+    // ✅ MIGLIORATO: Colori più leggibili e background meno invadenti
+    final consoleColor = isDark ? const Color(0xFF64B5F6) : const Color(0xFF1565C0);
     final consoleBackground = isDark
-      ? const Color(0xFF1A237E).withValues(alpha: 0.3)
-      : const Color(0xFFE3F2FD);
-    final consoleBorderColor = isDark ? const Color(0xFF1976D2) : const Color(0xFF90CAF9);
+      ? const Color(0xFF1A237E).withValues(alpha: 0.15) // ✅ Ridotto alpha da 0.3 a 0.15
+      : const Color(0xFFE3F2FD).withValues(alpha: 0.5); // ✅ Ridotto alpha
+    final consoleBorderColor = isDark ? const Color(0xFF1976D2).withValues(alpha: 0.4) : const Color(0xFF90CAF9).withValues(alpha: 0.6);
 
     switch (type) {
       case ConsoleEntryType.system:
@@ -107,6 +107,19 @@ class ConsoleEntryWidget extends StatelessWidget {
           borderColor: consoleBorderColor,
         );
       case ConsoleEntryType.error:
+        // ✅ Errore NON bloccante (warning arancione)
+        return _ConsoleEntryStyle(
+          color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFE65100),
+          bold: true,
+          withBackground: true,
+          backgroundColor: isDark
+            ? const Color(0xFFE65100).withValues(alpha: 0.2)
+            : const Color(0xFFFFF3E0),
+          borderColor: isDark ? const Color(0xFFFB8C00) : const Color(0xFFFFCC80),
+          icon: FluentIcons.warning,
+        );
+      case ConsoleEntryType.blockingError:
+        // ✅ Errore BLOCCANTE (rosso critico)
         return _ConsoleEntryStyle(
           color: isDark ? const Color(0xFFEF5350) : const Color(0xFFC62828),
           bold: true,

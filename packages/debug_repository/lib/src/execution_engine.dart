@@ -59,12 +59,12 @@ class ExecutionEngine {
         FlowNodeKind.process => _process(node as ProcessNode, variables),
         FlowNodeKind.returnNode => _return(node as ReturnNode, variables),
         FlowNodeKind.functionHeader => ExecutionResult.success(
-          message: 'Funzione: ${(node as FunctionHeaderNode).signatureText}',
+          message: '${(node as FunctionHeaderNode).signatureText}',
         ),
         FlowNodeKind.decision => _decision(node as DecisionNode, variables, allVariables),
         FlowNodeKind.whileLoop => _whileLoop(node as WhileNode, variables, allVariables),
         FlowNodeKind.doWhileLoop => _doWhileLoop(node as DoWhileNode, variables, allVariables),
-        FlowNodeKind.doWhileStart => ExecutionResult.success(message: 'Do-While start'),
+        FlowNodeKind.doWhileStart => ExecutionResult.success(), // ✅ Nessun messaggio per do-while start
       };
     } catch (e) {
       return ExecutionResult.error('Errore: ${e.toString()}');
@@ -76,13 +76,13 @@ class ExecutionEngine {
   // ==========================================================================
 
   static ExecutionResult _start() {
-    return ExecutionResult.success(message: '▶️ Avvio');
+    return ExecutionResult.success(message: 'Avvio programma');
   }
 
   static ExecutionResult _end() {
     // NON chiudere la sessione qui: l'utente è appena ARRIVATO al nodo End.
     // La fine del percorso verrà segnalata SOLO se l'utente preme Next ancora (oltre l'ultimo nodo).
-    return ExecutionResult.success(message: '⏹️ Fine');
+    return ExecutionResult.success(message: 'Terminazione programma');
   }
 
   /// INPUT NODE: Gestisce la pausa e l'assegnazione runtime (step-by-step)
@@ -184,9 +184,10 @@ class ExecutionEngine {
     }
 
     print('🎉 _input COMPLETATO (con valori pre-compilati): $updates');
+    // ✅ OTTIMIZZATO: Mostra solo le assegnazioni senza emoji
     return ExecutionResult.success(
       updatedVariables: updates,
-      message: messages.isEmpty ? '📥 Input pronti' : '📥 ${messages.join(', ')}',
+      message: messages.isEmpty ? 'Input acquisiti' : messages.join(', '),
     );
   }
 
@@ -275,7 +276,7 @@ class ExecutionEngine {
     print('🎉 _assignment COMPLETATO: $updates');
     return ExecutionResult.success(
       updatedVariables: updates,
-      message: messages.isEmpty ? '✏️ Assegnazioni pronte' : '✏️ ${messages.join(', ')}',
+      message: messages.isEmpty ? '' : messages.join(', '),
     );
   }
 
@@ -305,16 +306,16 @@ class ExecutionEngine {
     for (final name in referencedNames) {
       final decl = declaredByName[name];
       if (decl == null) {
-        return ExecutionResult.error('❌ Errore: Variabile "$name" non dichiarata nel flowchart');
+        return ExecutionResult.error('Variabile "$name" non dichiarata', blocking: true);
       }
       if (decl.scope != VariableScope.output) {
-        return ExecutionResult.error('❌ Errore: "$name" non è una variabile di tipo output');
+        return ExecutionResult.error('"$name" non è una variabile Output', blocking: true);
       }
       if (!vars.containsKey(name)) {
-        return ExecutionResult.error('❌ Errore: Variabile "$name" non disponibile nella sessione');
+        return ExecutionResult.error('Variabile "$name" non disponibile', blocking: true);
       }
       if (vars[name] == null) {
-        return ExecutionResult.error('❌ Errore: Variabile di output "$name" è null al momento della stampa');
+        return ExecutionResult.error('Variabile "$name" è null', blocking: true);
       }
     }
 
@@ -332,8 +333,9 @@ class ExecutionEngine {
       message = '';
     }
 
+    // ✅ OTTIMIZZATO: Mostra solo il messaggio/valore senza prefissi
     return ExecutionResult.success(
-      message: message.isEmpty ? '📤' : '📤 $message',
+      message: message.isEmpty ? '(output vuoto)' : message,
     );
   }
 
@@ -408,7 +410,7 @@ class ExecutionEngine {
         .join(' ${node.logicalJoin} ');
 
     return ExecutionResult.success(
-      message: '🔀 Decisione: $condition → ${result ? "VERO" : "FALSO"}',
+      message: '$condition → ${result ? "vero" : "falso"}',
       decisionBranch: branch,
     );
   }
@@ -445,7 +447,7 @@ class ExecutionEngine {
         .join(' ${node.logicalJoin} ');
 
     return ExecutionResult.success(
-      message: '🔁 While: $condition → ${result ? "ENTRA nel ciclo" : "SALTA il ciclo"}',
+      message: 'while ($condition) → ${result ? "entra nel ciclo" : "salta il ciclo"}',
       decisionBranch: branch,
     );
   }
@@ -482,7 +484,7 @@ class ExecutionEngine {
         .join(' ${node.logicalJoin} ');
 
     return ExecutionResult.success(
-      message: '🔁 Do-While: $condition → ${result ? "RIPETI (loop)" : "ESCI"}',
+      message: 'do-while ($condition) → ${result ? "ripete il ciclo" : "esce dal ciclo"}',
       decisionBranch: result ? 'loop' : 'false',
     );
   }

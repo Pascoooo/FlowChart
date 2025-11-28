@@ -2,6 +2,9 @@
 
 import '../entities/project_entity.dart';
 
+/// Rappresenta un progetto utente contenente flowchart e file.
+/// Include metadati come nome, data ultimo aggiornamento, visibilità pubblica
+/// e gestione del rate limiting per le modifiche di visibilità.
 class MyProject {
   final String projectId;
   final String name;
@@ -16,9 +19,11 @@ class MyProject {
     required this.updatedAt,
     this.isPublic = false,
     this.ownerId = '',
-    this.lastVisibilityChange, // Non più 'required'
+    this.lastVisibilityChange,
   });
 
+  /// Converte MyProject in MyProjectEntity per la persistenza su Firestore.
+  /// Se lastVisibilityChange è null, usa updatedAt come fallback.
   MyProjectEntity toEntity() {
     return MyProjectEntity(
       projectId: projectId,
@@ -26,11 +31,12 @@ class MyProject {
       updatedAt: updatedAt,
       isPublic: isPublic,
       ownerId: ownerId,
-      // Se è null (improbabile in scrittura), usa updatedAt come fallback
       lastVisibilityChange: lastVisibilityChange ?? updatedAt,
     );
   }
 
+  /// Crea un'istanza di MyProject da MyProjectEntity (deserializzazione).
+  /// Utilizzato per convertire i dati dal database nel modello di dominio.
   static MyProject fromEntity(MyProjectEntity entity) {
     return MyProject(
       projectId: entity.projectId,
@@ -42,6 +48,8 @@ class MyProject {
     );
   }
 
+  /// Crea una copia di MyProject con i campi specificati aggiornati.
+  /// Il projectId non può essere modificato. Tutti gli altri parametri sono opzionali.
   MyProject copyWith({
     String? name,
     DateTime? updatedAt,

@@ -1,5 +1,8 @@
-// pascoooo/flowchart/FlowChart-rework-flowchart/lib/screens/settings/views/settings_page.dart
+/// Schermata Impostazioni: gestisce profilo utente, preferenze app,
+/// azioni account e informazioni di sistema, integrando animazioni e BLoC.
+/// Curata per il web: layout a due colonne con larghezza massima controllata.
 
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,6 +15,8 @@ import 'package:flutter/services.dart'; // NECESSARIO PER FilteringTextInputForm
 import '../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../blocs/auth_bloc/authentication_state.dart';
+import '../../../blocs/project_bloc/project_bloc.dart';
+import '../../../blocs/project_bloc/project_event.dart';
 import '../../../config/services/banner_service.dart';
 import '../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../config/services/dialog_service/service_dialog.dart';
@@ -21,18 +26,22 @@ import '../widgets/settings_provider.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/settings_tile.dart';
 
+/// Pagina principale delle impostazioni con layout a due colonne.
+/// Orquestra i widget di profilo, preferenze app e gestione account.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
+  /// Crea lo stateful widget per la pagina impostazioni.
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderStateMixin {
-  // ... (codice initState, dispose, build principale invariato) ...
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
+  /// Inizializza l'animazione di fade-in per la pagina.
+  /// Prepara controller e curva di easing per l'ingresso dei contenuti.
   @override
   void initState() {
     super.initState();
@@ -47,12 +56,16 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
     _fadeController.forward();
   }
 
+  /// Libera le risorse delle animazioni e cancella debounce pendenti.
+  /// Evita memory leak chiudendo i controller prima della dismissione.
   @override
   void dispose() {
     _fadeController.dispose();
     super.dispose();
   }
 
+  /// Costruisce il layout web-friendly con larghezza massima e due colonne.
+  /// Applica fade-in sulla pagina e separa contenuto in due pannelli scorrevoli.
   @override
   Widget build(BuildContext context) {
     return NavigationView(
@@ -64,51 +77,26 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
               opacity: _fadeAnimation,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Center(
+                child: Align(
+                  alignment: Alignment.center,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Header(),
-                        SizedBox(height: 16),
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // --- COLONNA SINISTRA ---
-                              Expanded(
-                                flex: 1,
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    children: [
-                                      ProfileSettings(),
-                                      SizedBox(height: 16),
-                                      IntegrationSettings(),
-                                      SizedBox(height: 16),
-                                      AccountManagementSettings(),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: 16),
-                              // --- COLONNA DESTRA ---
-                              Expanded(
-                                flex: 1,
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    children: [
-                                      ExportPreferencesSettings(),
-                                      SizedBox(height: 16),
-                                      SystemAndInfoSettings(),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    constraints: const BoxConstraints(maxWidth: 900),
+                    child: const SingleChildScrollView(
+                      primary: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Header(),
+                          SizedBox(height: 16),
+                          ProfileSettings(),
+                          SizedBox(height: 16),
+                          SystemAndInfoSettings(),
+                          SizedBox(height: 16),
+                          AccountManagementSettings(),
+
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -123,9 +111,11 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
 
 
 // ... (widget Header, ProfileSettings invariati) ...
+/// Header superiore che mostra titolo pagina e pulsante back.
 class Header extends StatelessWidget {
   const Header({super.key});
 
+  /// Rende il layout del banner con pulsante indietro, icona e sottotitolo.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
@@ -210,9 +200,11 @@ class Header extends StatelessWidget {
   }
 }
 
+/// Sezione profilo: modifica nome visualizzato e foto profilo con feedback BLoC.
 class ProfileSettings extends StatefulWidget {
   const ProfileSettings({super.key});
 
+  /// Crea lo stateful widget della sezione profilo.
   @override
   State<ProfileSettings> createState() => _ProfileSettingsState();
 }
@@ -220,14 +212,31 @@ class ProfileSettings extends StatefulWidget {
 class _ProfileSettingsState extends State<ProfileSettings> {
   late final TextEditingController _nameController;
   bool _isNameChanged = false;
+  Timer? _nameDebounce;
 
+  /// Inizializza controller nome e imposta listener con debounce per variazioni.
   @override
   void initState() {
     super.initState();
     final user = context.read<AuthenticationBloc>().state.user;
     _nameController = TextEditingController(text: user.name);
 
-    _nameController.addListener(() {
+    _nameController.addListener(_scheduleNameChangeCheck);
+  }
+
+  /// Libera controller e cancella eventuali debounce attivi.
+  @override
+  void dispose() {
+    _nameDebounce?.cancel();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  /// Schedula con debounce il controllo di variazione nome per evitare toggle rapidi.
+  void _scheduleNameChangeCheck() {
+    _nameDebounce?.cancel();
+    _nameDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
       final newName = _nameController.text.trim();
       final currentName = context.read<AuthenticationBloc>().state.user.name;
       final hasChanged = newName.isNotEmpty && newName != currentName;
@@ -237,12 +246,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
     });
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
+  /// Apre il picker per la foto profilo, ridimensiona e invia evento BLoC.
   Future<void> _pickAndUpdatePhoto() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -273,6 +277,7 @@ class _ProfileSettingsState extends State<ProfileSettings> {
     }
   }
 
+  /// Invia al BLoC la richiesta di aggiornare il display name e resetta il flag locale.
   void _saveDisplayName() {
     if (!_isNameChanged) return;
     final newName = _nameController.text.trim();
@@ -282,10 +287,10 @@ class _ProfileSettingsState extends State<ProfileSettings> {
     setState(() => _isNameChanged = false);
   }
 
+  /// Costruisce la UI del profilo con avatar, textbox e pulsante salva reattivo.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
-
     return BlocListener<AuthenticationBloc, AuthenticationState>(
       listener: (context, state) {
         if (state.errorMessage != null) {
@@ -400,9 +405,9 @@ class _ProfileSettingsState extends State<ProfileSettings> {
                         ),
                         FilledButton(
                           onPressed: (!_isNameChanged || isLoading) ? null : _saveDisplayName,
-                          child: Row(
+                          child: const Row(
                             mainAxisSize: MainAxisSize.min,
-                            children: const [
+                            children: [
                               FaIcon(
                                 FontAwesomeIcons.floppyDisk,
                                 size: 14,
@@ -424,121 +429,22 @@ class _ProfileSettingsState extends State<ProfileSettings> {
     );
   }
 }
-// in pascoooo/flowchart/FlowChart-rework-flowchart/lib/screens/settings/views/settings_page.dart
-
-// ... (widget Header, ProfileSettings e altri import restano invariati) ...
-class IntegrationSettings extends StatelessWidget {
-  const IntegrationSettings({super.key});
-
-  void _connectToGoogleDrive(BuildContext context) {
-    context.read<AuthenticationBloc>().add(const AuthenticationDrivePermissionRequested());
-  }
-
-  void _disconnectFromGoogleDrive(BuildContext context) async {
-    final confirmed = await AppDialogs.showConfirmationDialog(
-      context,
-      title: 'Disconnetti Google Drive',
-      message: 'Sei sicuro di voler revocare i permessi? Non potrai più salvare i tuoi file su Drive.',
-      confirmText: 'Disconnetti',
-      isDestructive: true,
-    );
-    if (confirmed == true && context.mounted) {
-      context.read<AuthenticationBloc>().add(const AuthenticationDrivePermissionRevoked());
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    final isDriveConnected = context.select<AuthenticationBloc, bool>((bloc) => bloc.state.user.driveConnected);
-    final isLoading = context.select<AuthenticationBloc, bool>((bloc) => bloc.state.isLoading);
 
 
-    return SettingsSection(
-      title: 'Integrazioni',
-      status: _StatusLabel(isConnected: isDriveConnected),
-      children: [
-        // Tile di Google Drive (invariata)
-        SettingsTile(
-          title: 'Google Drive',
-          subtitle: isDriveConnected ? 'Account collegato per l\'esportazione' : 'Collega il tuo account per salvare i file',
-          icon: FontAwesomeIcons.googleDrive,
-          iconColor: isDriveConnected ? theme.resources.systemFillColorSuccess : null,
-          trailing: OutlinedButton(
-            onPressed: isLoading ? null : (isDriveConnected ? () => _disconnectFromGoogleDrive(context) : () => _connectToGoogleDrive(context)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(isDriveConnected ? 'Disconnetti' : 'Connetti'),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class ExportPreferencesSettings extends StatelessWidget {
-  const ExportPreferencesSettings({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final settingsProvider = context.watch<SettingsProvider>();
-
-    return BlocConsumer<AuthenticationBloc, AuthenticationState>(
-      listenWhen: (previous, current) {
-        return previous.user.driveConnected && !current.user.driveConnected;
-      },
-      listener: (context, state) {
-        if (settingsProvider.exportPreference == ExportPreference.drive) {
-          settingsProvider.updateExportPreference(ExportPreference.alwaysAsk);
-          AppDialogs.showInfoDialog(
-            context,
-            title: 'Google Drive Disconnesso',
-            message:
-            'La preferenza di esportazione è stata cambiata a "Chiedi sempre".',
-            type: DialogType.info,
-          );
-        }
-      },
-      builder: (context, state) {
-        final isDriveConnected = state.user.driveConnected;
-        return SettingsSection(
-          title: 'Preferenze di Esportazione',
-          children: [
-            ExportOptionTile(
-              title: 'Chiedi sempre dove salvare',
-              selected: settingsProvider.exportPreference == ExportPreference.alwaysAsk,
-              onTap: () => settingsProvider.updateExportPreference(ExportPreference.alwaysAsk),
-            ),
-            ExportOptionTile(
-              title: 'Salva automaticamente sul dispositivo',
-              selected: settingsProvider.exportPreference == ExportPreference.local,
-              onTap: () => settingsProvider.updateExportPreference(ExportPreference.local),
-            ),
-            ExportOptionTile(
-              title: 'Salva automaticamente su Google Drive',
-              selected: settingsProvider.exportPreference == ExportPreference.drive,
-              onTap: () => settingsProvider.updateExportPreference(ExportPreference.drive),
-              enabled: isDriveConnected,
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
+/// Sezione sistema e info app.
 class SystemAndInfoSettings extends StatelessWidget {
   const SystemAndInfoSettings({super.key});
 
 
+  /// Mostra un dialog informativo con versione e crediti dell'app.
   void _showAppInfoDialog(BuildContext context) {
     AppDialogs.showInfoDialog(context,
         title: 'Informazioni App',
-        message: 'Unichart\nVersione 1.0.0\n© 2025 Unichart Inc.\n Developed by: \n Nicolo\' Pacucci & Andrea Pantaleo',
+        message: 'Unichart\nVersione 1.0.0\n(c) 2025 Unichart Inc.\nDeveloped by:\nNicolo\' Pacucci & Andrea Pantaleo',
         type: DialogType.info);
   }
 
+  /// Costruisce il gruppo con la voce informazioni applicazione.
   @override
   Widget build(BuildContext context) {
     return SettingsSection(
@@ -558,6 +464,14 @@ class SystemAndInfoSettings extends StatelessWidget {
 class AccountManagementSettings extends StatelessWidget {
   const AccountManagementSettings({super.key});
 
+  /// Esegue pulizia di stato locale e invia logout all'AuthenticationBloc.
+  void _performLogoutCleanup(BuildContext context) {
+    final projectBloc = context.read<ProjectBloc>();
+    projectBloc.add(const LeaveProject());
+    context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
+  }
+
+  /// Chiede conferma logout, quindi pulisce bloc/prov e invia evento di logout.
   void _confirmLogout(BuildContext context) async {
     final bool? confirmed = await AppDialogs.showConfirmationDialog(
         context,
@@ -565,29 +479,29 @@ class AccountManagementSettings extends StatelessWidget {
         message: 'Sei sicuro di voler uscire?',
         confirmText: 'Logout',
         cancelText: 'Annulla',
-        isDestructive: true
-    );
+        isDestructive: true);
     if (confirmed == true && context.mounted) {
-      context.read<AuthenticationBloc>().add(const AuthenticationLogoutRequested());
+      _performLogoutCleanup(context);
     }
   }
 
+  /// Chiede conferma di eliminazione account e inoltra al BLoC di autenticazione.
   void _confirmAccountDeletion(BuildContext context) async {
-    final bool? confermation = await AppDialogs.showConfirmationDialog(
+    final bool? confirmation = await AppDialogs.showConfirmationDialog(
         context,
         title: 'Eliminazione Account',
-        message: 'Questa azione eliminerà definitivamente il tuo account e tutti i dati associati.',
+        message: "Questa azione eliminera' definitivamente il tuo account e tutti i dati associati.",
         confirmText: 'Elimina',
         cancelText: 'Annulla',
-        isDestructive: true
-    );
-    if (confermation == true && context.mounted) {
+        isDestructive: true);
+    if (confirmation == true && context.mounted) {
       context
           .read<AuthenticationBloc>()
           .add(const AuthenticationDeleteAccountRequested());
     }
   }
 
+  /// Costruisce le voci di logout e cancellazione account.
   @override
   Widget build(BuildContext context) {
     return SettingsSection(
@@ -611,53 +525,3 @@ class AccountManagementSettings extends StatelessWidget {
     );
   }
 }
-
-class _StatusLabel extends StatelessWidget {
-  final bool isConnected;
-  const _StatusLabel({required this.isConnected});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-
-    final color = isConnected
-        ? theme.resources.systemFillColorSuccess
-        : theme.resources.systemFillColorCritical;
-    final text = isConnected ? 'Connesso' : 'Non Connesso';
-    final icon = isConnected
-        ? FontAwesomeIcons.circleCheck
-        : FontAwesomeIcons.circleXmark;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: color.withValues(alpha: 0.3),
-          width: 1.0,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FaIcon(
-            icon,
-            size: 12,
-            color: color,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: theme.typography.caption?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-

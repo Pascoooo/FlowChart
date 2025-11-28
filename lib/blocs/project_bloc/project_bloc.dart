@@ -1,3 +1,6 @@
+/// Project BLoC gestisce il ciclo di vita dei progetti utente e le sessioni di lavoro.
+/// Coordina creazione, eliminazione, rinomina progetti, gestione sessioni di modifica,
+/// recupero dati non salvati da RTDB e caricamento workspace pubblici in modalità statica.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
@@ -15,6 +18,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   final ProjectRepo projectRepository;
   StreamSubscription? _projectsSubscription;
 
+  /// Inizializza il BLoC con ProjectRepository e registra tutti gli event handler.
+  /// Gestisce sessioni, CRUD progetti, sincronizzazione RTDB e workspace statici.
   ProjectBloc({required this.projectRepository}) : super(const ProjectInitial()) {
     on<CheckForUnsavedSessions>(_onCheckForUnsavedSessions);
     on<RecoverSession>(_onRecoverSession);
@@ -32,6 +37,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     on<LoadStaticWorkspace>(_onLoadStaticWorkspace);
   }
 
+  /// Verifica se esistono sessioni di lavoro non salvate in RTDB al login.
+  /// Se trovate, emette UnsavedChangesFound per permettere il recupero; altrimenti carica i progetti.
   Future<void> _onCheckForUnsavedSessions(CheckForUnsavedSessions event, Emitter<ProjectState> emit) async {
     emit(const ProjectLoading(message: 'Verifica dati...'));
     try {
@@ -50,6 +57,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Recupera una sessione non salvata da RTDB, salvandola su Firestore.
+  /// Dopo il recupero, ricarica la lista progetti.
   Future<void> _onRecoverSession(RecoverSession event, Emitter<ProjectState> emit) async {
     emit(const ProjectLoading(message: 'Recupero in corso...'));
     try {
@@ -60,6 +69,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Scarta una sessione non salvata eliminando i dati da RTDB.
+  /// Dopo l'eliminazione, ricarica la lista progetti.
   Future<void> _onDiscardSession(DiscardSession event, Emitter<ProjectState> emit) async {
     emit(const ProjectLoading(message: 'Eliminazione dati...'));
     try {
@@ -70,6 +81,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Recupera un singolo file modificato da RTDB e lo salva su Firestore.
+  /// Gestisce errori silenziosamente (UI può gestire separatamente).
   Future<void> _onRecoverSingleFile(RecoverSingleFile event, Emitter<ProjectState> emit) async {
     try {
       await projectRepository.recoverSingleFile(
@@ -78,10 +91,11 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         rtdbContent: event.rtdbContent,
       );
     } catch (e) {
-      // Gestione errore (opzionale, potrebbe essere gestito a livello UI)
     }
   }
 
+  /// Scarta le modifiche di un singolo file eliminate i dati da RTDB.
+  /// Gestisce errori silenziosamente (UI può gestire separatamente).
   Future<void> _onDiscardSingleFileChange(DiscardSingleFileChange event, Emitter<ProjectState> emit) async {
     try {
       await projectRepository.discardSingleFileChange(
@@ -89,10 +103,11 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         fileId: event.fileId,
       );
     } catch (e) {
-      // Gestione errore
     }
   }
 
+  /// Carica la lista dei progetti da Firestore tramite stream.
+  /// Sottoscrive lo stream e delega aggiornamenti a ProjectsUpdated event.
   Future<void> _onLoadProjects(LoadProjects event, Emitter<ProjectState> emit) async {
     emit(const ProjectLoading(message: 'Caricamento progetti...'));
     await _projectsSubscription?.cancel();
@@ -102,12 +117,16 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     );
   }
 
+  /// Aggiorna lo stato con la lista progetti ricevuta dallo stream.
+  /// Ordina i progetti per data di modifica (più recenti prima).
   void _onProjectsUpdated(ProjectsUpdated event, Emitter<ProjectState> emit) {
     final projects = List<MyProject>.from(event.projects)
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     emit(ProjectsLoaded(projects: projects));
   }
 
+  /// Avvia una sessione di lavoro su un progetto e lo seleziona come attivo.
+  /// Inizializza la sincronizzazione RTDB per il workspace.
   Future<void> _onStartSessionAndSelectProject(StartSessionAndSelectProject event, Emitter<ProjectState> emit) async {
     if (state is! ProjectsLoaded) return;
     final currentState = state as ProjectsLoaded;
@@ -121,6 +140,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Termina la sessione di lavoro su un progetto salvando i dati da RTDB a Firestore.
+  /// Gestisce sia workspace normali che workspace statici (read-only) e aggiorna la data modifica progetto.
   Future<void> _onLeaveProject(LeaveProject event, Emitter<ProjectState> emit) async {
     if (state is StaticWorkspaceLoaded) {
       emit(const ProjectLoading(message: 'Uscita...'));
@@ -177,13 +198,14 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Crea un nuovo progetto con un file "main" iniziale contenente solo il nodo Start.
+  /// Previene duplicati controllando il nome e avvia automaticamente una sessione sul nuovo progetto.
   Future<void> _onCreateProject(CreateProject event, Emitter<ProjectState> emit) async {
     if (state is ProjectsLoaded) {
       final currentState = state as ProjectsLoaded;
       final newNameLower = event.projectName.trim().toLowerCase();
       if (currentState.projects.any((p) => p.name.toLowerCase() == newNameLower)) {
         emit(currentState.copyWith(error: 'Un progetto con questo nome esiste già.'));
-        emit(currentState.copyWith(clearError: true));
         return;
       }
     }
@@ -214,15 +236,17 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       add(StartSessionAndSelectProject(project: newProject));
 
     } catch (e) {
-      final errorMessage = 'Errore nella creazione del progetto.';
+      const errorMessage = 'Errore nella creazione del progetto.';
       if (state is ProjectsLoaded) {
         emit((state as ProjectsLoaded).copyWith(error: errorMessage));
       } else {
-        emit(ProjectError(message: errorMessage));
+        emit(const ProjectError(message: errorMessage));
       }
     }
   }
 
+  /// Elimina un progetto da Firestore.
+  /// L'aggiornamento della lista avviene automaticamente tramite lo stream.
   Future<void> _onDeleteProject(DeleteProject event, Emitter<ProjectState> emit) async {
     try {
       await projectRepository.deleteProject(projectId: event.projectId);
@@ -233,6 +257,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Rinomina un progetto verificando che il nome non sia già in uso.
+  /// L'aggiornamento della lista avviene automaticamente tramite lo stream.
   Future<void> _onRenameProject(RenameProject event, Emitter<ProjectState> emit) async {
     if (state is! ProjectsLoaded) return;
     final currentState = state as ProjectsLoaded;
@@ -240,7 +266,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     final newNameLower = event.newName.trim().toLowerCase();
     if (currentState.projects.any((p) => p.projectId != event.projectId && p.name.toLowerCase() == newNameLower)) {
       emit(currentState.copyWith(error: 'Un progetto con questo nome esiste già.'));
-      emit(currentState.copyWith(clearError: true));
+      // Evita double-emit: rimuovi clearError perché viene gestito dalla UI
       return;
     }
 
@@ -252,6 +278,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Aggiorna la visibilità di un progetto (pubblico/privato).
+  /// Gestisce rate limiting specifico e aggiorna ottimisticamente lo stato locale.
   Future<void> _onUpdateProjectVisibility(UpdateProjectVisibility event, Emitter<ProjectState> emit) async {
     if (state is! ProjectsLoaded) return;
     final currentState = state as ProjectsLoaded;
@@ -262,7 +290,6 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
         isPublic: event.isPublic,
       );
 
-      // Rimuoviamo l'aggiornamento ottimistico locale. L'ordinamento è ora gestito dalla UI.
       final projectIndex = currentState.projects.indexWhere((p) => p.projectId == event.projectId);
       if (projectIndex != -1) {
         final updatedProjects = List<MyProject>.from(currentState.projects);
@@ -283,6 +310,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Carica un progetto pubblico in modalità read-only senza avviare una sessione.
+  /// Utilizzato per visualizzare progetti condivisi senza permessi di modifica.
   Future<void> _onLoadStaticWorkspace(LoadStaticWorkspace event, Emitter<ProjectState> emit) async {
     emit(const ProjectLoading(message: 'Caricamento progetto condiviso...'));
     final projectId = event.projectId.trim();
@@ -307,6 +336,8 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     }
   }
 
+  /// Cancella la sottoscrizione allo stream progetti prima di chiudere il BLoC.
+  /// Previene memory leak cancellando le risorse attive.
   @override
   Future<void> close() {
     _projectsSubscription?.cancel();

@@ -4,23 +4,132 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:debug_repository/debug_repository.dart';
-import '../../../../../blocs/debug_bloc/debug_bloc_exports.dart';
+import '../../../../../blocs/debug_bloc/debug_bloc.dart';
+import '../../../../../blocs/debug_bloc/debug_state.dart';
 import '../../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../../blocs/project_bloc/project_bloc.dart';
 import 'debug_ui_components.dart';
 
-/// 📊 Session Variables Panel - Pannello variabili di sessione
-class SessionVariablesPanel extends StatelessWidget {
+import 'call_stack_panel.dart';
+
+/// 📊 Debug Right Panel - TabView con Variabili e CallStack
+class SessionVariablesPanel extends StatefulWidget {
   const SessionVariablesPanel({super.key});
+
+  @override
+  State<SessionVariablesPanel> createState() => _SessionVariablesPanelState();
+}
+
+class _SessionVariablesPanelState extends State<SessionVariablesPanel> {
+  int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
 
+    return Column(
+      children: [
+        // TabView Header
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: theme.resources.cardBackgroundFillColorDefault,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: theme.resources.cardStrokeColorDefault),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildTabButton(
+                  context,
+                  'Variabili',
+                  FontAwesomeIcons.database,
+                  0,
+                  theme,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: _buildTabButton(
+                  context,
+                  'Call Stack',
+                  FontAwesomeIcons.layerGroup,
+                  1,
+                  theme,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // TabView Content
+        Expanded(
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              // Tab 0: Variabili
+              _buildVariablesTab(theme),
+              // Tab 1: CallStack
+              const CallStackPanel(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabButton(
+    BuildContext context,
+    String label,
+    IconData icon,
+    int index,
+    FluentThemeData theme,
+  ) {
+    final isSelected = _selectedIndex == index;
+
+    return Button(
+      onPressed: () => setState(() => _selectedIndex = index),
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.all(
+          isSelected
+              ? theme.accentColor.withValues(alpha: 0.15)
+              : Colors.transparent,
+        ),
+        padding: WidgetStateProperty.all(
+          const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FaIcon(
+            icon,
+            size: 14,
+            color: isSelected
+                ? theme.accentColor
+                : theme.resources.textFillColorSecondary,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.typography.body?.copyWith(
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              color: isSelected
+                  ? theme.accentColor
+                  : theme.resources.textFillColorPrimary,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVariablesTab(FluentThemeData theme) {
     return BlocBuilder<DebugBloc, DebugState>(
       builder: (context, debugState) {
-        // Mostra il pannello anche quando siamo in attesa input
         if (debugState is! DebugInProgress && debugState is! DebugAwaitingInput) {
           return Center(
             child: Text(
@@ -32,7 +141,6 @@ class SessionVariablesPanel extends StatelessWidget {
           );
         }
 
-        // Ottieni il flowchart corrente dal FlowchartBloc
         final flowchartState = context.read<FlowchartBloc>().state;
         if (flowchartState is! FlowchartLoaded) {
           return Center(
@@ -68,11 +176,8 @@ class SessionVariablesPanel extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             _buildHeader(context, session, theme),
             const SizedBox(height: 16),
-
-            // Lista variabili - usa le variabili dallo stato del debug
             Expanded(
               child: _buildVariablesList(
                 context,

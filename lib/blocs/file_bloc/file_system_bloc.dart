@@ -1,3 +1,6 @@
+/// FileSystem BLoC gestisce le operazioni CRUD sui file di un progetto (flowchart).
+/// Coordina creazione, eliminazione, rinomina file e validazione strutturale dei flowchart.
+/// Mantiene lo stato dei file attivi e valida l'integrità dei nodi e degli archi.
 import 'dart:convert';
 import 'package:bloc/bloc.dart';
 import 'package:file_repository/file_repository.dart';
@@ -7,12 +10,15 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../flowchart_bloc/flowchart_shape_factory.dart';
 import '../flowchart_bloc/flowchart_state.dart';
+import '../../config/services/flowchart_validation_service.dart';
 import 'file_system_event.dart';
 import 'file_system_state.dart';
 
 class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
   final ProjectRepo projectRepository;
 
+  /// Inizializza il BLoC con ProjectRepository e registra gli event handler.
+  /// Gestisce refresh, CRUD file, validazione progetto e aggiornamenti cache.
   FileSystemBloc({required this.projectRepository})
       : super(const FileSystemInitial()) {
     on<RefreshFileSystem>(_onRefreshFileSystem);
@@ -21,11 +27,14 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<DeleteFile>(_onDeleteFile);
     on<RenameFile>(_onRenameFile);
     on<UpdateFileContentInCache>(_onUpdateFileContentInCache);
-    on<ValidateProject>(_onValidateProject);
+    on<BuildProject>(_onBuildProject);
+    on<InvalidateBuild>(_onInvalidateBuild);
   }
 
   // --- SEZIONE CRUD (OPERAZIONI SUI FILE) ---
 
+  /// Carica tutti i file del progetto da Firebase.
+  /// Se non esiste il file 'main', lo crea con un flowchart iniziale contenente solo il nodo Start.
   Future<void> _onRefreshFileSystem(
       RefreshFileSystem event, Emitter<FileSystemState> emit) async {
     emit(const FileSystemLoading());
@@ -48,12 +57,14 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         final mainFile = files.firstWhere((f) => f.name.toLowerCase() == 'main', orElse: () => files.first);
         emit(FileSystemLoaded(files: files, activeFileId: mainFile.fileId));
       }
-      add(const ValidateProject()); // Attiva la validazione dopo il caricamento
+      // Rimossa validazione automatica: l'utente deve cliccare BUILD
     } catch (e) {
       emit(FileSystemError(message: 'Errore nel caricamento dei file: ${e.toString()}'));
     }
   }
 
+  /// Crea un nuovo file nel progetto con flowchart iniziale.
+  /// Se signature è null, crea un file "main" con nodo Start; altrimenti crea un sottoprogramma con header e parametri.
   Future<void> _onCreateFile(
       CreateFile event, Emitter<FileSystemState> emit) async {
     if (state is! FileSystemLoaded) return;
@@ -91,7 +102,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         final signature = event.signature!;
 
         final headerNode = FunctionHeaderNode(
-          id: 'header-${Uuid().v4()}',
+          id: 'header-${const Uuid().v4()}',
           x: 1030.0,
           y: 50.0,
           width: 250.0,
@@ -131,19 +142,23 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         activeFileId: newFile.fileId,
         isLoading: false,
       ));
-      add(const ValidateProject()); // Attiva la validazione dopo la creazione
+      add(const InvalidateBuild()); // Invalida il build dopo creazione file
       return;
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Impossibile creare il file: ${e.toString()}'));
     }
   }
 
+  /// Cambia il file attivo corrente nell'editor.
+  /// Emette stato aggiornato con il nuovo activeFileId.
   void _onOpenFile(OpenFile event, Emitter<FileSystemState> emit) {
     if (state is FileSystemLoaded) {
       emit((state as FileSystemLoaded).copyWith(activeFileId: event.fileId));
     }
   }
 
+  /// Elimina un file dal progetto, sia da Firestore che da RTDB.
+  /// Impedisce l'eliminazione del file "main" e seleziona automaticamente un nuovo file attivo se necessario.
   Future<void> _onDeleteFile(
       DeleteFile event, Emitter<FileSystemState> emit) async {
     if (state is! FileSystemLoaded) return;
@@ -169,12 +184,14 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       }
 
       emit(FileSystemLoaded(files: updatedFiles, activeFileId: nextActiveFileId));
-      add(const ValidateProject()); // Attiva la validazione dopo l'eliminazione
+      add(const InvalidateBuild()); // Invalida il build dopo eliminazione file
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Errore durante l\'eliminazione: ${e.toString()}'));
     }
   }
 
+  /// Rinomina un file esistente nel progetto.
+  /// Aggiorna il nome sia nel repository che nello stato locale.
   Future<void> _onRenameFile(
       RenameFile event, Emitter<FileSystemState> emit) async {
     if (state is! FileSystemLoaded) return;
@@ -190,13 +207,15 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       }).toList();
 
       emit(currentState.copyWith(files: updatedFiles, isLoading: false));
-      add(const ValidateProject()); // Attiva la validazione dopo la rinomina
+      // Rinominare un file non cambia la struttura: nessuna invalidazione necessaria
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Errore durante la rinomina.'));
     }
   }
 
 
+  /// Aggiorna il contenuto di un file nella cache locale (senza persistenza immediata).
+  /// Usato per sincronizzare modifiche temporanee prima del salvataggio su Firebase.
   void _onUpdateFileContentInCache(
       UpdateFileContentInCache event, Emitter<FileSystemState> emit) {
     if (state is! FileSystemLoaded) return;
@@ -204,102 +223,77 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     final updatedFiles = currentState.files.map((file) {
       if (file.fileId == event.fileId) {
-        // Assumendo che MyFile abbia un metodo copyWith. Se non ce l'ha, è essenziale aggiungerlo.
         return file.copyWith(content: event.newContent);
       }
       return file;
     }).toList();
 
-    // Emetti il nuovo stato con la lista dei file aggiornata, in modo silenzioso
     emit(currentState.copyWith(files: updatedFiles));
-    add(const ValidateProject());
+    // UpdateFileContentInCache: aggiornamento temporaneo, non invalidare
   }
 
-  Future<void> _onValidateProject(
-      ValidateProject event, Emitter<FileSystemState> emit) async {
+  /// Valida (builda) l'intero progetto verificando correttezza strutturale di tutti i flowchart.
+  /// Chiamato esplicitamente dall'utente tramite bottone BUILD.
+  /// Aggiorna buildStatus e popola liste errori/warnings.
+  Future<void> _onBuildProject(
+      BuildProject event, Emitter<FileSystemState> emit) async {
     if (state is! FileSystemLoaded) return;
     final currentState = state as FileSystemLoaded;
 
-    bool allValid = true;
+    // Imposta stato "building" durante la validazione
+    emit(currentState.copyWith(buildStatus: BuildStatus.building));
+
+    final allErrors = <String>[];
+    final allWarnings = <String>[];
+
     try {
       final List<Flowchart> flowcharts = currentState.files.map((file) {
         final jsonContent = jsonDecode(file.content);
         return Flowchart.fromEntity(FlowchartEntity.fromDocument(jsonContent));
       }).toList();
 
+      // Usa il servizio centralizzato di validazione
       for (final flowchart in flowcharts) {
-        if (!_isFlowchartValid(flowchart, flowcharts)) {
-          allValid = false;
-          break;
-        }
+        final report = FlowchartValidationService.validateCompleteFlowchart(flowchart);
+        allErrors.addAll(report.errors);
+        allWarnings.addAll(report.warnings);
       }
-    } catch (e) {
-      allValid = false;
-      // Puoi gestire l'errore di parsing o validazione qui se necessario
-    }
 
-    emit(currentState.copyWith(isProjectValid: allValid));
+      // Determina stato finale
+      final finalStatus = allErrors.isEmpty ? BuildStatus.valid : BuildStatus.invalid;
+
+      emit(currentState.copyWith(
+        buildStatus: finalStatus,
+        isProjectValid: allErrors.isEmpty, // Mantieni per compatibilità
+        validationErrors: allErrors,
+        validationWarnings: allWarnings,
+      ));
+    } catch (e) {
+      // Errore critico durante validazione (es. JSON malformato)
+      emit(currentState.copyWith(
+        buildStatus: BuildStatus.invalid,
+        isProjectValid: false,
+        validationErrors: ['Errore critico durante la validazione: $e'],
+        validationWarnings: [],
+      ));
+    }
   }
 
-  bool _isFlowchartValid(Flowchart flowchart, List<Flowchart> allFlowcharts) {
-    // 1. Tutti i nodi devono essere raggiungibili dal nodo di partenza
-    if (flowchart.nodes.isEmpty) return false; // Un flowchart vuoto non è valido
-    final startNode = flowchart.nodes.firstWhere(
-        (n) => n.kind == FlowNodeKind.start || n.kind == FlowNodeKind.functionHeader,
-        // Usa un nodo concreto per orElse, dato che FlowNode è astratto
-        orElse: () => const StartNode(id: '', x: 0, y: 0, width: 0, height: 0, text: ''));
-    if (startNode.id.isEmpty) return false; // Nessun nodo di partenza
+  /// Invalida il build corrente richiedendo una nuova validazione.
+  /// Chiamato automaticamente quando si modificano nodi/edge (operazioni strutturali).
+  void _onInvalidateBuild(
+      InvalidateBuild event, Emitter<FileSystemState> emit) {
+    if (state is! FileSystemLoaded) return;
+    final currentState = state as FileSystemLoaded;
 
-    final visited = <String>{};
-    final queue = [startNode.id];
-    visited.add(startNode.id);
-
-    while (queue.isNotEmpty) {
-      final currentId = queue.removeAt(0);
-      // Correzione: e.from è già una stringa (ID), non un oggetto con nodeId
-      final outgoingEdges = flowchart.edges.where((e) => e.from == currentId);
-      for (final edge in outgoingEdges) {
-        // Correzione: edge.to è già una stringa (ID)
-        if (!visited.contains(edge.to)) {
-          visited.add(edge.to);
-          queue.add(edge.to);
-        }
-      }
+    // Resetta a "notBuilt" se era valid o invalid
+    if (currentState.buildStatus != BuildStatus.notBuilt) {
+      emit(currentState.copyWith(
+        buildStatus: BuildStatus.notBuilt,
+        isProjectValid: false,
+        validationErrors: [],
+        validationWarnings: [],
+      ));
     }
-    if (visited.length != flowchart.nodes.length) return false;
-
-    // 2. Validazione dei nodi condizionali (cicli e decisioni)
-    final conditionalNodes = flowchart.nodes.where((n) =>
-        n.kind == FlowNodeKind.whileLoop ||
-        n.kind == FlowNodeKind.doWhileLoop ||
-        n.kind == FlowNodeKind.decision);
-
-    for (final node in conditionalNodes) {
-      final outgoingEdges = flowchart.edges.where((e) => e.from == node.id).toList();
-      final hasTrueExit = outgoingEdges.any((e) => e.port == 'true');
-      final hasFalseExit = outgoingEdges.any((e) => e.port == 'false');
-      if (!hasTrueExit || !hasFalseExit) {
-        return false; // Il nodo non ha entrambi i rami (true/false)
-      }
-    }
-
-    // 3. Validazione dei nodi foglia (nodi senza uscite)
-    final leafNodes = flowchart.nodes.where((node) {
-      return !flowchart.edges.any((edge) => edge.from == node.id);
-    }).toList();
-
-    if (flowchart.type == FlowchartType.main) {
-      // Per il main: deve esserci esattamente un nodo foglia, e deve essere un nodo 'end'.
-      if (leafNodes.length != 1) return false;
-      if (leafNodes.first.kind != FlowNodeKind.end) return false;
-    } else {
-      // Per i sottoprogrammi: tutti i nodi foglia devono essere di tipo 'return'.
-      if (leafNodes.isEmpty) return false; // Un sottoprogramma deve avere almeno un return
-      for (final node in leafNodes) {
-        if (node.kind != FlowNodeKind.returnNode) return false;
-      }
-    }
-
-    return true;
   }
 }

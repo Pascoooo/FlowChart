@@ -8,7 +8,8 @@ enum ConsoleEntryType {
   prompt,
   userInput,
   success,
-  error,
+  error,        // Errore non bloccante (warning)
+  blockingError, // Errore bloccante (critico)
   output,
 }
 

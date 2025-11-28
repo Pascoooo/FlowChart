@@ -1,8 +1,8 @@
-import 'package:flowchart_repository/src/models/flowchart_type.dart';
-import 'package:flowchart_repository/src/models/flow_node.dart';
-
 import '../../flowchart_repository.dart';
 
+/// Entity che rappresenta un flowchart completo nel formato Firestore.
+/// Contiene tutti i nodi, collegamenti, variabili e metadati necessari
+/// per salvare e ricostruire l'intero diagramma dal database.
 class FlowchartEntity {
   final String flowchartId;
   final String name;
@@ -24,6 +24,8 @@ class FlowchartEntity {
     required this.edges,
   });
 
+  /// Converte FlowchartEntity in una mappa per la scrittura su Firestore.
+  /// Serializza tutti i nodi, edge e metadati nel formato JSON compatibile.
   Map<String, dynamic> toDocument() {
     return {
       'flowchartId': flowchartId,
@@ -40,12 +42,15 @@ class FlowchartEntity {
     };
   }
 
+  /// Crea un'istanza di FlowchartEntity da un documento Firestore.
+  /// Gestisce la retrocompatibilità con schemi precedenti e deserializza
+  /// tutti i nodi e collegamenti nelle loro rappresentazioni entity.
   static FlowchartEntity fromDocument(Map<String, dynamic> doc) {
     final signatureDoc = doc['signature'] as Map<String, dynamic>? ?? {};
     final paramsList = signatureDoc['parameters'] as List<dynamic>? ?? [];
     final variablesList = doc['variables'] as List<dynamic>? ?? [];
 
-    // Parsing del tipo con fallback a 'main' per retrocompatibilità
+    // Parsing del tipo con fallback per retrocompatibilità
     final typeString = doc['type'] as String?;
     final type = typeString != null
         ? FlowchartType.values.firstWhere(

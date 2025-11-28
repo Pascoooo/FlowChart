@@ -1,3 +1,6 @@
+/// Stati del Debug BLoC.
+/// Rappresenta i diversi stati del debugging: iniziale, in corso, in attesa input,
+/// completato, errore, pausa. DebugInProgress include flag per lock concorrenza (isProcessing).
 import 'package:equatable/equatable.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:debug_repository/debug_repository.dart';
@@ -25,8 +28,10 @@ class DebugInProgress extends DebugState {
   final Map<String, dynamic>? lastUpdatedVariables;
   // 🆕 Flag: esecuzione step in corso (per disabilitare Next/Prev)
   final bool isProcessing;
-  // 🆕 Flag: l'ultimo messaggio è un errore non bloccante
+  // 🆕 Flag: l'ultimo messaggio è un errore
   final bool lastMessageIsError;
+  // 🆕 Flag: l'errore è bloccante (true) o warning (false)
+  final bool lastMessageIsBlocking;
 
   const DebugInProgress({
     required this.session,
@@ -37,6 +42,7 @@ class DebugInProgress extends DebugState {
     this.lastUpdatedVariables,
     this.isProcessing = false,
     this.lastMessageIsError = false,
+    this.lastMessageIsBlocking = false,
   });
 
   // ✅ CALCOLATO DINAMICAMENTE - Nessuna duplicazione
@@ -52,6 +58,7 @@ class DebugInProgress extends DebugState {
   List<String> get executionPath => session.debugPath;
   CallStack get callStack => session.callStack;
 
+  /// Crea una copia dello stato con modifiche selettive.
   DebugInProgress copyWith({
     DebugSession? session,
     Flowchart? currentFlowchart,
@@ -61,6 +68,7 @@ class DebugInProgress extends DebugState {
     Map<String, dynamic>? lastUpdatedVariables,
     bool? isProcessing,
     bool? lastMessageIsError,
+    bool? lastMessageIsBlocking,
   }) {
     return DebugInProgress(
       session: session ?? this.session,
@@ -71,6 +79,7 @@ class DebugInProgress extends DebugState {
       lastUpdatedVariables: lastUpdatedVariables ?? this.lastUpdatedVariables,
       isProcessing: isProcessing ?? this.isProcessing,
       lastMessageIsError: lastMessageIsError ?? this.lastMessageIsError,
+      lastMessageIsBlocking: lastMessageIsBlocking ?? this.lastMessageIsBlocking,
     );
   }
 
@@ -84,6 +93,7 @@ class DebugInProgress extends DebugState {
         lastUpdatedVariables,
         isProcessing,
         lastMessageIsError,
+        lastMessageIsBlocking,
       ];
 }
 

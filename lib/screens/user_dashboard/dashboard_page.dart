@@ -1,3 +1,6 @@
+/// Main dashboard page that orchestrates project selection, workspace, and recovery flows.
+/// Listens to ProjectBloc for state changes and renders appropriate views based on current state.
+/// Handles unsaved session recovery with user-friendly dialogs.
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/project_workspace.dart';
 import 'package:flowchart_thesis/screens/user_dashboard/project_workspace/widgets/static_workspace.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -27,7 +30,8 @@ class _DashboardPageState extends State<DashboardPage> {
     context.read<ProjectBloc>().add(const CheckForUnsavedSessions());
   }
 
-  // --- METODO DI INTERAZIONE CON I DIALOGHI COMPLETAMENTE RISCRITTO ---
+  /// Displays recovery dialog when unsaved session is detected.
+  /// Offers user choice to manage changes or discard session, dispatching appropriate events to ProjectBloc.
   void _showRecoveryDialog(BuildContext context, UnsavedChangesFound state) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Chiama il nostro nuovo dialogo a due pulsanti, più pulito e diretto.
@@ -59,7 +63,8 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
-  // Questo metodo rimane valido, poiché il dialogo manuale esiste ancora nel nuovo flusso.
+  /// Shows detailed manual recovery dialog for reviewing and comparing local vs cloud changes.
+  /// Called when user selects "Manage" action from initial recovery dialog.
   Future<void> _showManualRecoveryDialog(
       BuildContext context, UnsavedChangesFound state) async {
     final didComplete = await RecoveryDialogs.showManualRecoveryDialog(
@@ -73,6 +78,8 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  /// Builds dashboard UI with animated background, state listeners, and dynamic content.
+  /// Uses BlocListener for side effects (dialogs, banners) and BlocBuilder for UI rendering.
   @override
   Widget build(BuildContext context) {
     return ScaffoldPage(
@@ -118,6 +125,8 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  /// Renders either ProjectWorkspace or ProjectSelector based on selected project.
+  /// Uses AnimatedSwitcher for smooth transitions between views.
   Widget _buildProjectsLoadedView(ProjectsLoaded state) {
     return AnimatedSwitcher(
       duration: _kTransitionDuration,

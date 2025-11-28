@@ -1,3 +1,6 @@
+/// Responsive paginated carousel for displaying project cards.
+/// Automatically adjusts projects per page based on viewport width (1-3 cards).
+/// Features staggered entrance animations and smooth page transitions.
 import 'dart:math';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -64,6 +67,7 @@ class _ProjectCarouselState extends State<ProjectCarousel>
       ? 0
       : (widget.projects.length / _projectsPerPage).ceil();
 
+  /// Animates transition to specified page with smooth easing.
   void _navigateToPage(int page) {
     _pageController.animateToPage(
       page,
@@ -72,6 +76,7 @@ class _ProjectCarouselState extends State<ProjectCarousel>
     );
   }
 
+  /// Creates staggered animation for card at given index with delayed start.
   Animation<double> _animationFor(int index) {
     final start = (index * 0.1).clamp(0.0, 1.0);
     final end = (start + 0.6).clamp(0.0, 1.0);
@@ -81,6 +86,8 @@ class _ProjectCarouselState extends State<ProjectCarousel>
     );
   }
 
+  /// Builds responsive carousel with navigation buttons and adaptive layout.
+  /// Adjusts projects per page: 3 (≥880px), 2 (651-879px), 1 (≤650px).
   @override
   Widget build(BuildContext context) {
     if (widget.projects.isEmpty) {
@@ -169,13 +176,14 @@ class _ProjectCarouselState extends State<ProjectCarousel>
   }
 }
 
-// Widget di navigazione personalizzato e migrato a Fluent UI
+/// Circular navigation button for carousel with hover and press states.
 class _NavigationButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
   const _NavigationButton({required this.icon, required this.onTap});
 
+  /// Builds circular button with accent color on hover and press.
   @override
   Widget build(BuildContext context) {
     return Button(

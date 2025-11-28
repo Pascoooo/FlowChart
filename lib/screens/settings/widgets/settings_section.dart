@@ -1,3 +1,6 @@
+/// Contenitore di sezione per gruppi di impostazioni.
+/// Fornisce header, stato opzionale e inserisce divisori tra i figli.
+
 import 'package:fluent_ui/fluent_ui.dart';
 
 class SettingsSection extends StatelessWidget {
@@ -12,6 +15,8 @@ class SettingsSection extends StatelessWidget {
     required this.children,
   });
 
+  /// Costruisce il contenitore della sezione con header e corpo,
+  /// applicando bordi e divisori per separare i widget figli.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
@@ -53,6 +58,8 @@ class SettingsSection extends StatelessWidget {
     );
   }
 
+  /// Inserisce un Divider tra ogni widget della lista,
+  /// mantenendo l'ordine e saltando il divider finale.
   List<Widget> _withDividers(List<Widget> items) {
     if (items.isEmpty) return items;
     final List<Widget> out = [];

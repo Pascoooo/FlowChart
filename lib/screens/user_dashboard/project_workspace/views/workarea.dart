@@ -1,3 +1,6 @@
+/// Main work area for flowchart editing with canvas, toolbar, and variable management panel.
+/// Orchestrates flowchart canvas, node palette, grid toggle, and read-only/debug mode controls.
+/// Features animated variables panel and comprehensive variable validation.
 import 'package:file_repository/file_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show Icons;
@@ -5,12 +8,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../../../blocs/debug_bloc/debug_bloc.dart';
+import '../../../../blocs/debug_bloc/debug_state.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
+import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
-import '../../../../blocs/debug_bloc/debug_bloc_exports.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/dialog_service/service_dialog.dart';
 import 'flowchart_canvas.dart';
@@ -22,7 +27,6 @@ class WorkArea extends StatefulWidget {
   final VoidCallback onToggleGrid;
   final bool isReadOnly;
   final bool allowDragInReadOnly;
-  final VoidCallback? onEdit;
   final VoidCallback? onExport;
   final VoidCallback? onStartDebug;
   final VoidCallback? onLeave;
@@ -34,7 +38,6 @@ class WorkArea extends StatefulWidget {
     required this.onToggleGrid,
     this.isReadOnly = false,
     this.allowDragInReadOnly = false,
-    this.onEdit,
     this.onExport,
     this.onStartDebug,
     this.onLeave,
@@ -86,6 +89,7 @@ class _WorkAreaState extends State<WorkArea>
     super.dispose();
   }
 
+  /// Toggles animated variables panel with slide transition.
   void _toggleVariablesPanel() {
     setState(() {
       _isVariablesPanelOpen = !_isVariablesPanelOpen;
@@ -97,6 +101,7 @@ class _WorkAreaState extends State<WorkArea>
     });
   }
 
+  /// Renames all occurrences of variable using word boundaries to avoid partial matches.
   String _renameInText(String text, String oldName, String newName) {
     if (text.isEmpty || oldName.isEmpty || oldName == newName) return text;
     final pattern = RegExp('\\b${RegExp.escape(oldName)}\\b');
@@ -458,6 +463,131 @@ class _WorkAreaState extends State<WorkArea>
     }
   }
 
+  /// Mostra un dialog con errori e warning di validazione.
+  /// Chiamato quando l'utente clicca sul bottone ERRORS dopo un build fallito.
+  void _showValidationErrors(BuildContext context, FileSystemLoaded fileState) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return ContentDialog(
+          title: Row(
+            children: [
+              Icon(FontAwesomeIcons.circleExclamation, color: Colors.red, size: 24),
+              const SizedBox(width: 12),
+              const Text('Errori di Validazione'),
+            ],
+          ),
+          content: SizedBox(
+            width: 600,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Sezione errori
+                if (fileState.validationErrors.isNotEmpty) ...[
+                  Text(
+                    'Errori (${fileState.validationErrors.length})',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 300),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: fileState.validationErrors.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      itemBuilder: (context, index) {
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(FontAwesomeIcons.xmark, color: Colors.red, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  fileState.validationErrors[index],
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+
+                // Sezione warnings
+                if (fileState.validationWarnings.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Avvisi (${fileState.validationWarnings.length})',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: fileState.validationWarnings.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      itemBuilder: (context, index) {
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(FontAwesomeIcons.triangleExclamation, color: Colors.orange, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  fileState.validationWarnings[index],
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+
+                if (fileState.validationErrors.isEmpty && fileState.validationWarnings.isEmpty)
+                  const Text('Nessun errore o avviso da mostrare.'),
+              ],
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Chiudi'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Avvolge il canvas con un listener sul FileSystemBloc per caricare il contenuto del file attivo
@@ -502,7 +632,7 @@ class _WorkAreaState extends State<WorkArea>
           ),
 
           // Layer per i bottoni sopra la workarea
-          if (!widget.isReadOnly && (widget.onEdit != null || widget.onExport != null || widget.onStartDebug != null || widget.onLeave != null))
+          if (!widget.isReadOnly && (widget.onExport != null || widget.onStartDebug != null || widget.onLeave != null))
             Positioned(
               top: 16,
               left: 0,
@@ -525,12 +655,8 @@ class _WorkAreaState extends State<WorkArea>
 
                         if (flowchartState is FlowchartLoaded &&
                             fileSystemState is FileSystemLoaded) {
-                          final hasEndNode = flowchartState.flowchart.nodes
-                              .any((n) => n.kind == FlowNodeKind.end);
-                          isPlayEnabled = flowchartState.flowchart.isMain &&
-                              hasEndNode &&
-                              !disableUI &&
-                              fileSystemState.isProjectValid;
+                          isPlayEnabled = !disableUI;
+
 
                           final nodes = flowchartState.flowchart.nodes;
                           final bool hasOnlyStartOrHeader = nodes.length == 1 &&
@@ -588,13 +714,57 @@ class _WorkAreaState extends State<WorkArea>
                                   iconSize: 22,
                                 ),
                                 const SizedBox(width: 12),
-                                _TopBarButton(
-                                  icon: FontAwesomeIcons.play,
-                                  tooltip: 'Avvia debug',
-                                  enabled: isPlayEnabled,
-                                  onTap:
-                                      isPlayEnabled ? widget.onStartDebug : null,
-                                  isAccent: true,
+                                // Bottone BUILD/ERRORS/PLAY basato su build status
+                                BlocBuilder<FileSystemBloc, FileSystemState>(
+                                  builder: (context, fileState) {
+                                    if (fileState is! FileSystemLoaded) {
+                                      return const SizedBox.shrink();
+                                    }
+
+                                    switch (fileState.buildStatus) {
+                                      case BuildStatus.notBuilt:
+                                        // Mostra bottone BUILD
+                                        return _TopBarButton(
+                                          icon: FontAwesomeIcons.hammer,
+                                          tooltip: 'Builda progetto',
+                                          enabled: true,
+                                          onTap: () {
+                                            context.read<FileSystemBloc>().add(const BuildProject());
+                                          },
+                                          isAccent: false,
+                                        );
+
+                                      case BuildStatus.building:
+                                        // Mostra loading
+                                        return Container(
+                                          width: 40,
+                                          height: 40,
+                                          padding: const EdgeInsets.all(10),
+                                          child: const ProgressRing(strokeWidth: 3),
+                                        );
+
+                                      case BuildStatus.invalid:
+                                        // Mostra bottone ERRORS
+                                        return _TopBarButton(
+                                          icon: FontAwesomeIcons.circleExclamation,
+                                          tooltip: 'Mostra errori (${fileState.validationErrors.length})',
+                                          enabled: true,
+                                          onTap: () => _showValidationErrors(context, fileState),
+                                          isAccent: false,
+                                          color: Colors.red,
+                                        );
+
+                                      case BuildStatus.valid:
+                                        // Mostra bottone PLAY
+                                        return _TopBarButton(
+                                          icon: FontAwesomeIcons.play,
+                                          tooltip: 'Avvia debug',
+                                          enabled: true,
+                                          onTap: widget.onStartDebug,
+                                          isAccent: true,
+                                        );
+                                    }
+                                  },
                                 ),
                                 const SizedBox(width: 12),
                                 _TopBarButton(
@@ -653,12 +823,6 @@ class _WorkAreaState extends State<WorkArea>
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    _TopBarButton(
-                                      icon: FontAwesomeIcons.pencil,
-                                      tooltip: 'Modifica disegno',
-                                      enabled: !disableUI,
-                                      onTap: !disableUI ? widget.onEdit : null,
-                                    ),
                                     const SizedBox(width: 8),
                                     _TopBarButton(
                                       icon: FontAwesomeIcons.download,
@@ -1098,6 +1262,7 @@ class _TopBarButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool isAccent;
   final double? iconSize;
+  final Color? color; // Colore personalizzato per icona/bordo
 
   const _TopBarButton({
     required this.icon,
@@ -1106,6 +1271,7 @@ class _TopBarButton extends StatelessWidget {
     required this.onTap,
     this.isAccent = false,
     this.iconSize,
+    this.color,
   });
 
   @override
@@ -1121,9 +1287,9 @@ class _TopBarButton extends StatelessWidget {
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isAccent && enabled
+              color: color ?? (isAccent && enabled
                   ? theme.accentColor
-                  : theme.resources.cardStrokeColorDefault,
+                  : theme.resources.cardStrokeColorDefault),
             ),
             boxShadow: [
               BoxShadow(
@@ -1137,7 +1303,7 @@ class _TopBarButton extends StatelessWidget {
             icon: Icon(
               icon,
               size: iconSize ?? 18,
-              color: isAccent && enabled ? theme.accentColor : null,
+              color: color ?? (isAccent && enabled ? theme.accentColor : null),
             ),
             onPressed: enabled ? onTap : null,
             style: ButtonStyle(

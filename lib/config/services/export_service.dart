@@ -13,7 +13,10 @@ class ExportService {
   /// **Metodo di Preparazione Universale**
   /// Genera i byte di un'immagine PNG da un widget identificato da una GlobalKey.
   /// Restituisce Uint8List in caso di successo, altrimenti null.
-  static Future<Uint8List?> generatePngBytes({required GlobalKey key}) async {
+  static Future<Uint8List?> generatePngBytes({
+    required GlobalKey key,
+    BuildContext? context,
+  }) async {
     try {
       final boundary =
           key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
@@ -24,13 +27,16 @@ class ExportService {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (e) {
-      AppDialogs.showInfoDialog(
-          context as BuildContext,
+      // Mostra dialog solo se context è fornito
+      if (context != null && context.mounted) {
+        AppDialogs.showInfoDialog(
+          context,
           title: 'Errore di esportazione',
           message: 'Si è verificato un errore durante la generazione dell\'immagine: $e',
           closeText: 'OK',
-
-          type: DialogType.error);
+          type: DialogType.error,
+        );
+      }
       return null;
     }
   }

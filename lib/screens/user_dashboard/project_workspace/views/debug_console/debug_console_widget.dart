@@ -1,3 +1,6 @@
+/// Debug console widget for interactive command execution during flowchart debugging.
+/// Displays command history, handles user input, and integrates with DebugEngine.
+/// Presentation-only component that delegates business logic to DebugBloc and DebugEngine.
 // ============================================================================
 // 🎨 DEBUG CONSOLE - UI COMPONENT (Presentation Only)
 // ============================================================================
@@ -16,7 +19,9 @@ import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../../../../blocs/debug_bloc/debug_bloc_exports.dart';
+import '../../../../../blocs/debug_bloc/debug_bloc.dart';
+import '../../../../../blocs/debug_bloc/debug_event.dart';
+import '../../../../../blocs/debug_bloc/debug_state.dart';
 import 'console_models.dart';
 import 'console_entry_widget.dart';
 import 'debug_engine.dart'; // ✅ Ora usa la versione pulita
@@ -238,6 +243,7 @@ class _DebugConsoleState extends State<DebugConsole> {
               success: !(state.lastMessageIsError),
               message: state.lastMessage,
               updatedVariables: state.lastUpdatedVariables,
+              blocking: state.lastMessageIsBlocking, // ✅ Passa flag bloccante
             );
           }
         } else if (state is DebugAwaitingInput) {

@@ -1,3 +1,7 @@
+/// Flowchart BLoC gestisce l'editing visuale dei diagrammi di flusso.
+/// Coordina l'aggiunta/rimozione nodi, collegamenti tra nodi, modalità connettore,
+/// gestione cicli (while/do-while), undo/redo con command pattern, cache multi-file e debug mode.
+/// Include validazione strutturale e placement automatico nodi tramite PlacementEngine.
 import 'dart:async';
 import 'dart:convert';
 import 'package:bloc/bloc.dart';
@@ -12,6 +16,8 @@ import 'flowchart_shape_factory.dart';
 import 'flowchart_state.dart';
 import 'placement_engine.dart';
 
+/// Entry della cache per memorizzare stato completo di un flowchart quando si cambia file.
+/// Include flowchart, history undo/redo e stato UI (selezione nodi, modalità connettore, debug mode).
 class _FlowchartCacheEntry {
   final Flowchart flowchart;
   final CommandHistory history;
@@ -38,9 +44,6 @@ class _FlowchartCacheEntry {
 }
 
 class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
-  final _validationRequestController = StreamController<void>.broadcast();
-  Stream<void> get onValidationRequested => _validationRequestController.stream;
-
   final Map<String, _FlowchartCacheEntry> _cache = {};
   String? _activeFileId;
   CommandHistory _history = CommandHistory();
@@ -48,6 +51,8 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   // ✅ FIX #3: Getter pubblico per il file attivo nel FlowchartBloc
   String? get activeFileId => _activeFileId;
 
+  /// Inizializza il BLoC con stato iniziale e registra tutti gli event handler.
+  /// Gestisce editing grafico, connessioni, cicli, undo/redo, cache multi-file e validazione.
   FlowchartBloc() :
         super(FlowchartInitial()) {
     on<LoadFlowchart>(_onLoadFlowchart);
@@ -84,7 +89,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
 
   @override
   Future<void> close() {
-    _validationRequestController.close();
     return super.close();
   }
 
@@ -157,7 +161,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         projectFlowcharts: cachedEntry.projectFlowcharts,
         isDebugMode: cachedEntry.isDebugMode,
       ));
-      _validationRequestController.add(null);
       return;
     }
 
@@ -208,7 +211,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         connectorPurpose: ConnectorPurpose.doWhileBody,
         selectedNodeId: targetDoWhileId,
       ));
-      _validationRequestController.add(null);
       return;
     }
 
@@ -217,7 +219,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       projectFlowcharts: currentState?.projectFlowcharts ?? {},
       isDebugMode: (currentState?.isDebugMode ?? false),
     ));
-    _validationRequestController.add(null);
   }
 
   void _onAddGlobalVariable(
@@ -240,7 +241,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         description: 'Aggiungi variabile globale');
     _history.executeCommand(command);
     emit(command.execute(currentState));
-    _validationRequestController.add(null);
   }
 
   void _onUpdateGlobalVariables(
@@ -256,7 +256,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         description: 'Aggiorna variabili globali');
     _history.executeCommand(command);
     emit(command.execute(currentState));
-    _validationRequestController.add(null);
   }
 
   void _onUpdateFlowchart(
@@ -265,7 +264,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     final currentState = state as FlowchartLoaded;
 
     emit(currentState.copyWith(flowchart: event.flowchart));
-    _validationRequestController.add(null);
   }
 
   // ============================================================================
@@ -393,7 +391,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         connectorPurpose: ConnectorPurpose.doWhileBody,
         selectedNodeId: newNode.id,
       ));
-      _validationRequestController.add(null);
       return;
     }
 
@@ -417,7 +414,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         connectorPurpose: ConnectorPurpose.doWhileBody,
         selectedNodeId: targetDoWhileId,
       ));
-      _validationRequestController.add(null);
       return;
     }
 
@@ -434,7 +430,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     }
 
     emit(command.execute(s));
-    _validationRequestController.add(null);
   }
 
   Size _getNodeSize(FlowNodeKind kind) {
@@ -497,12 +492,10 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
         connectorPurpose: ConnectorPurpose.doWhileBody,
         selectedNodeId: targetDoWhileId,
       ));
-      _validationRequestController.add(null);
       return;
     }
 
     emit(command.execute(s));
-    _validationRequestController.add(null);
   }
 
   void _onUpdateNodePosition(UpdateNodePosition event, Emitter<FlowchartState> emit) {
@@ -548,7 +541,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     _history.executeCommand(command);
 
     emit(command.execute(s));
-    _validationRequestController.add(null);
   }
 
   void _onUpdateNodeContent(UpdateNodeContent event, Emitter<FlowchartState> emit) {
@@ -623,7 +615,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     _history.executeCommand(command);
 
     emit(command.execute(s));
-    _validationRequestController.add(null);
   }
 
   void _onSelectNode(SelectNode event, Emitter<FlowchartState> emit) {
@@ -650,7 +641,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
           clearConnectorSource: true,
           selectedConnectorNodeIds: <String>{},
         ));
-        _validationRequestController.add(null);
       }
     }
   }
@@ -681,7 +671,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
               selectedNodeId: dw.id,
               connectorPurpose: ConnectorPurpose.doWhileBody,
             ));
-            _validationRequestController.add(null);
             return;
           }
         }
@@ -691,7 +680,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
           clearConnectorSource: true,
           selectedConnectorNodeIds: <String>{},
         ));
-        _validationRequestController.add(null);
       }
     }
   }
@@ -737,7 +725,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     _history.executeCommand(command);
 
     emit(command.execute(s));
-    _validationRequestController.add(null);
   }
 
   void _onResetCanvasAndVariables(ResetCanvasAndVariables event, Emitter<FlowchartState> emit) {
@@ -758,7 +745,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     _history.executeCommand(command);
 
     emit(command.execute(s));
-    _validationRequestController.add(null);
   }
 
   void _onResetCanvasPreserveVariables(ResetCanvasPreserveVariables event, Emitter<FlowchartState> emit) {
@@ -819,7 +805,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     _history.executeCommand(command);
 
     emit(command.execute(s));
-    _validationRequestController.add(null);
   }
 
   void _onClearHistory(ClearHistory event, Emitter<FlowchartState> emit) {
@@ -1029,7 +1014,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       selectedConnectorNodeIds: {},
       connectorPurpose: null,
     ));
-    _validationRequestController.add(null);
   }
 
   void _onCancelConnectorMode(CancelConnectorMode event, Emitter<FlowchartState> emit) {
@@ -1131,7 +1115,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
     _history.executeCommand(cmd);
 
     emit(cmd.execute(s));
-    _validationRequestController.add(null);
   }
 
   void _onSelectDoWhileBodyStart(
@@ -1218,7 +1201,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       connectorPurpose: null,
       selectedNodeId: loop.id,
     ));
-    _validationRequestController.add(null);
   }
 
   void _onResetFromNode(ResetFromNode event, Emitter<FlowchartState> emit) {
@@ -1276,7 +1258,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
           connectorPurpose: ConnectorPurpose.doWhileBody,
           selectedNodeId: target.id,
         ));
-        _validationRequestController.add(null);
         return;
       }
     }
@@ -1288,7 +1269,6 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       selectedConnectorNodeIds: {},
       connectorPurpose: null,
     ));
-    _validationRequestController.add(null);
   }
 
   void _onStartResetFromNodeSelection(
@@ -1472,6 +1452,5 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       selectedConnectorNodeIds: {},
       connectorPurpose: null,
     ));
-    _validationRequestController.add(null);
   }
 }

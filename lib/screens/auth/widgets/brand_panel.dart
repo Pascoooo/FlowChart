@@ -1,3 +1,6 @@
+/// Pannello brand laterale con animazioni fluttuanti e highlight del prodotto.
+/// Pensato per layout desktop, arricchisce la pagina di login con messaggi di valore.
+/// Include decorazioni animate leggere per dare profondità alla UI.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -14,6 +17,8 @@ class _BrandPanelState extends State<BrandPanel> with TickerProviderStateMixin {
   late Animation<double> _floatingAnimation;
   late Animation<double> _rotationAnimation;
 
+  /// Avvia le animazioni di floating/rotazione per dare movimento al pannello.
+  /// I controller sono ciclici per mantenere l'effetto continuo sul background.
   @override
   void initState() {
     super.initState();
@@ -46,6 +51,8 @@ class _BrandPanelState extends State<BrandPanel> with TickerProviderStateMixin {
     _rotationController.repeat();
   }
 
+  /// Libera i controller per evitare leak quando il pannello esce dal tree.
+  /// Mantiene pulizia della memoria durante navigazioni ripetute.
   @override
   void dispose() {
     _floatingController.dispose();
@@ -53,6 +60,8 @@ class _BrandPanelState extends State<BrandPanel> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  /// Costruisce il pannello brand con elementi decorativi animati e testi.
+  /// Usa gradienti soft e transizioni per presentare il valore del prodotto.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
@@ -211,6 +220,8 @@ class _BrandPanelState extends State<BrandPanel> with TickerProviderStateMixin {
     );
   }
 
+  /// Genera la lista di feature con animazioni di ingresso scaglionate.
+  /// Ogni item mostra icona, titolo e sottotitolo con opacità progressiva.
   List<Widget> _buildFeatureList(BuildContext context) {
     final theme = FluentTheme.of(context);
     final features = [

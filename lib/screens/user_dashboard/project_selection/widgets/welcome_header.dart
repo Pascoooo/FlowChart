@@ -1,8 +1,11 @@
+/// Animated welcome header displaying personalized greeting with user's name.
+/// Features fade-in, slide, and scale animations for hero icon and text.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../../blocs/auth_bloc/authentication_state.dart';
+import '../../../../config/constants/app_constants.dart';
 import '../../../../config/constants/themes.dart';
 
 class WelcomeHeader extends StatefulWidget {
@@ -27,6 +30,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     _startAnimations();
   }
 
+  /// Sets up hero and decoration animation controllers with fade, slide, and scale effects.
   void _initializeAnimations() {
     _heroController = AnimationController(
       duration: AppConstants.animationDuration,
@@ -54,6 +58,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     ).animate(_heroAnimation);
   }
 
+  /// Triggers animation sequence with staggered timing for smooth entry effect.
   void _startAnimations() {
     _heroController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
@@ -68,6 +73,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     super.dispose();
   }
 
+  /// Builds animated header with hero icon, personalized welcome text, and subtitle.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
@@ -94,6 +100,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     );
   }
 
+  /// Renders animated hero icon with gradient background and shadow effects.
   Widget _buildHeroIcon(FluentThemeData theme) {
     return AnimatedBuilder(
       animation: _decorationAnimation,
@@ -129,6 +136,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     );
   }
 
+  /// Displays personalized welcome message with user's name fetched from AuthenticationBloc.
   Widget _buildWelcomeText(FluentThemeData theme) {
     return BlocBuilder<AuthenticationBloc, AuthenticationState>(
       builder: (context, state) {
@@ -161,6 +169,7 @@ class WelcomeHeaderState extends State<WelcomeHeader>
     );
   }
 
+  /// Renders subtitle with inspirational message in styled container.
   Widget _buildSubtitle(FluentThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),

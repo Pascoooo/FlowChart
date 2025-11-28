@@ -1,3 +1,6 @@
+/// Tile di selezione per preferenze di esportazione nel pannello impostazioni.
+/// Evidenzia l'opzione corrente e supporta trailing personalizzati o stato disabilitato.
+
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -17,6 +20,8 @@ class ExportOptionTile extends StatelessWidget {
     this.trailing,
   });
 
+  /// Costruisce il tile con radio button, titolo e badge di selezione opzionale.
+  /// Gestisce hover/press per dare feedback visivo e disabilita l'interazione se necessario.
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
@@ -79,6 +84,8 @@ class ExportOptionTile extends StatelessWidget {
     );
   }
 
+  /// Calcola il colore di background in base allo stato della HoverButton.
+  /// Mostra accentuazione su hover/press e un tono disabilitato quando necessario.
   Color _getBackgroundColor(FluentThemeData theme, Set<ButtonStates> states) {
     if (!enabled) return theme.cardColor.withOpacity(0.5);
     if (states.isPressing) return theme.accentColor.withOpacity(0.1);
@@ -87,4 +94,3 @@ class ExportOptionTile extends StatelessWidget {
     return theme.cardColor;
   }
 }
-

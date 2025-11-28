@@ -1,17 +1,3 @@
-// ============================================================================
-// 🗄️ DEBUG REPOSITORY - GESTIONE SESSIONE (Business Logic)
-// ============================================================================
-//
-// RESPONSABILITÀ:
-// ✅ Creare/gestire sessione debug
-// ✅ Eseguire step (delega a ExecutionEngine)
-// ✅ Gestire variabili sessione
-// ✅ Gestire history (undo)
-// ❌ NON emette stati UI
-// ❌ NON conosce BLoC
-//
-// ============================================================================
-
 import 'dart:async';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter/foundation.dart';
@@ -20,6 +6,15 @@ import '../debug_repository.dart';
 import 'execution_engine.dart';
 import 'expression_parser.dart';
 
+/// Implementazione concreta del DebugRepo per la gestione delle sessioni di debug.
+///
+/// Responsabilità:
+/// - Creare e gestire sessioni di debug attive
+/// - Eseguire step di esecuzione (delega a ExecutionEngine)
+/// - Gestire variabili e stato della sessione
+/// - Gestire history per supporto undo/redo
+///
+/// Nota: Non emette stati UI e non conosce i BLoC (separazione responsabilità).
 class DebugRepoImpl implements DebugRepo {
   DebugSession? _session;
   final List<DebugSnapshot> _history = [];
@@ -27,7 +22,7 @@ class DebugRepoImpl implements DebugRepo {
   final StreamController<Map<String, dynamic>> _varsStream =
   StreamController<Map<String, dynamic>>.broadcast();
 
-  // 🆕 Stato interno: se l'ultimo step ha richiesto input utente
+  /// Flag interno che indica se l'ultimo step ha richiesto input dall'utente
   bool _awaitingInput = false;
 
   DebugRepoImpl({required Map<String, Flowchart> projectFlowcharts})

@@ -2,13 +2,16 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Entity che rappresenta i dati di un progetto nel formato Firestore.
+/// Utilizzata per serializzare/deserializzare documenti dalla collection 'projects'.
+/// Separa il livello di persistenza dal modello di dominio (MyProject).
 class MyProjectEntity {
-  String projectId;
-  String name;
-  DateTime updatedAt;
-  bool isPublic;
-  String ownerId;
-  DateTime? lastVisibilityChange;
+  final String projectId;
+  final String name;
+  final DateTime updatedAt;
+  final bool isPublic;
+  final String ownerId;
+  final DateTime? lastVisibilityChange;
 
   MyProjectEntity({
     required this.projectId,
@@ -19,10 +22,11 @@ class MyProjectEntity {
     this.isPublic = false,
   });
 
-  // --- MODIFICA FONDAMENTALE QUI ---
+  /// Crea un'istanza di MyProjectEntity da un documento Firestore.
+  /// Converte i Timestamp in DateTime e gestisce i campi opzionali.
   static MyProjectEntity fromDocument(Map<String, dynamic> json) {
     final updatedAtTs = json['updatedAt'] as Timestamp;
-    final lastChangeTs = json['lastVisibilityChange'] as Timestamp?; // Legge il timestamp (che può essere nullo)
+    final lastChangeTs = json['lastVisibilityChange'] as Timestamp?;
 
     return MyProjectEntity(
       projectId: json['projectId'] as String,
@@ -34,7 +38,8 @@ class MyProjectEntity {
     );
   }
 
-  // Il resto del file (toDocument) è corretto e non va toccato.
+  /// Converte MyProjectEntity in una mappa per la scrittura su Firestore.
+  /// Serializza le date in Timestamp e omette campi null opzionali.
   Map<String, dynamic> toDocument() {
     return {
       'projectId': projectId,

@@ -2,12 +2,10 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:project_repository/project_repository.dart';
 
-import '../../../blocs/auth_bloc/authentication_bloc.dart';
-import '../../../blocs/auth_bloc/authentication_event.dart';
 import '../../../screens/settings/widgets/settings_provider.dart';
 import '../banner_service.dart';
 import '../export_service.dart';
@@ -18,31 +16,18 @@ class ShareDialogs {
     required Uint8List pngBytes,
     required String fileName,
   }) {
-    // La logica di gestione rimane invariata
-    void handleExport(BuildContext dialogContext, ExportPreference choice,
-        bool shouldRemember) {
-      if (shouldRemember) {
-        dialogContext.read<SettingsProvider>().updateExportPreference(choice);
-      }
-      Navigator.of(dialogContext).pop();
-
-      if (choice == ExportPreference.local) {
-        ExportService.downloadFileWithDialog(
-            context: context, bytes: pngBytes, fileName: fileName);
-      } else if (choice == ExportPreference.drive) {
-        context.read<AuthenticationBloc>().add(
-              ExportFlowchartToDriveRequested(
-                  fileName: '$fileName.png', fileBytes: pngBytes),
-            );
-      }
+    void handleLocalExport(BuildContext dialogContext, bool shouldRemember) {
+      ExportService.downloadFileWithDialog(
+        context: context,
+        bytes: pngBytes,
+        fileName: fileName,
+      );
     }
 
     return showDialog<void>(
       context: context,
       builder: (dialogContext) {
         final theme = FluentTheme.of(dialogContext);
-        final isDriveConnected =
-            dialogContext.watch<AuthenticationBloc>().state.user.driveConnected;
         bool rememberChoice = false;
 
         return StatefulBuilder(
@@ -73,7 +58,7 @@ class ShareDialogs {
 
                     // 🎯 Export Options - Web-Optimized Layout
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         _buildExportChoiceCard(
                           context: context,
@@ -81,20 +66,8 @@ class ShareDialogs {
                           title: 'Dispositivo Locale',
                           subtitle: 'Scarica sul tuo computer',
                           isEnabled: true,
-                          onPressed: () => handleExport(dialogContext,
-                              ExportPreference.local, rememberChoice),
-                        ),
-                        const SizedBox(width: 24),
-                        _buildExportChoiceCard(
-                          context: context,
-                          icon: FontAwesomeIcons.googleDrive,
-                          title: 'Google Drive',
-                          subtitle: isDriveConnected
-                              ? 'Salva nel cloud'
-                              : 'Account non connesso',
-                          isEnabled: isDriveConnected,
-                          onPressed: () => handleExport(dialogContext,
-                              ExportPreference.drive, rememberChoice),
+                          onPressed: () =>
+                              handleLocalExport(dialogContext, rememberChoice),
                         ),
                       ],
                     ),
