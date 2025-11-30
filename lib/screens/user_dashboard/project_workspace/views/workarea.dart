@@ -520,7 +520,8 @@ class _WorkAreaState extends State<WorkArea>
 
                     bool isPlayEnabled = widget.onStartDebug != null &&
                         flowchartState is FlowchartLoaded &&
-                        !disableUI;
+                        !disableUI &&
+                        flowchartState.flowchart.isMain;
                     bool isResetEnabled = false;
                     bool isDeleteEnabled = false;
                     bool canUndo = false;

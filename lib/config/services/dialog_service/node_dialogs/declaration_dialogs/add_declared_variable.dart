@@ -26,7 +26,7 @@ class _AddVariableDialogState extends State<AddVariableDialog> {
   bool _attemptedSubmit = false;
 
   // Tipi di dato supportati, in linea con lo standard C
-  static const _cTypes = <String>['int', 'float', 'double', 'bool', 'char', 'string'];
+  static const _cTypes = <String>['int', 'float', 'double', 'bool', 'string'];
 
   @override
   void dispose() {

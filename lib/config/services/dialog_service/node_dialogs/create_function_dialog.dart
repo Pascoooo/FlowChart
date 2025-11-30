@@ -53,10 +53,11 @@ class _CreateFunctionDialogState extends State<_CreateFunctionDialog> {
 
   List<String> get _availableDataTypes => [
         'void',
-        'string',
         'int',
+        'float',
         'double',
         'bool',
+        'string',
       ];
 
   void _addParameter() {

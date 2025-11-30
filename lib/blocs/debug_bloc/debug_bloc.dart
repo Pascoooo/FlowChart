@@ -128,6 +128,12 @@ class DebugBloc extends Bloc<DebugEvent, DebugState> {
         return;
       }
 
+      // ⛔ Validazione: solo il Main può essere eseguito
+      if (!event.flowchart.isMain) {
+        emit(const DebugError('Il debug può essere avviato solo dal flowchart principale (Main).', isBlocking: true));
+        return;
+      }
+
       // 🔄 Sincronizza i flowchart del progetto nel repository prima di creare la sessione
       await debugRepository.syncProjectFlowcharts(event.projectFlowcharts);
 

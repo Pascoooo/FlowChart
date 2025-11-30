@@ -59,6 +59,9 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   Timer? _debounce;
   StreamSubscription? _rtdbSubscription;
 
+  // 🆕 Flag per prevenire loop infiniti nel cambio file
+  bool _isChangingFile = false;
+
   @override
   void initState() {
     super.initState();
@@ -107,7 +110,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
   }
 
   Future<void> _handleExport(BuildContext innerContext) async {
-    if (!mounted || !(innerContext.mounted)) return;
+    if (!mounted || !innerContext.mounted) return;
     final fileState = innerContext.read<FileSystemBloc>().state;
     if (fileState is FileSystemLoaded && fileState.activeFileId != null) {
       final fileName = _getCurrentFileName(fileState);
@@ -118,26 +121,40 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
         }
         return;
       }
+      
+      if (mounted && innerContext.mounted) {
+        await ExportService.downloadFileWithDialog(
+          context: innerContext,
+          bytes: pngBytes,
+          fileName: fileName,
+        );
+      }
     } else {
-      if (!mounted || !(innerContext.mounted)) return;
+      if (!mounted || !innerContext.mounted) return;
       await AppDialogs.showInfoDialog(innerContext, title: "Nessun File Selezionato", message: "Seleziona un file prima di esportare.");
     }
   }
 
   // ==========================================================================
-  // 🎬 AVVIO DEBUG (Semplificato - Solo Evento al BLoC)
+  // 🆕 METODO HELPER PER RIPRISTINARE LA GRIGLIA
+  // ==========================================================================
+  void _restoreGridState() {
+    if (_preDebugShowGrid != null && mounted) {
+      setState(() {
+        _showGrid = _preDebugShowGrid!;
+        _preDebugShowGrid = null;
+      });
+    }
+  }
+
+  // ==========================================================================
+  // 🎬 AVVIO DEBUG (Refactored con gestione errori migliorata)
   // ==========================================================================
 
   /// Gestisce l'avvio della modalità debug.
-  /// ✨ REFACTORING CRITICO: Questo metodo è stato drasticamente semplificato.
-  /// La UI ora si limita a:
-  /// 1. Verificare che gli stati siano pronti
-  /// 2. Preparare i dati necessari (flowcharts)
-  /// 3. Inviare un evento al DebugBloc
-  ///
-  /// Tutta la logica di business (costruzione del path, validazione, ecc.)
-  /// è stata spostata nel DebugBloc dove appartiene.
-  void _handleStartDebug(BuildContext ctx) async {
+  /// Verifica gli stati, prepara i dati e invia l'evento al DebugBloc.
+  /// Con gestione robusta degli errori e salvataggi.
+  Future<void> _handleStartDebug(BuildContext ctx) async {
     if (!mounted || !ctx.mounted) return;
 
     final flowchartBloc = ctx.read<FlowchartBloc>();
@@ -171,76 +188,90 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       setState(() => _showGrid = false);
     }
 
-    // 1️⃣ Serializza il flowchart corrente nel cache
-    if (fileSystemState.activeFileId != null) {
+    // 1️⃣ Salvataggio forzato di tutti i flowchart in memoria (attivo + cache)
+    final projectRepo = ctx.read<ProjectBloc>().projectRepository;
+    final cacheSnapshot = flowchartBloc.exportAllFlowcharts();
+    final savedFlowchartsByFileId = <String, Flowchart>{};
+
+    for (final entry in cacheSnapshot.entries) {
+      final fileId = entry.key;
+      final targetFile = fileSystemState.files.firstWhereOrNull((f) => f.fileId == fileId);
+      if (targetFile == null) continue;
+
+      final normalizedFlowchart = entry.value.copyWith(name: targetFile.name);
+      final serialized = jsonEncode(normalizedFlowchart.toEntity().toDocument());
+
+      savedFlowchartsByFileId[fileId] = normalizedFlowchart;
+
+      fileSystemBloc.add(UpdateFileContentInCache(
+        fileId: fileId,
+        newContent: serialized,
+      ));
+
       try {
-        final serialized = flowchartState.toJson();
-        if (serialized.trim().isNotEmpty) {
-          fileSystemBloc.add(UpdateFileContentInCache(
-            fileId: fileSystemState.activeFileId!,
-            newContent: serialized,
-          ));
-        }
+        await projectRepo.updateLiveFileContent(
+          widget.selectedProject.projectId,
+          fileId,
+          serialized,
+        );
       } catch (e) {
-        debugPrint('⚠️ Impossibile serializzare il flowchart: $e');
+        debugPrint('⚠️ Errore salvataggio forzato ($fileId): $e');
+        if (mounted && ctx.mounted) {
+          BannerService.showError(ctx, 'Avviso: impossibile salvare "${targetFile.name}" prima dell\'esecuzione.');
+        }
       }
     }
 
-    // 2️⃣ Prepara tutti i flowchart del progetto
+    // 2️⃣ Prepara i flowchart del progetto usando le versioni salvate in cache
+    // e, se necessario, il contenuto già presente nel file system.
+    final Flowchart mainFlowchart = flowchartState.flowchart;
     final Map<String, Flowchart> allFlowcharts = {};
+
     for (final file in fileSystemState.files) {
-      try {
-        if (file.content.trim().isNotEmpty) {
+      Flowchart? flowchart = savedFlowchartsByFileId[file.fileId];
+
+      if (flowchart == null && file.fileId == flowchartBloc.activeFileId) {
+        flowchart = mainFlowchart;
+      }
+
+      if (flowchart == null && file.content.trim().isNotEmpty) {
+        try {
           final entity = FlowchartEntity.fromDocument(jsonDecode(file.content));
-          final flowchart = Flowchart.fromEntity(entity);
-          allFlowcharts[flowchart.name] = flowchart;
+          flowchart = Flowchart.fromEntity(entity);
+        } catch (e) {
+          debugPrint('⚠️ Impossibile parsare file ${file.name}: $e');
         }
-      } catch (e) {
-        debugPrint('⚠️ Impossibile parsare file ${file.name}: $e');
+      }
+
+      if (flowchart != null) {
+        final normalized = flowchart.copyWith(name: file.name);
+        allFlowcharts.putIfAbsent(normalized.name, () => normalized);
       }
     }
 
-    // Usa sempre la versione IN MEMORIA del flowchart corrente
-    final String currentName = flowchartState.flowchart.name;
-    allFlowcharts[currentName] = flowchartState.flowchart; // override prima
-    final Flowchart mainFlowchart = flowchartState.flowchart; // sempre in memoria
-
-    if (allFlowcharts.isNotEmpty) {
+    // Aggiorna il FlowchartBloc con tutti i flowchart del progetto
+    if (allFlowcharts.length > 1) {
       flowchartBloc.add(LoadProjectFlowcharts(allFlowcharts));
     }
 
+    // 3️⃣ Avvia il debug
     try {
-      // 3️⃣ ✨ UNICO PUNTO DI INTERAZIONE CON IL DEBUGBLOC
+      if (!mounted || !ctx.mounted) return;
+
       ctx.read<DebugBloc>().add(DebugStart(
         flowchart: mainFlowchart,
-        projectFlowcharts: allFlowcharts.isNotEmpty
-            ? allFlowcharts
-            : {currentName: mainFlowchart},
+        projectFlowcharts: allFlowcharts,
       ));
 
       debugPrint('✅ Evento DebugStart inviato al BLoC');
     } catch (e) {
       debugPrint('❌ Errore avvio debug: $e');
-      BannerService.showError(ctx, 'Errore avvio debug: $e');
-
-      // Ripristina la griglia in caso di errore
-      if (_preDebugShowGrid != null) {
-        setState(() {
-          _showGrid = _preDebugShowGrid!;
-          _preDebugShowGrid = null;
-        });
+      if (mounted && ctx.mounted) {
+        BannerService.showError(ctx, 'Errore avvio debug: $e');
+        _restoreGridState();
       }
     }
   }
-
-  // ============================================================================
-  // ❌ METODO RIMOSSO: _buildDebugPath()
-  //
-  // Questo metodo conteneva logica di business pura (attraversamento del grafo)
-  // ed è stato spostato nel DebugBloc come metodo privato.
-  //
-  // La UI NON deve sapere come si costruisce un percorso di debug.
-  // ============================================================================
 
   @override
   Widget build(BuildContext outerContext) {
@@ -260,8 +291,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
         ],
         child: BlocBuilder<FileSystemBloc, FileSystemState>(
           builder: (context, fileSystemState) {
-            // Usa solo il numero di file per la chiave, non il contenuto
-            // così il DebugBloc non viene ricreato durante le modifiche
             int fileCount = 0;
             if (fileSystemState is FileSystemLoaded) {
               fileCount = fileSystemState.files.length;
@@ -293,7 +322,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                     listenWhen: (prev, curr) =>
                     prev is! FileSystemLoaded && curr is FileSystemLoaded,
                     listener: (context, state) {
-                      if (!mounted || !(context.mounted)) return; // guardia contro contesto deattivato
+                      if (!mounted || !context.mounted) return;
                       if (state is FileSystemLoaded) {
                         final Map<String, Flowchart> projectFlowcharts = {};
                         for (final file in state.files) {
@@ -314,65 +343,56 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                     },
                   ),
 
+                  // ==========================================================
+                  // 🆕 LISTENER DEBUG STATE - LOGICA UNIFICATA
+                  // ==========================================================
                   BlocListener<DebugBloc, DebugState>(
                     listener: (context, debugState) {
-                      if (!mounted || !(context.mounted)) return; // guardia contro contesto deattivato
-                      final flowchartBloc = context.read<FlowchartBloc>();
-                      final flowchartState = flowchartBloc.state;
+                      if (!mounted || !context.mounted) return;
 
-                      if (debugState is DebugInitial) {
-                        // Debug terminato manualmente
-                        if (flowchartState is FlowchartLoaded) {
-                          // 🔴 FIX: Rimosso clearDebugVariables - il DebugBloc gestisce già la pulizia
-                          // tramite endSession() quando riceve DebugStop
+                      // 🆕 Gestione unificata del termine debug
+                      if (debugState is DebugInitial || debugState is DebugCompleted) {
+                        _restoreGridState();
 
-                          if (_preDebugShowGrid != null) {
-                            setState(() {
-                              _showGrid = _preDebugShowGrid!;
-                              _preDebugShowGrid = null;
-                            });
-                          }
+                        // 💾 SALVA SU FIRESTORE ALL'USCITA DAL DEBUG
+                        final projectRepo = context.read<ProjectBloc>().projectRepository;
+                        unawaited(projectRepo.saveSessionToFirestore(
+                            widget.selectedProject.projectId
+                        ));
+
+                        // Se DebugCompleted, invia DebugStop per pulire il repository
+                        if (debugState is DebugCompleted) {
+                          // Usa un microtask per evitare modifiche durante il build
+                          Future.microtask(() {
+                            if (mounted && context.mounted) {
+                              context.read<DebugBloc>().add(const DebugStop());
+                            }
+                          });
                         }
-                      } else if (debugState is DebugCompleted) {
-                        // ✅ Debug terminato raggiungendo la fine: ripristina come per DebugInitial
-                        if (flowchartState is FlowchartLoaded) {
-                          // 🔴 FIX: Rimosso clearDebugVariables - il DebugBloc gestisce già la pulizia
-                          // tramite endSession() quando riceve DebugStop
-
-                          if (_preDebugShowGrid != null) {
-                            setState(() {
-                              _showGrid = _preDebugShowGrid!;
-                              _preDebugShowGrid = null;
-                            });
-                          }
-                        }
-                        // Porta il DebugBloc allo stato iniziale per pulire la sessione del repo
-                        context.read<DebugBloc>().add(const DebugStop());
                       }
-                      // 🔴 FIX CRITICO: Rimosso else if con ComputeDebugStep
-                      // Il DebugBloc gestisce autonomamente l'avanzamento tramite executeNextStep()
-                      // Non c'è bisogno di notificare il FileSystemBloc
                     },
                   ),
+
                   // ==========================================================
-                  // 💾 SALVATAGGIO FLOWCHART: usa FlowchartBloc.activeFileId
+                  // 💾 SALVATAGGIO FLOWCHART - CORRETTO
                   // ==========================================================
                   BlocListener<FlowchartBloc, FlowchartState>(
                     listenWhen: (previous, current) {
-                      // Salva solo quando il flowchart cambia e NON siamo in debug
-                      // Per verificare se siamo in debug, usiamo il DebugBloc
-                      return previous is! FlowchartLoaded && current is FlowchartLoaded ||
-                          (previous is FlowchartLoaded && current is FlowchartLoaded &&
+                      // 🆕 Condizione con parentesi esplicite per chiarezza
+                      return (previous is! FlowchartLoaded && current is FlowchartLoaded) ||
+                          (previous is FlowchartLoaded &&
+                              current is FlowchartLoaded &&
                               previous.flowchart != current.flowchart);
                     },
                     listener: (context, state) {
-                      if (!mounted || !(context.mounted)) return; // guardia contro contesto deattivato
-                      // Controlla se siamo in debug dal DebugBloc
+                      if (!mounted || !context.mounted) return;
+
+                      // Verifica se siamo in debug
                       final debugState = context.read<DebugBloc>().state;
-                      final isInDebug = debugState is DebugInProgress || debugState is DebugAwaitingInput;
+                      final isInDebug = debugState is DebugInProgress ||
+                          debugState is DebugAwaitingInput;
 
                       if (state is FlowchartLoaded && !widget.isReadOnly && !isInDebug) {
-                        // ✅ Usa FlowchartBloc come source of truth
                         final flowchartBlocRef = context.read<FlowchartBloc>();
                         final activeFileId = flowchartBlocRef.activeFileId;
                         if (activeFileId == null) return;
@@ -380,39 +400,49 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                         final fileSystemState = context.read<FileSystemBloc>().state;
                         if (fileSystemState is! FileSystemLoaded) return;
 
-                        // Validazione extra: il file deve esistere nella lista
-                        final activeFile = fileSystemState.files.firstWhereOrNull((f) => f.fileId == activeFileId);
+                        final activeFile = fileSystemState.files.firstWhereOrNull(
+                                (f) => f.fileId == activeFileId
+                        );
                         if (activeFile == null) return;
 
                         final jsonContent = state.toJson();
                         if (jsonContent.trim().isEmpty) return;
 
+                        // 🆕 Cancella il timer precedente prima di crearne uno nuovo
                         _debounce?.cancel();
+
                         final projectRepo = context.read<ProjectBloc>().projectRepository;
                         final projectId = widget.selectedProject.projectId;
+
                         _debounce = Timer(const Duration(milliseconds: 400), () {
                           if (!mounted) return;
-                          projectRepo.updateLiveFileContent(
+                          // Fire-and-forget: non bloccare l'UI
+                          unawaited(projectRepo.updateLiveFileContent(
                             projectId,
                             activeFileId,
                             jsonContent,
-                          );
+                          ));
                         });
                       }
                     },
                   ),
 
                   // ==========================================================
-                  // ✨ LISTENER CORRETTO E AGGIORNATO PER IL CAMBIO FILE
+                  // 🆕 CAMBIO FILE - CON PROTEZIONE LOOP INFINITI
                   // ==========================================================
                   BlocListener<FileSystemBloc, FileSystemState>(
                     listener: (context, state) async {
-                      if (!mounted || !(context.mounted)) return; // guardia contro contesto deattivato
-                      // Cattura riferimenti stabili ai bloc/repo per evitare context.read() dopo await o in callback
+                      if (!mounted || !context.mounted) return;
+
+                      // 🆕 Previeni loop infiniti
+                      if (_isChangingFile) {
+                        debugPrint('⚠️ Cambio file già in corso, ignoro evento');
+                        return;
+                      }
+
                       final projectRepo = context.read<ProjectBloc>().projectRepository;
                       final fileSystemBlocRef = context.read<FileSystemBloc>();
                       final flowchartBlocRef = context.read<FlowchartBloc>();
-                      final debugBlocRef = context.read<DebugBloc>();
 
                       if (state is FileSystemError) {
                         BannerService.showError(context, state.message);
@@ -421,134 +451,111 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
 
                       if (state is! FileSystemLoaded) return;
 
-                      // ✅ Usa FlowchartBloc come source of truth per il file precedente
                       final previousFlowchartFileId = flowchartBlocRef.activeFileId;
 
-                      // Hai cambiato file nel FileSystemBloc?
                       if (previousFlowchartFileId != state.activeFileId) {
                         debugPrint('🔄 Cambio file: "$previousFlowchartFileId" → "${state.activeFileId}"');
 
-                        // STEP 1: Salva il file precedente
-                        if (previousFlowchartFileId != null) {
-                          _debounce?.cancel();
+                        // 🆕 Attiva il flag
+                        _isChangingFile = true;
 
-                          final flowchartState = flowchartBlocRef.state;
-                          if (flowchartState is FlowchartLoaded && !widget.isReadOnly) {
-                            final jsonContent = flowchartState.toJson();
+                        try {
+                          // STEP 1: Salva il file precedente
+                          if (previousFlowchartFileId != null) {
+                            _debounce?.cancel();
 
-                            if (jsonContent.trim().isNotEmpty) {
-                              debugPrint('💾 Salvataggio file precedente: $previousFlowchartFileId');
+                            final flowchartState = flowchartBlocRef.state;
+                            if (flowchartState is FlowchartLoaded && !widget.isReadOnly) {
+                              final jsonContent = flowchartState.toJson();
 
-                              try {
-                                await projectRepo.updateLiveFileContent(
-                                  widget.selectedProject.projectId,
-                                  previousFlowchartFileId,
-                                  jsonContent,
-                                );
+                              if (jsonContent.trim().isNotEmpty) {
+                                debugPrint('💾 Salvataggio file precedente: $previousFlowchartFileId');
 
-                                fileSystemBlocRef.add(UpdateFileContentInCache(
-                                  fileId: previousFlowchartFileId,
-                                  newContent: jsonContent,
-                                ));
-                              } catch (e) {
-                                debugPrint('❌ Errore salvataggio: $e');
+                                try {
+                                  await projectRepo.updateLiveFileContent(
+                                    widget.selectedProject.projectId,
+                                    previousFlowchartFileId,
+                                    jsonContent,
+                                  );
+
+                                  if (!mounted || !context.mounted) return;
+
+                                  fileSystemBlocRef.add(UpdateFileContentInCache(
+                                    fileId: previousFlowchartFileId,
+                                    newContent: jsonContent,
+                                  ));
+                                } catch (e) {
+                                  debugPrint('❌ Errore salvataggio: $e');
+                                  // Continua comunque con il caricamento del nuovo file
+                                }
                               }
                             }
                           }
-                        }
 
-                        // STEP 2: Carica il nuovo file
-                        await _rtdbSubscription?.cancel();
+                          // STEP 2: Gestisci file non selezionato
+                          if (state.activeFileId == null && state.files.isNotEmpty) {
+                            final mainFile = state.files.firstWhere(
+                                  (f) => f.name.toLowerCase() == 'main',
+                              orElse: () => state.files.first,
+                            );
 
-                        if (state.activeFileId == null && state.files.isNotEmpty) {
-                          final mainFile = state.files.firstWhere(
-                            (f) => f.name.toLowerCase() == 'main',
-                            orElse: () => state.files.first,
-                          );
-                          fileSystemBlocRef.add(OpenFile(
-                            projectId: widget.selectedProject.projectId,
-                            fileId: mainFile.fileId,
-                          ));
-                          return;
-                        }
+                            if (!mounted || !context.mounted) return;
 
-                        if (state.activeFileId != null) {
-                          final activeFile = state.files.firstWhereOrNull(
-                            (f) => f.fileId == state.activeFileId,
-                          );
-
-                          if (activeFile != null) {
-                            debugPrint('📥 Caricamento nuovo file: ${activeFile.name}');
-
-                            flowchartBlocRef.add(LoadFlowchart(
-                              fileId: activeFile.fileId,
-                              jsonContent: activeFile.content,
-                              fileName: activeFile.name,
+                            fileSystemBlocRef.add(OpenFile(
+                              projectId: widget.selectedProject.projectId,
+                              fileId: mainFile.fileId,
                             ));
+                            return;
+                          }
 
-                            // Setup live updates
-                            if (!widget.isReadOnly) {
-                              final projectId = widget.selectedProject.projectId;
-                              final fileId = activeFile.fileId;
-                              final fileName = activeFile.name;
+                          // STEP 3: Carica il nuovo file
+                          if (state.activeFileId != null) {
+                            final activeFile = state.files.firstWhereOrNull(
+                                  (f) => f.fileId == state.activeFileId,
+                            );
 
-                              _rtdbSubscription = projectRepo
-                                  .liveFileContent(projectId, fileId)
-                                  .listen((liveContent) {
-                                if (!mounted) return;
-                                if (liveContent == null || liveContent.trim().isEmpty) return;
+                            if (activeFile != null) {
+                              debugPrint('📥 Caricamento nuovo file: ${activeFile.name}');
 
-                                // Verifica che il FlowchartBloc abbia lo stesso fileId
-                                if (flowchartBlocRef.activeFileId != fileId) {
-                                  debugPrint('⚠️ Ignorando update: file diverso');
-                                  return;
-                                }
+                              if (!mounted || !context.mounted) return;
 
-                                final currentFcState = flowchartBlocRef.state;
-                                if (currentFcState is FlowchartLoaded) {
-                                  try {
-                                    final currentJson = currentFcState.toJson();
-                                    if (const DeepCollectionEquality().equals(
-                                        jsonDecode(liveContent),
-                                        jsonDecode(currentJson))) {
-                                      return;
-                                    }
-                                  } catch (_) {}
-                                }
-
-                                final debugState = debugBlocRef.state;
-                                final isInDebug = debugState is DebugInProgress || debugState is DebugAwaitingInput;
-
-                                if (isInDebug) return;
-                                if (FlowchartLoaded.tryParse(liveContent) == null) return;
-
-                                flowchartBlocRef.add(LoadFlowchart(
-                                  fileId: fileId,
-                                  jsonContent: liveContent,
-                                  fileName: fileName,
-                                ));
-                              });
+                              flowchartBlocRef.add(LoadFlowchart(
+                                fileId: activeFile.fileId,
+                                jsonContent: activeFile.content,
+                                fileName: activeFile.name,
+                              ));
                             }
                           }
+                        } finally {
+                          // 🆕 Rilascia il flag dopo un breve delay per garantire stabilità
+                          Future.delayed(const Duration(milliseconds: 100), () {
+                            _isChangingFile = false;
+                          });
                         }
                       }
                     },
                   ),
 
+                  // ==========================================================
+                  // DIALOG CREAZIONE NODI
+                  // ==========================================================
                   BlocListener<FlowchartBloc, FlowchartState>(
                     listenWhen: (prev, curr) => curr is ShowNodeCreationDialog,
                     listener: (context, state) async {
-                      if (!mounted || !(context.mounted)) return; // guardia contro contesto deattivato
+                      if (!mounted || !context.mounted) return;
+
                       if (state is ShowNodeCreationDialog) {
                         final data = await AppDialogs.showNodeCreationDialog(
                           context: context,
                           kind: state.kind,
                           variables: state.availableVariables,
                         );
-                        if (data == null || !mounted || !(context.mounted)) return; // ricontrolla dopo l'await
+
+                        if (data == null || !mounted || !context.mounted) return;
 
                         final ctx = _workareaKey.currentContext;
                         BoxConstraints canvasConstraints;
+
                         if (ctx != null && ctx.findRenderObject() is RenderBox) {
                           final renderBox = ctx.findRenderObject() as RenderBox;
                           canvasConstraints = BoxConstraints.tight(renderBox.size);
@@ -570,14 +577,21 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                 ],
                 child: BlocBuilder<DebugBloc, DebugState>(
                   builder: (ctx, debugState) {
-                    // Mostra DebugModeView se siamo in una sessione di debug attiva
-                    if (debugState is DebugInProgress || debugState is DebugAwaitingInput || debugState is DebugError || debugState is DebugCompleted) {
+                    // Mostra DebugModeView se siamo in debug
+                    if (debugState is DebugInProgress ||
+                        debugState is DebugAwaitingInput ||
+                        debugState is DebugError ||
+                        debugState is DebugCompleted) {
                       return DebugModeView(
                         workareaKey: _workareaKey,
                         showGrid: _showGrid,
-                        onToggleGrid: () { if (!mounted) return; setState(() => _showGrid = !_showGrid); },
+                        onToggleGrid: () {
+                          if (!mounted) return;
+                          setState(() => _showGrid = !_showGrid);
+                        },
                       );
                     }
+
                     return AnimatedBuilder(
                       animation: _slideInController,
                       builder: (innerContext, child) {
@@ -590,7 +604,10 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                           workareaKey: _workareaKey,
                           onExport: () => _handleExport(innerContext),
                           showGrid: _showGrid,
-                          toggleGrid: () { if (!mounted) return; setState(() => _showGrid = !_showGrid); },
+                          toggleGrid: () {
+                            if (!mounted) return;
+                            setState(() => _showGrid = !_showGrid);
+                          },
                           onStartDebug: () => _handleStartDebug(innerContext),
                           isReadOnly: widget.isReadOnly,
                           onLeave: widget.onLeave,

@@ -214,13 +214,19 @@ class DebugEngine {
   }) {
     if (success) {
       if (message != null && message.isNotEmpty) {
-        _addSuccessMessage(message);
+        // Evita duplicati consecutivi
+        if (_history.isEmpty || _history.last.text != message) {
+          _addSuccessMessage(message);
+        }
       }
       if (updatedVariables != null && updatedVariables.isNotEmpty) {
         // Le variabili sono visibili altrove; nessun log aggiuntivo
       }
     } else {
-      _addErrorMessage(message ?? 'Errore durante l\'esecuzione', blocking: blocking);
+      final errorMsg = message ?? 'Errore durante l\'esecuzione';
+      if (_history.isEmpty || _history.last.text != errorMsg) {
+        _addErrorMessage(errorMsg, blocking: blocking);
+      }
     }
 
     _state = ConsoleState.completed;

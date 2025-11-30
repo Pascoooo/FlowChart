@@ -122,7 +122,12 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   void _onProjectsUpdated(ProjectsUpdated event, Emitter<ProjectState> emit) {
     final projects = List<MyProject>.from(event.projects)
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    emit(ProjectsLoaded(projects: projects));
+    
+    if (state is ProjectsLoaded) {
+      emit((state as ProjectsLoaded).copyWith(projects: projects));
+    } else {
+      emit(ProjectsLoaded(projects: projects));
+    }
   }
 
   /// Avvia una sessione di lavoro su un progetto e lo seleziona come attivo.

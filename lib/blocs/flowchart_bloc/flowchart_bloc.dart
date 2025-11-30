@@ -51,6 +51,22 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   // ✅ FIX #3: Getter pubblico per il file attivo nel FlowchartBloc
   String? get activeFileId => _activeFileId;
 
+  /// Restituisce uno snapshot di tutti i flowchart in memoria (attivo + cache) indicizzati per fileId.
+  /// Utile per persistere in blocco i diagrammi senza dover cambiare file.
+  Map<String, Flowchart> exportAllFlowcharts() {
+    final snapshot = <String, Flowchart>{};
+
+    if (_activeFileId != null && state is FlowchartLoaded) {
+      snapshot[_activeFileId!] = (state as FlowchartLoaded).flowchart;
+    }
+
+    for (final entry in _cache.entries) {
+      snapshot.putIfAbsent(entry.key, () => entry.value.flowchart);
+    }
+
+    return snapshot;
+  }
+
   /// Inizializza il BLoC con stato iniziale e registra tutti gli event handler.
   /// Gestisce editing grafico, connessioni, cicli, undo/redo, cache multi-file e validazione.
   FlowchartBloc() :

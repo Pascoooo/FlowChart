@@ -64,6 +64,11 @@ class ExpressionParser {
           }
 
           return ExpressionResult(isValid: true, value: value);
+        } else {
+          // 🟢 FALLBACK STRINGHE: Se la variabile non esiste e il target è stringa, trattalo come testo
+          if (targetDeclaration != null && _getTypeCategory(targetDeclaration.dataType) == 'string') {
+             return ExpressionResult(isValid: true, value: normalized);
+          }
         }
       }
 
@@ -126,6 +131,11 @@ class ExpressionParser {
       // Espressioni matematiche
       final hasMathOps = RegExp(r'[+\-*/%^()]').hasMatch(normalized);
       if (!hasMathOps) {
+        // 🟢 FALLBACK STRINGHE: Testo senza operatori e senza quote
+        if (targetDeclaration != null && _getTypeCategory(targetDeclaration.dataType) == 'string') {
+           return ExpressionResult(isValid: true, value: normalized);
+        }
+
         // Stringa non quotata senza operatori
         return const ExpressionResult(
           isValid: false,
@@ -197,6 +207,36 @@ class ExpressionParser {
     } catch (e) {
       return ExpressionResult(isValid: false, errorMessage: 'Errore valutazione: ${e.toString()}');
     }
+  }
+
+  // ============================================================================
+  // 🟢 VALUE CONVERSION & VALIDATION (Runtime)
+  // ============================================================================
+
+  /// Converte e valida un valore runtime rispetto a una dichiarazione target.
+  /// Utile per passare valori di ritorno o parametri dove non c'è un'espressione stringa.
+  static ExpressionResult convertValue(dynamic value, VariableDeclaration targetDeclaration) {
+    if (value == null) {
+      // Null è accettabile? Dipende dalla logica, ma per ora assumiamo di sì o lasciamo passare
+      // Se il sistema è strict-non-null, qui dovremmo fallire.
+      return const ExpressionResult(isValid: true, value: null);
+    }
+
+    final sourceType = _getValueType(value);
+    final typeError = _checkTypeCompatibility(sourceType, targetDeclaration.dataType);
+
+    if (typeError != null) {
+      return ExpressionResult(isValid: false, errorMessage: typeError);
+    }
+
+    // Conversione necessaria? (Es. int -> double)
+    if (targetDeclaration.dataType.toLowerCase() == 'double' && value is int) {
+      return ExpressionResult(isValid: true, value: value.toDouble());
+    }
+    
+    // Aggiungi qui altre conversioni se necessario
+
+    return ExpressionResult(isValid: true, value: value);
   }
 
   // ============================================================================

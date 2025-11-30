@@ -40,6 +40,10 @@ abstract class ProjectRepo {
   Future<void> endWorkspaceSession(String projectId);
   Future<void> recoverSingleFile({required String projectId, required String fileId, required String rtdbContent});
   Future<void> discardSingleFileChange({required String projectId, required String fileId});
+  
+  /// Sincronizza forzatamente il contenuto della sessione RTDB su Firestore.
+  /// Utile per salvare lo stato prima di operazioni critiche (es. debug).
+  Future<void> saveSessionToFirestore(String projectId);
 
   // --- Gestione Progetti (CRUD) ---
   Stream<List<MyProject>> projects();

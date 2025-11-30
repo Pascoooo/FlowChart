@@ -249,8 +249,43 @@ class FirebaseProjectRepo implements ProjectRepo {
   // --- Gestione File (lista e aggiunta) ---
 
   @override
-  Future<List<MyFile>> getProjectFiles({required String projectId}) =>
-      _storage.getProjectFiles(projectId: projectId);
+  Future<List<MyFile>> getProjectFiles({required String projectId}) async {
+    // 1. Carica i file da Firestore (base persistente)
+    final firestoreFiles = await _storage.getProjectFiles(projectId: projectId);
+
+    try {
+      // 2. Controlla se esiste una sessione attiva su RTDB
+      final sessionSnapshot = await _session.getSessionSnapshot();
+      if (sessionSnapshot.exists && sessionSnapshot.value != null) {
+        final allSessions = sessionSnapshot.value as Map<dynamic, dynamic>;
+        final projectSession = allSessions[projectId];
+
+        if (projectSession != null && projectSession['files'] != null) {
+          final sessionFilesMap = Map<dynamic, dynamic>.from(projectSession['files']);
+
+          // 3. Fai il merge: se un file è in sessione, usa il contenuto RTDB
+          final mergedFiles = firestoreFiles.map((fsFile) {
+            final rtdbFile = sessionFilesMap[fsFile.fileId];
+            if (rtdbFile != null) {
+              final rtdbContent = rtdbFile['content']?.toString();
+              if (rtdbContent != null && rtdbContent.isNotEmpty) {
+                // Usa il contenuto live della sessione
+                return fsFile.copyWith(content: rtdbContent);
+              }
+            }
+            return fsFile;
+          }).toList();
+
+          return mergedFiles;
+        }
+      }
+    } catch (e) {
+      // Se RTDB fallisce, ritorna almeno i file Firestore
+      print('⚠️ Errore merge RTDB in getProjectFiles: $e');
+    }
+
+    return firestoreFiles;
+  }
 
   @override
   Future<MyFile> addFileToProject({
@@ -339,4 +374,40 @@ class FirebaseProjectRepo implements ProjectRepo {
   Future<void> discardSingleFileChange({required String projectId, required String fileId}) async {
     await _session.removeFileFromSession(projectId, fileId);
   }
+
+  @override
+  Future<void> saveSessionToFirestore(String projectId) async {
+    try {
+      final sessionSnapshot = await _session.getSessionSnapshot();
+      if (!sessionSnapshot.exists || sessionSnapshot.value == null) return;
+
+      final allSessions = sessionSnapshot.value as Map<dynamic, dynamic>;
+      final projectSession = allSessions[projectId];
+      
+      if (projectSession != null && projectSession['files'] is Map<dynamic, dynamic>) {
+        final filesMap = Map<String, dynamic>.from(projectSession['files'] as Map);
+        final Map<String, String> filesToSync = {};
+
+        for (final entry in filesMap.entries) {
+          final fileId = entry.key.toString();
+          final fileData = Map<String, dynamic>.from(entry.value as Map);
+          final content = (fileData['content'] ?? '').toString();
+          
+          // Sincronizza solo se c'è contenuto
+          if (content.trim().isNotEmpty) {
+             filesToSync[fileId] = content;
+          }
+        }
+
+        if (filesToSync.isNotEmpty) {
+          await _storage.syncFiles(projectId, filesToSync);
+        }
+      }
+    } catch (e) {
+      // Logga errore ma non bloccare, è una best-effort sync
+      print('⚠️ Errore durante saveSessionToFirestore: $e');
+    }
+  }
+
+  // --- Gestione File (CRUD Intelligente) ---
 }

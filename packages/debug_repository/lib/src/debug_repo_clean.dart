@@ -37,6 +37,10 @@ class DebugRepoImpl implements DebugRepo {
     required Flowchart flowchart,
     required List<String> debugPath,
   }) async {
+    if (!flowchart.isMain) {
+      throw StateError('La sessione di debug può essere avviata solo dal flowchart "main".');
+    }
+
     _session = DebugSession(
       sessionId: const Uuid().v4(),
       flowchartId: flowchart.flowchartId,
@@ -167,10 +171,16 @@ class DebugRepoImpl implements DebugRepo {
     debugPrint('🎯 Eseguendo Step ${newIndex + 1}/${_session!.debugPath.length}: ${node.kind.name}');
 
     // 4️⃣ ESEGUI il nodo corrente
+    String? expectedReturnType;
+    if (node is ReturnNode && flowchart != null && flowchart.isFunction) {
+      expectedReturnType = flowchart.signature.returnType;
+    }
+
     final result = await ExecutionEngine.executeNode(
       node: node,
       variables: _session!.variables,
-      allVariables: flowchart.variables,
+      allVariables: flowchart!.variables,
+      expectedReturnType: expectedReturnType,
     );
 
     // 🟠 SOTTOPROGRAMMI: STEP INTO
@@ -218,22 +228,42 @@ class DebugRepoImpl implements DebugRepo {
       // Passaggio parametri: valuta gli arguments del Process e mappali sui parametri della signature del callee
       if (node is ProcessNode) {
         final evaluated = <dynamic>[];
-        for (final argExpr in node.arguments) {
-          final eval = ExpressionParser.evaluate(argExpr, _session!.variables);
+        final params = callee.signature.parameters;
+        
+        for (int i = 0; i < node.arguments.length; i++) {
+          final argExpr = node.arguments[i];
+          VariableDeclaration? paramDecl;
+          
+          if (i < params.length) {
+            paramDecl = VariableDeclaration(
+              name: params[i].name, 
+              dataType: params[i].type,
+              scope: VariableScope.params
+            );
+          }
+
+          // 🔍 Valuta con il tipo target del parametro (abilita fallback stringhe)
+          final eval = ExpressionParser.evaluate(
+            argExpr, 
+            _session!.variables, 
+            targetDeclaration: paramDecl
+          );
+
           if (!eval.isValid) {
             debugPrint('⚠️ Argomento non valido "$argExpr": ${eval.errorMessage}');
-            continue;
+            // Interrompi o continua? Se un argomento è invalido, la chiamata potrebbe fallire.
+            // Per ora logghiamo, ma potremmo restituire Error.
+            return ExecutionResult.error('Argomento non valido "$argExpr": ${eval.errorMessage}');
           }
           evaluated.add(eval.value);
         }
-        final params = callee.signature.parameters;
+
         final toAssign = <String, dynamic>{};
         for (int i = 0; i < params.length && i < evaluated.length; i++) {
           final name = params[i].name;
           toAssign[name] = evaluated[i];
         }
         if (toAssign.isNotEmpty) {
-          // Aggiorna le variabili in base al callee (ora _getCurrentFlowchart() restituisce il callee)
           await updateVariables(toAssign);
         }
       }
@@ -320,10 +350,30 @@ class DebugRepoImpl implements DebugRepo {
         final callerNode = callerFlow.nodes.firstWhere((n) => n.id == (top.callerNodeId ?? '')) as ProcessNode;
         final targetName = callerNode.resultTarget;
         if (targetName != null && targetName.isNotEmpty) {
-          await updateVariables({targetName: result.returnValue});
+          // 🔍 Validazione e Conversione Tipo nel Chiamante
+          VariableDeclaration? targetDecl;
+          try {
+            targetDecl = callerFlow.variables.firstWhere((v) => v.name == targetName);
+          } catch (_) {} // Variabile non trovata
+
+          if (targetDecl != null) {
+            final convertResult = ExpressionParser.convertValue(result.returnValue, targetDecl);
+            if (!convertResult.isValid) {
+              debugPrint('❌ Errore assegnazione ritorno: ${convertResult.errorMessage}');
+              return ExecutionResult.error(
+                  'Tipo ritorno incompatibile con variabile "$targetName": ${convertResult.errorMessage}',
+                  blocking: true
+              );
+            }
+            // Usa il valore convertito (es. int -> double)
+            await updateVariables({targetName: convertResult.value});
+          } else {
+            // Fallback
+            await updateVariables({targetName: result.returnValue});
+          }
         }
-      } catch (_) {
-        // Nessun target o nodo non trovato: ignora
+      } catch (e) {
+        debugPrint('⚠️ Errore durante assegnazione ritorno: $e');
       }
 
       _saveSnapshot();
@@ -358,10 +408,6 @@ class DebugRepoImpl implements DebugRepo {
 
     // 7️⃣ Salva lo stato DOPO l'esecuzione
     _saveSnapshot();
-
-    if (result.outputMessage != null) {
-      debugPrint('✅ ${result.outputMessage}');
-    }
 
     return result;
   }

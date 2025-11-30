@@ -26,7 +26,7 @@ class _EditVariableDialogState extends State<EditVariableDialog> {
   String? _nameError;
   bool _attemptedSubmit = false;
 
-  static const _cTypes = <String>['int', 'float', 'double', 'bool', 'char', 'string'];
+  static const _cTypes = <String>['int', 'float', 'double', 'bool', 'string'];
 
   @override
   void initState() {

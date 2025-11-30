@@ -48,6 +48,7 @@ class ExecutionEngine {
     required FlowNode node,
     required Map<String, dynamic> variables,
     required List<VariableDeclaration> allVariables,
+    String? expectedReturnType,
   }) async {
     try {
       return switch (node.kind) {
@@ -57,9 +58,9 @@ class ExecutionEngine {
         FlowNodeKind.assignment => _assignment(node as AssignmentNode, variables, allVariables),
         FlowNodeKind.output => _output(node as OutputNode, variables, allVariables),
         FlowNodeKind.process => _process(node as ProcessNode, variables),
-        FlowNodeKind.returnNode => _return(node as ReturnNode, variables),
+        FlowNodeKind.returnNode => _return(node as ReturnNode, variables, expectedReturnType),
         FlowNodeKind.functionHeader => ExecutionResult.success(
-          message: '${(node as FunctionHeaderNode).signatureText}',
+          message: (node as FunctionHeaderNode).signatureText,
         ),
         FlowNodeKind.decision => _decision(node as DecisionNode, variables, allVariables),
         FlowNodeKind.whileLoop => _whileLoop(node as WhileNode, variables, allVariables),
@@ -123,7 +124,7 @@ class ExecutionEngine {
       }
 
       // VALIDAZIONE: Un nodo Input può assegnare SOLO variabili di scope Input e ai Parametri.
-      if (decl.scope != VariableScope.input || decl.scope != VariableScope.params) {
+      if (decl.scope != VariableScope.input && decl.scope != VariableScope.params) {
         return ExecutionResult.error(
           'Errore: Il blocco Input può assegnare solo variabili di tipo Input e ai Parametri. "$target" è ${decl.scope.name}.',
           blocking: true,
@@ -341,28 +342,30 @@ class ExecutionEngine {
 
   /// PROCESS NODE: Chiamata sottoprogramma
   static ExecutionResult _process(ProcessNode node, Map<String, dynamic> vars) {
-    final args = <dynamic>[];
-
-    for (final argExpr in node.arguments) {
-      final result = ExpressionParser.evaluate(argExpr, vars);
-      if (!result.isValid) {
-        final msg = result.errorMessage ?? 'argomento non valido';
-        final isTypeMismatch = msg.contains('Tipo incompatibile') || msg.contains('Conversione non permessa');
-        return ExecutionResult.error('Errore arg "$argExpr": $msg', blocking: !isTypeMismatch);
-      }
-      args.add(result.value);
-    }
-
+    // Non valutiamo qui gli argomenti perché mancano le informazioni sui tipi dei parametri (targetDeclaration).
+    // La valutazione e il binding avvengono nel DebugRepoImpl che ha accesso alla signature del callee.
     return ExecutionResult.subprogramCall(node.flowchartToCall);
   }
 
   /// RETURN NODE: Ritorna valore
-  static ExecutionResult _return(ReturnNode node, Map<String, dynamic> vars) {
+  static ExecutionResult _return(ReturnNode node, Map<String, dynamic> vars, String? expectedReturnType) {
     if (node.returnExpression == null || node.returnExpression!.isEmpty) {
+      // Se la funzione dichiara un tipo di ritorno diverso da void, è obbligatorio restituire un valore
+      if (expectedReturnType != null && expectedReturnType != 'void') {
+        return ExecutionResult.error(
+            'La funzione deve restituire un valore di tipo "$expectedReturnType", ma non è stata fornita alcuna espressione.',
+            blocking: true
+        );
+      }
       return ExecutionResult.withReturn(null);
     }
 
-    final result = ExpressionParser.evaluate(node.returnExpression!, vars);
+    VariableDeclaration? targetDecl;
+    if (expectedReturnType != null) {
+      targetDecl = VariableDeclaration(name: 'return', dataType: expectedReturnType);
+    }
+
+    final result = ExpressionParser.evaluate(node.returnExpression!, vars, targetDeclaration: targetDecl);
     if (!result.isValid) {
       final msg = result.errorMessage ?? 'espressione non valida';
       final isTypeMismatch = msg.contains('Tipo incompatibile') || msg.contains('Conversione non permessa');
@@ -441,14 +444,13 @@ class ExecutionEngine {
       variables: vars,
     );
 
-    final branch = result ? 'true' : 'false';
     final condition = node.clauses
         .map((c) => '${c.leftOperand} ${c.operator} ${c.rightOperand}')
         .join(' ${node.logicalJoin} ');
 
     return ExecutionResult.success(
       message: 'while ($condition) → ${result ? "entra nel ciclo" : "salta il ciclo"}',
-      decisionBranch: branch,
+      decisionBranch: result ? 'true' : 'false',
     );
   }
 
@@ -478,7 +480,6 @@ class ExecutionEngine {
       variables: vars,
     );
 
-    final branch = result ? 'true' : 'false';
     final condition = node.clauses
         .map((c) => '${c.leftOperand} ${c.operator} ${c.rightOperand}')
         .join(' ${node.logicalJoin} ');
