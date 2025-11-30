@@ -1,6 +1,6 @@
 /// Eventi del FileSystem BLoC.
 /// Rappresentano tutte le operazioni CRUD sui file (creazione, eliminazione, rinomina, apertura)
-/// e azioni di validazione/aggiornamento cache del progetto.
+/// e le azioni di aggiornamento della cache del progetto.
 import 'package:equatable/equatable.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 
@@ -68,14 +68,3 @@ class UpdateFileContentInCache extends FileSystemEvent {
   List<Object> get props => [fileId, newContent];
 }
 
-/// Valida (builda) l'intero progetto, verificando correttezza strutturale di tutti i flowchart.
-/// Chiamato esplicitamente dall'utente tramite bottone BUILD.
-class BuildProject extends FileSystemEvent {
-  const BuildProject();
-}
-
-/// Invalida il build corrente, richiedendo una nuova validazione.
-/// Chiamato automaticamente quando si modificano nodi/edge (operazioni strutturali).
-class InvalidateBuild extends FileSystemEvent {
-  const InvalidateBuild();
-}

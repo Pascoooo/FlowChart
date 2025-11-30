@@ -161,9 +161,7 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
           ],
         ),
       ),
-      content: widget.variables.isEmpty
-          ? _buildEmptyState(theme)
-          : SingleChildScrollView(
+      content: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Column(
@@ -226,46 +224,6 @@ class _OutputNodeDialogState extends State<_OutputNodeDialog> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildEmptyState(FluentThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(64.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.resources.cardStrokeColorDefaultSolid,
-                shape: BoxShape.circle,
-              ),
-              child: FaIcon(
-                FontAwesomeIcons.triangleExclamation,
-                size: 48,
-                color: theme.resources.systemFillColorCritical,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Nessuna variabile disponibile',
-              style: theme.typography.subtitle?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Aggiungi variabili dal menu principale\nper usarle nei messaggi di output.',
-              style: theme.typography.body?.copyWith(
-                color: theme.typography.body?.color?.withValues(alpha: 0.7),
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
     );
   }
 

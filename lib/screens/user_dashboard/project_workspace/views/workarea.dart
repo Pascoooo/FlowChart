@@ -11,7 +11,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../blocs/debug_bloc/debug_bloc.dart';
 import '../../../../blocs/debug_bloc/debug_state.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
-import '../../../../blocs/file_bloc/file_system_event.dart';
 import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
@@ -463,131 +462,6 @@ class _WorkAreaState extends State<WorkArea>
     }
   }
 
-  /// Mostra un dialog con errori e warning di validazione.
-  /// Chiamato quando l'utente clicca sul bottone ERRORS dopo un build fallito.
-  void _showValidationErrors(BuildContext context, FileSystemLoaded fileState) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return ContentDialog(
-          title: Row(
-            children: [
-              Icon(FontAwesomeIcons.circleExclamation, color: Colors.red, size: 24),
-              const SizedBox(width: 12),
-              const Text('Errori di Validazione'),
-            ],
-          ),
-          content: SizedBox(
-            width: 600,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Sezione errori
-                if (fileState.validationErrors.isNotEmpty) ...[
-                  Text(
-                    'Errori (${fileState.validationErrors.length})',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.red,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 300),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: fileState.validationErrors.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(FontAwesomeIcons.xmark, color: Colors.red, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  fileState.validationErrors[index],
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-
-                // Sezione warnings
-                if (fileState.validationWarnings.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Avvisi (${fileState.validationWarnings.length})',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: fileState.validationWarnings.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(FontAwesomeIcons.triangleExclamation, color: Colors.orange, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  fileState.validationWarnings[index],
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-
-                if (fileState.validationErrors.isEmpty && fileState.validationWarnings.isEmpty)
-                  const Text('Nessun errore o avviso da mostrare.'),
-              ],
-            ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Chiudi'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // Avvolge il canvas con un listener sul FileSystemBloc per caricare il contenuto del file attivo
@@ -639,204 +513,154 @@ class _WorkAreaState extends State<WorkArea>
               right: 0,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: BlocBuilder<FileSystemBloc, FileSystemState>(
-                  builder: (context, fileSystemState) {
-                    return BlocBuilder<FlowchartBloc, FlowchartState>(
-                      builder: (context, flowchartState) {
-                        final bool disableUI = flowchartState is FlowchartLoaded &&
-                            flowchartState.isConnectorModeActive;
+                child: BlocBuilder<FlowchartBloc, FlowchartState>(
+                  builder: (context, flowchartState) {
+                    final bool disableUI = flowchartState is FlowchartLoaded &&
+                        flowchartState.isConnectorModeActive;
 
-                        // Logica per abilitare/disabilitare i bottoni
-                        bool isPlayEnabled = false;
-                        bool isResetEnabled = false;
-                        bool isDeleteEnabled = false;
-                        bool canUndo = false;
-                        bool canRedo = false;
+                    bool isPlayEnabled = widget.onStartDebug != null &&
+                        flowchartState is FlowchartLoaded &&
+                        !disableUI;
+                    bool isResetEnabled = false;
+                    bool isDeleteEnabled = false;
+                    bool canUndo = false;
+                    bool canRedo = false;
 
-                        if (flowchartState is FlowchartLoaded &&
-                            fileSystemState is FileSystemLoaded) {
-                          isPlayEnabled = !disableUI;
+                    if (flowchartState is FlowchartLoaded) {
+                      final nodes = flowchartState.flowchart.nodes;
+                      final bool hasOnlyStartOrHeader = nodes.length == 1 &&
+                          (nodes.first.kind == FlowNodeKind.start ||
+                              nodes.first.kind ==
+                                  FlowNodeKind.functionHeader);
+                      isResetEnabled = !hasOnlyStartOrHeader && !disableUI;
 
+                      final selectedId = flowchartState.selectedNodeId;
+                      FlowNode? selectedNode = selectedId != null
+                          ? flowchartState.getNodeById(selectedId)
+                          : null;
 
-                          final nodes = flowchartState.flowchart.nodes;
-                          final bool hasOnlyStartOrHeader = nodes.length == 1 &&
-                              (nodes.first.kind == FlowNodeKind.start ||
-                                  nodes.first.kind ==
-                                      FlowNodeKind.functionHeader);
-                          isResetEnabled = !hasOnlyStartOrHeader && !disableUI;
-
-                          final selectedId = flowchartState.selectedNodeId;
-                          FlowNode? selectedNode = selectedId != null
-                              ? flowchartState.getNodeById(selectedId)
-                              : null;
-
-                          if (selectedNode != null &&
-                              selectedNode.kind != FlowNodeKind.start &&
-                              selectedNode.kind !=
-                                  FlowNodeKind.functionHeader) {
-                            if (selectedNode.kind == FlowNodeKind.doWhileLoop) {
-                              final outs = flowchartState
-                                  .getOutgoingEdges(selectedNode.id);
-                              final hasFalse =
-                                  outs.any((e) => e.port == 'false');
-                              isDeleteEnabled = !hasFalse;
-                            } else {
-                              isDeleteEnabled = flowchartState
-                                  .getOutgoingEdges(selectedNode.id)
-                                  .isEmpty;
-                            }
-                          }
-                          isDeleteEnabled = isDeleteEnabled && !disableUI;
-
-                          canUndo =
-                              context.read<FlowchartBloc>().canUndo && !disableUI;
-                          canRedo =
-                              context.read<FlowchartBloc>().canRedo && !disableUI;
+                      if (selectedNode != null &&
+                          selectedNode.kind != FlowNodeKind.start &&
+                          selectedNode.kind !=
+                              FlowNodeKind.functionHeader) {
+                        if (selectedNode.kind == FlowNodeKind.doWhileLoop) {
+                          final outs = flowchartState
+                              .getOutgoingEdges(selectedNode.id);
+                          final hasFalse =
+                              outs.any((e) => e.port == 'false');
+                          isDeleteEnabled = !hasFalse;
+                        } else {
+                          isDeleteEnabled = flowchartState
+                              .getOutgoingEdges(selectedNode.id)
+                              .isEmpty;
                         }
+                      }
+                      isDeleteEnabled = isDeleteEnabled && !disableUI;
 
-                        return Stack(
-                          alignment: Alignment.center,
+                      canUndo =
+                          context.read<FlowchartBloc>().canUndo && !disableUI;
+                      canRedo =
+                          context.read<FlowchartBloc>().canRedo && !disableUI;
+                    }
+
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Bottoni centrali (undo, play, redo)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Bottoni centrali (undo, redo, play) - ORA PERFETTAMENTE CENTRATI
+                            _TopBarButton(
+                              icon: Icons.undo_rounded,
+                              tooltip: 'Annulla',
+                              enabled: canUndo,
+                              onTap: canUndo
+                                  ? () => context
+                                      .read<FlowchartBloc>()
+                                      .add(const Undo())
+                                  : null,
+                              iconSize: 22,
+                            ),
+                            if (widget.onStartDebug != null) ...[
+                              const SizedBox(width: 12),
+                              _TopBarButton(
+                                icon: FontAwesomeIcons.play,
+                                tooltip: 'Avvia debug',
+                                enabled: isPlayEnabled,
+                                onTap: isPlayEnabled ? widget.onStartDebug : null,
+                                isAccent: true,
+                              ),
+                            ],
+                            const SizedBox(width: 12),
+                            _TopBarButton(
+                              icon: Icons.redo_rounded,
+                              tooltip: 'Ripeti',
+                              enabled: canRedo,
+                              onTap: canRedo
+                                  ? () => context
+                                      .read<FlowchartBloc>()
+                                      .add(const Redo())
+                                  : null,
+                              iconSize: 22,
+                            ),
+                          ],
+                        ),
+
+                        // Bottoni laterali (sinistra e destra)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Bottoni di gestione flowchart (sinistra)
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 _TopBarButton(
-                                  icon: Icons.undo_rounded,
-                                  tooltip: 'Annulla',
-                                  enabled: canUndo,
-                                  onTap: canUndo
-                                      ? () => context
-                                          .read<FlowchartBloc>()
-                                          .add(const Undo())
+                                  icon: FontAwesomeIcons.trash,
+                                  tooltip: 'Elimina nodo selezionato',
+                                  enabled: isDeleteEnabled,
+                                  onTap: isDeleteEnabled
+                                      ? () => _handleDeleteSelected(
+                                          context, flowchartState)
                                       : null,
-                                  iconSize: 22,
                                 ),
-                                const SizedBox(width: 12),
-                                // Bottone BUILD/ERRORS/PLAY basato su build status
-                                BlocBuilder<FileSystemBloc, FileSystemState>(
-                                  builder: (context, fileState) {
-                                    if (fileState is! FileSystemLoaded) {
-                                      return const SizedBox.shrink();
-                                    }
-
-                                    switch (fileState.buildStatus) {
-                                      case BuildStatus.notBuilt:
-                                        // Mostra bottone BUILD
-                                        return _TopBarButton(
-                                          icon: FontAwesomeIcons.hammer,
-                                          tooltip: 'Builda progetto',
-                                          enabled: true,
-                                          onTap: () {
-                                            context.read<FileSystemBloc>().add(const BuildProject());
-                                          },
-                                          isAccent: false,
-                                        );
-
-                                      case BuildStatus.building:
-                                        // Mostra loading
-                                        return Container(
-                                          width: 40,
-                                          height: 40,
-                                          padding: const EdgeInsets.all(10),
-                                          child: const ProgressRing(strokeWidth: 3),
-                                        );
-
-                                      case BuildStatus.invalid:
-                                        // Mostra bottone ERRORS
-                                        return _TopBarButton(
-                                          icon: FontAwesomeIcons.circleExclamation,
-                                          tooltip: 'Mostra errori (${fileState.validationErrors.length})',
-                                          enabled: true,
-                                          onTap: () => _showValidationErrors(context, fileState),
-                                          isAccent: false,
-                                          color: Colors.red,
-                                        );
-
-                                      case BuildStatus.valid:
-                                        // Mostra bottone PLAY
-                                        return _TopBarButton(
-                                          icon: FontAwesomeIcons.play,
-                                          tooltip: 'Avvia debug',
-                                          enabled: true,
-                                          onTap: widget.onStartDebug,
-                                          isAccent: true,
-                                        );
-                                    }
-                                  },
-                                ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 8),
                                 _TopBarButton(
-                                  icon: Icons.redo_rounded,
-                                  tooltip: 'Ripeti',
-                                  enabled: canRedo,
-                                  onTap: canRedo
-                                      ? () => context
-                                          .read<FlowchartBloc>()
-                                          .add(const Redo())
+                                  icon: FontAwesomeIcons.arrowRotateLeft,
+                                  tooltip: 'Resetta flowchart',
+                                  enabled: isResetEnabled,
+                                  onTap: isResetEnabled
+                                      ? () => _handleResetFlowchart(context)
                                       : null,
-                                  iconSize: 22,
+                                ),
+                                const SizedBox(width: 8),
+                                _TopBarButton(
+                                  icon: FontAwesomeIcons.scissors,
+                                  tooltip: 'Resetta da un blocco',
+                                  enabled: isResetEnabled,
+                                  onTap: isResetEnabled
+                                      ? () => _handleResetFromBlock(context)
+                                      : null,
                                 ),
                               ],
                             ),
 
-                            // Bottoni laterali (sinistra e destra)
+                            // Bottoni a destra (export, edit)
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                // Bottoni di gestione flowchart (sinistra)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _TopBarButton(
-                                      icon: FontAwesomeIcons.trash,
-                                      tooltip: 'Elimina nodo selezionato',
-                                      enabled: isDeleteEnabled,
-                                      onTap: isDeleteEnabled
-                                          ? () => _handleDeleteSelected(
-                                              context, flowchartState)
-                                          : null,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _TopBarButton(
-                                      icon: FontAwesomeIcons.arrowRotateLeft,
-                                      tooltip: 'Resetta flowchart',
-                                      enabled: isResetEnabled,
-                                      onTap: isResetEnabled
-                                          ? () => _handleResetFlowchart(context)
-                                          : null,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _TopBarButton(
-                                      icon: FontAwesomeIcons.scissors,
-                                      tooltip: 'Resetta da un blocco',
-                                      enabled: isResetEnabled,
-                                      onTap: isResetEnabled
-                                          ? () => _handleResetFromBlock(context)
-                                          : null,
-                                    ),
-                                  ],
-                                ),
-
-                                // Bottoni a destra (export, edit)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const SizedBox(width: 8),
-                                    _TopBarButton(
-                                      icon: FontAwesomeIcons.download,
-                                      tooltip: 'Esporta immagine',
-                                      enabled: !disableUI,
-                                      onTap: !disableUI ? widget.onExport : null,
-                                    ),
-                                  ],
+                                const SizedBox(width: 8),
+                                _TopBarButton(
+                                  icon: FontAwesomeIcons.download,
+                                  tooltip: 'Esporta immagine',
+                                  enabled: !disableUI,
+                                  onTap: !disableUI ? widget.onExport : null,
                                 ),
                               ],
                             ),
                           ],
-                        );
-                      },
+                        ),
+                      ],
                     );
                   },
                 ),

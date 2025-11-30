@@ -3,6 +3,7 @@
 /// Integrates debug console, session variables, and work area for comprehensive debugging experience.
 import 'package:file_repository/file_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../blocs/debug_bloc/debug_bloc.dart';
 import '../../../../blocs/debug_bloc/debug_event.dart';
@@ -193,8 +194,10 @@ class _DebugModeViewState extends State<DebugModeView>
             final rightWidth = totalWidth * _rightPanelWidth;
             final leftWidth = totalWidth - rightWidth - 8;
 
-            return Row(
+            return Stack(
               children: [
+                Row(
+                  children: [
                 // Colonna sinistra - WorkArea + Console
                 SizedBox(
                   width: leftWidth,
@@ -220,6 +223,56 @@ class _DebugModeViewState extends State<DebugModeView>
                               top: 24,
                               left: 24,
                               child: DebugStepInfoCard(),
+                            ),
+
+                            // Top Right - chiusura debug
+                            Positioned(
+                              top: 16,
+                              right: 16,
+                              child: IconButton(
+                                icon: const Icon(FluentIcons.chrome_close, size: 30),
+                                onPressed: () {
+                                  context.read<DebugBloc>().add(const DebugStop());
+                                },
+                                style: ButtonStyle(
+                                  padding: WidgetStateProperty.all(const EdgeInsets.all(10)),
+                                  backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                                  shape: WidgetStateProperty.all(const CircleBorder()),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 16,
+                              top: 0,
+                              bottom: 0,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_upward, size: 40),
+                                    onPressed: () {
+                                      context.read<DebugBloc>().add(const DebugPrevious());
+                                    },
+                                    style: ButtonStyle(
+                                      padding: WidgetStateProperty.all(const EdgeInsets.all(14)),
+                                      backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                                      shape: WidgetStateProperty.all(const CircleBorder()),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_downward, size: 40),
+                                    onPressed: () {
+                                      context.read<DebugBloc>().add(const DebugNext());
+                                    },
+                                    style: ButtonStyle(
+                                      padding: WidgetStateProperty.all(const EdgeInsets.all(14)),
+                                      backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                                      shape: WidgetStateProperty.all(const CircleBorder()),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -401,7 +454,10 @@ class _DebugModeViewState extends State<DebugModeView>
                   ),
                 ),
               ],
-            );
+            ),
+
+          ],
+        );
           },
         ),
       ),

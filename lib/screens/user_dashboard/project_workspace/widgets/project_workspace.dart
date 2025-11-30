@@ -387,9 +387,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                         final jsonContent = state.toJson();
                         if (jsonContent.trim().isEmpty) return;
 
-                        // ✅ Invalida build immediatamente quando flowchart cambia
-                        context.read<FileSystemBloc>().add(const InvalidateBuild());
-
                         _debounce?.cancel();
                         final projectRepo = context.read<ProjectBloc>().projectRepository;
                         final projectId = widget.selectedProject.projectId;

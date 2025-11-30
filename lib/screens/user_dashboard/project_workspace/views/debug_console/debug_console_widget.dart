@@ -1,5 +1,5 @@
-/// Debug console widget for interactive command execution during flowchart debugging.
-/// Displays command history, handles user input, and integrates with DebugEngine.
+/// Debug console widget per l'inserimento degli input durante il debug dei flowchart.
+/// Mostra la cronologia e delega la logica al DebugEngine.
 /// Presentation-only component that delegates business logic to DebugBloc and DebugEngine.
 // ============================================================================
 // 🎨 DEBUG CONSOLE - UI COMPONENT (Presentation Only)
@@ -360,41 +360,6 @@ class _DebugConsoleState extends State<DebugConsole> {
             ),
           ),
           const Spacer(),
-          IconButton(
-            icon: const Icon(FluentIcons.chevron_left, size: 14),
-            onPressed: disablePrevPrev ? null : () {
-              context.read<DebugBloc>().add(const DebugPrevious());
-            },
-            style: ButtonStyle(
-              padding: WidgetStateProperty.all(const EdgeInsets.all(6)),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(FluentIcons.chevron_right, size: 14),
-            onPressed: disableNextNext ? null : () {
-              context.read<DebugBloc>().add(const DebugNext());
-            },
-            style: ButtonStyle(
-              padding: WidgetStateProperty.all(const EdgeInsets.all(6)),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(FluentIcons.chrome_close, size: 14),
-            onPressed: () {
-              context.read<DebugBloc>().add(const DebugStop());
-            },
-            style: ButtonStyle(
-              padding: WidgetStateProperty.all(const EdgeInsets.all(6)),
-              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.isHovered) {
-                  return Colors.red.withValues(alpha: 0.2);
-                }
-                return Colors.transparent;
-              }),
-            ),
-          ),
         ],
       ),
     );
@@ -441,7 +406,7 @@ class _DebugConsoleState extends State<DebugConsole> {
             child: TextBox(
               controller: _inputController,
               focusNode: _focusNode,
-              placeholder: 'Usa "help" per visualizzare i comandi disponibili',
+              placeholder: 'Inserisci i valori richiesti per il nodo Input',
               enabled: true,
               style: const TextStyle(
                 fontFamily: 'Consolas',

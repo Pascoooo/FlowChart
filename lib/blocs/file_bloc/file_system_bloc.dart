@@ -1,6 +1,6 @@
 /// FileSystem BLoC gestisce le operazioni CRUD sui file di un progetto (flowchart).
-/// Coordina creazione, eliminazione, rinomina file e validazione strutturale dei flowchart.
-/// Mantiene lo stato dei file attivi e valida l'integrità dei nodi e degli archi.
+/// Coordina creazione, eliminazione, rinomina file e sincronizzazione con il repository.
+/// Mantiene lo stato dei file attivi e la cache dei contenuti.
 import 'dart:convert';
 import 'package:bloc/bloc.dart';
 import 'package:file_repository/file_repository.dart';
@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../flowchart_bloc/flowchart_shape_factory.dart';
 import '../flowchart_bloc/flowchart_state.dart';
-import '../../config/services/flowchart_validation_service.dart';
 import 'file_system_event.dart';
 import 'file_system_state.dart';
 
@@ -27,8 +26,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
     on<DeleteFile>(_onDeleteFile);
     on<RenameFile>(_onRenameFile);
     on<UpdateFileContentInCache>(_onUpdateFileContentInCache);
-    on<BuildProject>(_onBuildProject);
-    on<InvalidateBuild>(_onInvalidateBuild);
   }
 
   // --- SEZIONE CRUD (OPERAZIONI SUI FILE) ---
@@ -57,7 +54,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         final mainFile = files.firstWhere((f) => f.name.toLowerCase() == 'main', orElse: () => files.first);
         emit(FileSystemLoaded(files: files, activeFileId: mainFile.fileId));
       }
-      // Rimossa validazione automatica: l'utente deve cliccare BUILD
+      // Il progetto viene caricato senza step di validazione esecutiva
     } catch (e) {
       emit(FileSystemError(message: 'Errore nel caricamento dei file: ${e.toString()}'));
     }
@@ -142,7 +139,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
         activeFileId: newFile.fileId,
         isLoading: false,
       ));
-      add(const InvalidateBuild()); // Invalida il build dopo creazione file
       return;
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Impossibile creare il file: ${e.toString()}'));
@@ -184,7 +180,6 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
       }
 
       emit(FileSystemLoaded(files: updatedFiles, activeFileId: nextActiveFileId));
-      add(const InvalidateBuild()); // Invalida il build dopo eliminazione file
     } catch (e) {
       emit(currentState.copyWith(isLoading: false, error: 'Errore durante l\'eliminazione: ${e.toString()}'));
     }
@@ -230,70 +225,5 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
 
     emit(currentState.copyWith(files: updatedFiles));
     // UpdateFileContentInCache: aggiornamento temporaneo, non invalidare
-  }
-
-  /// Valida (builda) l'intero progetto verificando correttezza strutturale di tutti i flowchart.
-  /// Chiamato esplicitamente dall'utente tramite bottone BUILD.
-  /// Aggiorna buildStatus e popola liste errori/warnings.
-  Future<void> _onBuildProject(
-      BuildProject event, Emitter<FileSystemState> emit) async {
-    if (state is! FileSystemLoaded) return;
-    final currentState = state as FileSystemLoaded;
-
-    // Imposta stato "building" durante la validazione
-    emit(currentState.copyWith(buildStatus: BuildStatus.building));
-
-    final allErrors = <String>[];
-    final allWarnings = <String>[];
-
-    try {
-      final List<Flowchart> flowcharts = currentState.files.map((file) {
-        final jsonContent = jsonDecode(file.content);
-        return Flowchart.fromEntity(FlowchartEntity.fromDocument(jsonContent));
-      }).toList();
-
-      // Usa il servizio centralizzato di validazione
-      for (final flowchart in flowcharts) {
-        final report = FlowchartValidationService.validateCompleteFlowchart(flowchart);
-        allErrors.addAll(report.errors);
-        allWarnings.addAll(report.warnings);
-      }
-
-      // Determina stato finale
-      final finalStatus = allErrors.isEmpty ? BuildStatus.valid : BuildStatus.invalid;
-
-      emit(currentState.copyWith(
-        buildStatus: finalStatus,
-        isProjectValid: allErrors.isEmpty, // Mantieni per compatibilità
-        validationErrors: allErrors,
-        validationWarnings: allWarnings,
-      ));
-    } catch (e) {
-      // Errore critico durante validazione (es. JSON malformato)
-      emit(currentState.copyWith(
-        buildStatus: BuildStatus.invalid,
-        isProjectValid: false,
-        validationErrors: ['Errore critico durante la validazione: $e'],
-        validationWarnings: [],
-      ));
-    }
-  }
-
-  /// Invalida il build corrente richiedendo una nuova validazione.
-  /// Chiamato automaticamente quando si modificano nodi/edge (operazioni strutturali).
-  void _onInvalidateBuild(
-      InvalidateBuild event, Emitter<FileSystemState> emit) {
-    if (state is! FileSystemLoaded) return;
-    final currentState = state as FileSystemLoaded;
-
-    // Resetta a "notBuilt" se era valid o invalid
-    if (currentState.buildStatus != BuildStatus.notBuilt) {
-      emit(currentState.copyWith(
-        buildStatus: BuildStatus.notBuilt,
-        isProjectValid: false,
-        validationErrors: [],
-        validationWarnings: [],
-      ));
-    }
   }
 }
