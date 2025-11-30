@@ -122,12 +122,10 @@ class ExecutionEngine {
         return ExecutionResult.error('Variabile "$target" non dichiarata nel flowchart');
       }
 
-      // VALIDAZIONE: Un nodo Input può assegnare variabili Input, Local e Params.
-      // Le variabili Output sono destinate solo alla visualizzazione.
-      // I parametri (params) sono universali e possono essere usati in ogni contesto.
-      if (decl.scope == VariableScope.output) {
+      // VALIDAZIONE: Un nodo Input può assegnare SOLO variabili di scope Input e ai Parametri.
+      if (decl.scope != VariableScope.input || decl.scope != VariableScope.params) {
         return ExecutionResult.error(
-          'Errore: Il blocco Input non può assegnare variabili di tipo Output. "$target" è una variabile di output.',
+          'Errore: Il blocco Input può assegnare solo variabili di tipo Input e ai Parametri. "$target" è ${decl.scope.name}.',
           blocking: true,
         );
       }
