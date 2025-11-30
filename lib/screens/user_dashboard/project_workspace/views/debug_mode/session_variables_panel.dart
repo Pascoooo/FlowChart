@@ -251,14 +251,12 @@ class _SessionVariablesPanelState extends State<SessionVariablesPanel> {
     FlowNode currentNode,
     FluentThemeData theme,
   ) {
-    // ✨ Unisci dichiarazioni: variabili del flowchart + parametri della signature (come Input)
-    final paramDecls = state.flowchart.signature.parameters
-        .map((p) => VariableDeclaration(name: p.name, dataType: p.type, scope: VariableScope.input))
-        .toList();
-    final allDecls = <VariableDeclaration>[...state.flowchart.variables, ...paramDecls];
+    // ✨ Le dichiarazioni ora includono già i parametri con scope VariableScope.params
+    final allDecls = state.flowchart.variables;
 
     // ✨ Completa la mappa variabili con eventuali parametri mancanti (mostrati come null)
     final augmentedVars = Map<String, dynamic>.from(variables);
+    final paramDecls = allDecls.where((v) => v.scope == VariableScope.params).toList();
     for (final p in paramDecls) {
       augmentedVars.putIfAbsent(p.name, () => null);
     }
@@ -277,11 +275,22 @@ class _SessionVariablesPanelState extends State<SessionVariablesPanel> {
     final inputVars = _getVariablesByScope(filteredEntries, allDecls, VariableScope.input);
     final outputVars = _getVariablesByScope(filteredEntries, allDecls, VariableScope.output);
     final localVars = _getVariablesByScope(filteredEntries, allDecls, VariableScope.local);
+    final paramsVars = _getVariablesByScope(filteredEntries, allDecls, VariableScope.params);
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (paramsVars.isNotEmpty) ...[
+            VariableScopeSection(
+              title: 'Parametri',
+              icon: FontAwesomeIcons.circleNodes,
+              variables: paramsVars,
+              allVariables: allDecls,
+              color: Colors.purple,
+            ),
+            const SizedBox(height: 16),
+          ],
           if (inputVars.isNotEmpty) ...[
             VariableScopeSection(
               title: 'Input',

@@ -113,7 +113,7 @@ class FileSystemBloc extends Bloc<FileSystemEvent, FileSystemState> {
             .map((p) => VariableDeclaration(
           name: p.name,
           dataType: p.type,
-          scope: VariableScope.local, // REQUISITO: I parametri sono variabili locali
+          scope: VariableScope.params, // REQUISITO: I parametri hanno scope dedicato
         ))
             .toList();
 

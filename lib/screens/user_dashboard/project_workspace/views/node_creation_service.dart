@@ -86,16 +86,16 @@ class NodeCreationService {
 
     switch (kind) {
       case FlowNodeKind.input:
-        // NUOVA REGOLA: Non mostrare warning, passa lista vuota se necessario
+        // NUOVA REGOLA: Input può assegnare valori a variabili input E params
         variablesForDialog = flowState.flowchart.variables
-            .where((v) => v.scope == VariableScope.input)
+            .where((v) => v.scope == VariableScope.input || v.scope == VariableScope.params)
             .toList();
         break;
 
       case FlowNodeKind.output:
-        // NUOVA REGOLA: Non mostrare warning, passa lista vuota se necessario
+        // NUOVA REGOLA: Output può stampare variabili output E params
         variablesForDialog = flowState.flowchart.variables
-            .where((v) => v.scope == VariableScope.output)
+            .where((v) => v.scope == VariableScope.output || v.scope == VariableScope.params)
             .toList();
         break;
 

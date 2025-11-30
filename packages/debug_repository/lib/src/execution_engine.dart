@@ -122,10 +122,12 @@ class ExecutionEngine {
         return ExecutionResult.error('Variabile "$target" non dichiarata nel flowchart');
       }
 
-      // VALIDAZIONE: Un nodo Input può assegnare SOLO variabili di scope Input.
-      if (decl.scope != VariableScope.input) {
+      // VALIDAZIONE: Un nodo Input può assegnare variabili Input, Local e Params.
+      // Le variabili Output sono destinate solo alla visualizzazione.
+      // I parametri (params) sono universali e possono essere usati in ogni contesto.
+      if (decl.scope == VariableScope.output) {
         return ExecutionResult.error(
-          'Errore: Il blocco Input può assegnare solo variabili di tipo Input. "$target" è ${decl.scope.name}.',
+          'Errore: Il blocco Input non può assegnare variabili di tipo Output. "$target" è una variabile di output.',
           blocking: true,
         );
       }
@@ -301,15 +303,15 @@ class ExecutionEngine {
 
     // Validazioni richieste (tutte bloccanti):
     // 1) variabile esiste nel flowchart
-    // 2) variabile è di scope output
+    // 2) variabile è di scope output O params (i parametri sono universali)
     // 3) variabile ha valore non nullo nella sessione
     for (final name in referencedNames) {
       final decl = declaredByName[name];
       if (decl == null) {
         return ExecutionResult.error('Variabile "$name" non dichiarata', blocking: true);
       }
-      if (decl.scope != VariableScope.output) {
-        return ExecutionResult.error('"$name" non è una variabile Output', blocking: true);
+      if (decl.scope != VariableScope.output && decl.scope != VariableScope.params) {
+        return ExecutionResult.error('"$name" non è una variabile Output o Parametro', blocking: true);
       }
       if (!vars.containsKey(name)) {
         return ExecutionResult.error('Variabile "$name" non disponibile', blocking: true);

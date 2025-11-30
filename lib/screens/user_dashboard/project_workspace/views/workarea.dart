@@ -835,6 +835,8 @@ class _VariablesPanelState extends State<_VariablesPanel> {
     widget.variables.where((v) => v.scope == VariableScope.output).toList();
     final works =
     widget.variables.where((v) => v.scope == VariableScope.local).toList();
+    final params =
+    widget.variables.where((v) => v.scope == VariableScope.params).toList();
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -913,6 +915,17 @@ class _VariablesPanelState extends State<_VariablesPanel> {
                         onDelete: widget.onDeleteVariable,
                       ),
                     ),
+                    Tab(
+                      text: const Text('Parametri'),
+                      body: _VariableList(
+                        scope: VariableScope.params,
+                        variables: params,
+                        protectedVariableNames: widget.protectedVariableNames,
+                        onAdd: () {}, // I parametri non possono essere aggiunti manualmente
+                        onEdit: widget.onEditVariable,
+                        onDelete: widget.onDeleteVariable,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -944,9 +957,11 @@ class _VariableList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final showAddButton = scope != VariableScope.params; // I parametri non possono essere aggiunti manualmente
+
     return ScaffoldPage(
       padding: EdgeInsets.zero,
-      header: Padding(
+      header: showAddButton ? Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
         child: FilledButton(
           onPressed: onAdd,
@@ -959,7 +974,7 @@ class _VariableList extends StatelessWidget {
             ],
           ),
         ),
-      ),
+      ) : null,
       content: variables.isEmpty
           ? Center(child: Text('Nessuna variabile', style: theme.typography.caption))
           : ListView.separated(

@@ -25,6 +25,7 @@ enum VariableScope {
   input,
   output,
   local,
+  params, // Variabili passate come parametri alla funzione
 }
 
 /// Rappresenta una singola clausola di condizione.
