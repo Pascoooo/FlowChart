@@ -1,6 +1,10 @@
+import 'package:equatable/equatable.dart';
 import '../entities/file_entity.dart';
 
-class MyFile {
+/// Rappresenta un file di testo all'interno di un progetto.
+/// Include identificatore univoco, nome e contenuto completo.
+/// Usa Equatable per confronti affidabili basati sul valore.
+class MyFile extends Equatable {
   final String fileId;
   final String name;
   final String content;
@@ -11,14 +15,27 @@ class MyFile {
     required this.content,
   });
 
-  // Costante statica per un'istanza vuota di MyFile.
   static const empty = MyFile(
     fileId: '',
     name: '',
     content: '',
   );
 
-  // Converte un oggetto MyFile in un'entità (Entity).
+  /// Crea una copia di MyFile con i campi specificati aggiornati.
+  /// Essenziale per la programmazione con stati immutabili (pattern usato con BLoC).
+  MyFile copyWith({
+    String? fileId,
+    String? name,
+    String? content,
+  }) {
+    return MyFile(
+      fileId: fileId ?? this.fileId,
+      name: name ?? this.name,
+      content: content ?? this.content,
+    );
+  }
+
+  /// Converte MyFile in MyFileEntity per la persistenza su Firestore.
   MyFileEntity toEntity() {
     return MyFileEntity(
       fileId: fileId,
@@ -27,7 +44,7 @@ class MyFile {
     );
   }
 
-  // Crea un oggetto MyFile da un'entità (Entity).
+  /// Crea un'istanza di MyFile da MyFileEntity (deserializzazione).
   static MyFile fromEntity(MyFileEntity entity) {
     return MyFile(
       fileId: entity.fileId,
@@ -41,6 +58,8 @@ class MyFile {
     return 'MyFile: $fileId, $name';
   }
 
-  // Getter per verificare se l'istanza è vuota.
   bool get isEmpty => this == MyFile.empty;
+
+  @override
+  List<Object?> get props => [fileId, name, content];
 }

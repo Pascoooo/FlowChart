@@ -1,19 +1,39 @@
-import "package:flowchart_thesis/config/constants/themes.dart";
-import "package:flutter/material.dart";
+import 'package:flowchart_thesis/config/constants/themes.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider with ChangeNotifier {
-  ThemeData _themeMode = lightmode;
-  ThemeData get themeData => _themeMode;
+  static const String _prefsKey = 'theme_mode';
+
+  final SharedPreferences _prefs;
+  FluentThemeData _themeData = lightmode;
+
+  ThemeProvider(this._prefs) {
+    final saved = _prefs.getString(_prefsKey);
+    if (saved == 'dark') {
+      _themeData = darkmode;
+    } else if (saved == 'light') {
+      _themeData = lightmode;
+    }
+  }
+
+  FluentThemeData get themeData => _themeData;
+
   void toggleTheme() {
-    if (_themeMode == lightmode) {
-      _themeMode = darkmode;
+    if (_themeData.brightness == Brightness.light) {
+      _themeData = darkmode;
+      _prefs.setString(_prefsKey, 'dark');
     } else {
-      _themeMode = lightmode;
+      _themeData = lightmode;
+      _prefs.setString(_prefsKey, 'light');
     }
     notifyListeners();
   }
-  void setTheme(ThemeData theme) {
-    _themeMode = theme;
+
+  void setTheme(FluentThemeData theme) {
+    _themeData = theme;
+    _prefs.setString(
+        _prefsKey, theme.brightness == Brightness.dark ? 'dark' : 'light');
     notifyListeners();
   }
 }

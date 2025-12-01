@@ -59,6 +59,7 @@ class DefaultFirebaseOptions {
     projectId: 'flowchart-thesis',
     authDomain: 'flowchart-thesis.firebaseapp.com',
     storageBucket: 'flowchart-thesis.firebasestorage.app',
+    databaseURL: 'https://flowchart-thesis-default-rtdb.europe-west1.firebasedatabase.app',
     measurementId: 'G-FN9PMLJNRR',
   );
 

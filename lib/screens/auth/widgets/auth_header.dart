@@ -1,6 +1,8 @@
-// dart
-import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+/// Header del card di autenticazione con logo, titolo e toggle tema.
+/// Mostra opzionalmente un back button e anima i testi per un ingresso morbido.
+/// Pensato per mantenere coerenza di brand tra versioni light/dark.
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:go_router/go_router.dart';
 
 class AuthHeader extends StatelessWidget {
@@ -19,56 +21,24 @@ class AuthHeader extends StatelessWidget {
     this.showBackButton = false,
   });
 
+  /// Rende l'intestazione con logo animato, testi e azione tema/back.
+  /// Adatta i colori al tema corrente e gestisce animazioni di ingresso.
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         if (showBackButton)
           IconButton(
-            icon: Icon(Icons.arrow_back_ios_new, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+            icon: Icon(Icons.arrow_back_ios_new,
+                color: theme.typography.body?.color?.withOpacity(0.6)),
             onPressed: () => context.pop(),
           ),
         Expanded(
           child: Row(
             children: [
-              // Logo animato
-              TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 800),
-                tween: Tween(begin: 0.0, end: 1.0),
-                builder: (context, value, child) {
-                  return Transform.scale(
-                    scale: value,
-                    child: Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            theme.colorScheme.primary,
-                            theme.colorScheme.primary.withOpacity(0.7),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: theme.colorScheme.primary.withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        FontAwesomeIcons.diagramProject,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  );
-                },
-              ),
               const SizedBox(width: 16),
               // Testi
               Expanded(
@@ -85,10 +55,8 @@ class AuthHeader extends StatelessWidget {
                             offset: Offset(0, 20 * (1 - value)),
                             child: Text(
                               title,
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: theme.colorScheme.onSurface,
-                              ),
+                              style: theme.typography.title
+                                  ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                           ),
                         );
@@ -105,10 +73,9 @@ class AuthHeader extends StatelessWidget {
                             offset: Offset(0, 20 * (1 - value)),
                             child: Text(
                               subtitle,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurface
-                                    .withOpacity(0.7),
-                                fontWeight: FontWeight.w400,
+                              style: theme.typography.body?.copyWith(
+                                color: theme.typography.body?.color
+                                    ?.withOpacity(0.7),
                               ),
                             ),
                           ),
@@ -130,10 +97,10 @@ class AuthHeader extends StatelessWidget {
                 scale: value,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                    color: theme.cardColor.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: theme.colorScheme.outline.withOpacity(0.1),
+                      color: theme.inactiveColor.withOpacity(0.2),
                     ),
                   ),
                   child: IconButton(
@@ -147,8 +114,9 @@ class AuthHeader extends StatelessWidget {
                       },
                       child: Icon(
                         isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                        size: 25,
                         key: ValueKey(isDark),
-                        color: theme.colorScheme.onSurfaceVariant,
+                        color: theme.typography.body?.color,
                       ),
                     ),
                     onPressed: onThemeToggle,

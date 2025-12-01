@@ -1,0 +1,33 @@
+name: flowchart_repository
+description: The Repo that handles flowcharts
+publish_to: 'none'
+version: 0.0.1
+
+environment:
+  sdk: '>=3.1.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # firebase (rimosso perché non direttamente usati qui)
+  # firebase_auth:
+  # cloud_firestore:
+  # firebase_database:
+  # google_sign_in:
+
+  # RIMOSSO: 'math_expressions' non è usato direttamente qui, spostato in project_repository.
+
+  equatable: ^2.0.5
+
+  # utils
+  rxdart: ^0.27.7
+  uuid: ^4.4.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

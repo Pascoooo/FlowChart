@@ -1,4 +1,7 @@
-import 'package:flutter/material.dart';
+/// Bottone animato per l'autenticazione social.
+/// Gestisce stati di loading, pressione e shimmer per call-to-action primaria.
+/// Ottimizzato per Flutter web con feedback chiari e disabilitazioni sicure.
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class SocialAuthButton extends StatefulWidget {
@@ -33,12 +36,16 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
   late Animation<double> _shimmerAnimation;
   bool _isPressed = false;
 
+  /// Avvia i controller e setup animazioni per scale/shimmer del bottone.
+  /// Richiamato una sola volta per prevenire stutter nelle animazioni.
   @override
   void initState() {
     super.initState();
     _initAnimations();
   }
 
+  /// Configura tween e loop animati per shimmer e pressione.
+  /// Se il bottone è primario avvia lo shimmer by default.
   void _initAnimations() {
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 100),
@@ -70,19 +77,25 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     }
   }
 
+  /// Aggiorna gli stati animati quando cambiano le proprietà widget.
+  /// Ferma o riavvia lo shimmer in base a loading e flag primario.
   @override
   void didUpdateWidget(SocialAuthButton oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Gestione animazione shimmer in base allo stato
-    if (widget.isPrimary && !widget.isLoading && !_shimmerController.isAnimating) {
+    if (widget.isPrimary &&
+        !widget.isLoading &&
+        !_shimmerController.isAnimating) {
       _shimmerController.repeat();
-    } else if ((!widget.isPrimary || widget.isLoading) && _shimmerController.isAnimating) {
+    } else if ((!widget.isPrimary || widget.isLoading) &&
+        _shimmerController.isAnimating) {
       _shimmerController.stop();
       _shimmerController.reset();
     }
   }
 
+  /// Rilascia le risorse dei controller per evitare leak.
+  /// Chiamato quando il widget esce dall'albero.
   @override
   void dispose() {
     _scaleController.dispose();
@@ -90,142 +103,128 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     super.dispose();
   }
 
-  void _handleTapDown(TapDownDetails details) {
+  /// Gestisce il press iniziale abbassando la scala se cliccabile.
+  /// Evita input quando in loading o disabilitato.
+  void _onPointerDown(PointerDownEvent event) {
     if (widget.isEnabled && !widget.isLoading) {
       setState(() => _isPressed = true);
       _scaleController.forward();
     }
   }
 
-  void _handleTapUp(TapUpDetails details) {
-    _resetPressState();
+  /// Rilascia il press e invoca onPressed dopo l'animazione di ritorno.
+  /// Protegge da tap multipli durante fasi di loading.
+  void _onPointerUp(PointerUpEvent event) {
+    if (_isPressed) {
+      setState(() => _isPressed = false);
+      _scaleController.reverse().then((_) {
+        if (widget.isEnabled && !widget.isLoading) {
+          widget.onPressed();
+        }
+      });
+    }
   }
 
-  void _handleTapCancel() {
-    _resetPressState();
-  }
-
-  void _resetPressState() {
+  /// Ripristina lo stato premuto quando il puntatore viene annullato.
+  /// Mantiene coerenza visiva in caso di drag fuori area.
+  void _onPointerCancel(PointerCancelEvent event) {
     if (_isPressed) {
       setState(() => _isPressed = false);
       _scaleController.reverse();
     }
   }
 
-  void _handleTap() {
-    if (widget.isEnabled && !widget.isLoading) {
-      widget.onPressed();
-    }
-  }
 
+  /// Costruisce il bottone con animazione di scala e gesture listener.
+  /// Usa stack per shimmer opzionale e centra contenuto dinamico.
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isInteractive = widget.isEnabled && !widget.isLoading;
-
     return AnimatedBuilder(
       animation: _scaleAnimation,
       builder: (context, child) {
         return Transform.scale(
           scale: _scaleAnimation.value,
-          child: Container(
-            height: 64,
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(18),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  gradient: widget.isPrimary
-                      ? LinearGradient(
-                    colors: [
-                      theme.colorScheme.primary,
-                      theme.colorScheme.primary.withOpacity(0.8),
-                    ],
-                  )
-                      : null,
-                  color: widget.isPrimary
-                      ? null
-                      : (isDark
-                      ? theme.colorScheme.surfaceVariant.withOpacity(0.5)
-                      : theme.colorScheme.surface),
-                  borderRadius: BorderRadius.circular(18),
-                  border: widget.isPrimary
-                      ? null
-                      : Border.all(
-                    color: _isPressed
-                        ? theme.colorScheme.primary.withOpacity(0.5)
-                        : theme.colorScheme.outline.withOpacity(0.2),
-                    width: _isPressed ? 2.0 : 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.isPrimary
-                          ? theme.colorScheme.primary.withOpacity(_isPressed ? 0.4 : 0.3)
-                          : theme.colorScheme.shadow.withOpacity(_isPressed ? 0.1 : 0.05),
-                      blurRadius: widget.isPrimary ? (_isPressed ? 25 : 20) : (_isPressed ? 15 : 12),
-                      offset: Offset(0, widget.isPrimary ? (_isPressed ? 6 : 8) : (_isPressed ? 2 : 4)),
-                    ),
+          child: Listener(
+            onPointerDown: _onPointerDown,
+            onPointerUp: _onPointerUp,
+            onPointerCancel: _onPointerCancel,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              height: 64,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                gradient: widget.isPrimary
+                    ? LinearGradient(
+                  colors: [
+                    theme.accentColor.dark,
+                    theme.accentColor,
                   ],
+                )
+                    : null,
+                color: widget.isPrimary
+                    ? null
+                    : (isDark
+                    ? theme.cardColor.withOpacity(0.5)
+                    : theme.cardColor),
+                borderRadius: BorderRadius.circular(18),
+                border: widget.isPrimary
+                    ? null
+                    : Border.all(
+                  color: _isPressed
+                      ? theme.accentColor.withOpacity(0.5)
+                      : theme.inactiveColor.withOpacity(0.2),
+                  width: _isPressed ? 2.0 : 1.5,
                 ),
-                child: Stack(
-                  children: [
-                    // Shimmer effect
-                    if (widget.isPrimary && !widget.isLoading)
-                      Positioned.fill(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: AnimatedBuilder(
-                            animation: _shimmerAnimation,
-                            builder: (context, child) {
-                              return Transform.translate(
-                                offset: Offset(_shimmerAnimation.value * 100, 0),
-                                child: Container(
-                                  width: 100,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.white.withOpacity(0.2),
-                                        Colors.transparent,
-                                      ],
-                                      stops: const [0.0, 0.5, 1.0],
-                                    ),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.isPrimary
+                        ? theme.accentColor
+                        .withOpacity(_isPressed ? 0.4 : 0.3)
+                        : Colors.black.withOpacity(_isPressed ? 0.08 : 0.05),
+                    blurRadius:
+                    widget.isPrimary ? (_isPressed ? 25 : 20) : (_isPressed ? 15 : 12),
+                    offset: Offset(
+                        0, widget.isPrimary ? (_isPressed ? 6 : 8) : (_isPressed ? 2 : 4)),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  if (widget.isPrimary && !widget.isLoading)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: AnimatedBuilder(
+                          animation: _shimmerAnimation,
+                          builder: (context, child) {
+                            return Transform.translate(
+                              offset: Offset(_shimmerAnimation.value * 100, 0),
+                              child: Container(
+                                width: 100,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.white.withOpacity(0.2),
+                                      Colors.transparent,
+                                    ],
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-
-                    // Clickable area - copre tutto il container
-                    Positioned.fill(
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(18),
-                        splashColor: widget.isPrimary
-                            ? Colors.white.withOpacity(0.2)
-                            : theme.colorScheme.primary.withOpacity(0.1),
-                        highlightColor: widget.isPrimary
-                            ? Colors.white.withOpacity(0.1)
-                            : theme.colorScheme.primary.withOpacity(0.05),
-                        mouseCursor: isInteractive
-                            ? SystemMouseCursors.click
-                            : SystemMouseCursors.basic,
-                        onTap: _handleTap,
-                        onTapDown: _handleTapDown,
-                        onTapUp: _handleTapUp,
-                        onTapCancel: _handleTapCancel,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: _buildContent(theme),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: _buildContent(theme),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -234,37 +233,36 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
     );
   }
 
-  Widget _buildContent(ThemeData theme) {
+  /// Rende il contenuto interno: spinner in loading o icona+testo standard.
+  /// Adatta colori al tema corrente e stato primario/disabled.
+  Widget _buildContent(FluentThemeData theme) {
     if (widget.isLoading) {
+      final textColor =
+      widget.isPrimary ? Colors.white : theme.typography.body?.color;
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           SizedBox(
             width: 22,
             height: 22,
-            child: CircularProgressIndicator(
+            child: ProgressRing(
               strokeWidth: 2.5,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                widget.isPrimary
-                    ? Colors.white
-                    : theme.colorScheme.primary,
-              ),
+              // ===== FIX: Ripristinato il colore originale per essere uguale a Material =====
+              activeColor: widget.isPrimary ? Colors.white : theme.accentColor,
             ),
           ),
           const SizedBox(width: 16),
           Text(
             'Accesso in corso...',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: widget.isPrimary
-                  ? Colors.white
-                  : theme.colorScheme.onSurface,
-            ),
+            style: theme.typography.bodyStrong?.copyWith(color: textColor),
           ),
         ],
       );
     }
 
+    // Contenuto normale del bottone
+    final textColor =
+    widget.isPrimary ? Colors.white : theme.typography.body?.color;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -272,20 +270,13 @@ class _SocialAuthButtonState extends State<SocialAuthButton>
           widget.icon,
           size: 22,
           color: widget.iconColor ??
-              (widget.isPrimary
-                  ? Colors.white
-                  : theme.colorScheme.primary),
+              (widget.isPrimary ? Colors.white : theme.accentColor),
         ),
         const SizedBox(width: 16),
         Flexible(
           child: Text(
             widget.text,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: widget.isPrimary
-                  ? Colors.white
-                  : theme.colorScheme.onSurface,
-            ),
+            style: theme.typography.bodyStrong?.copyWith(color: textColor),
             overflow: TextOverflow.ellipsis,
           ),
         ),

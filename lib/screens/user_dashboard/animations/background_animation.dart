@@ -1,5 +1,7 @@
+/// Rotating circular gradient background animation for dashboard ambiance.
+/// Creates subtle visual interest with slow 8-second rotation and theme-aware colors.
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 
 class AnimatedBackground extends StatefulWidget {
   const AnimatedBackground({super.key});
@@ -8,7 +10,8 @@ class AnimatedBackground extends StatefulWidget {
   State<AnimatedBackground> createState() => _AnimatedBackgroundState();
 }
 
-class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProviderStateMixin {
+class _AnimatedBackgroundState extends State<AnimatedBackground>
+    with TickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -28,7 +31,7 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProv
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final theme = FluentTheme.of(context);
 
     return AnimatedBuilder(
       animation: _controller,
@@ -42,16 +45,16 @@ class _AnimatedBackgroundState extends State<AnimatedBackground> with TickerProv
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    theme.colorScheme.primary.withOpacity(0.05),
-                    theme.colorScheme.secondary.withOpacity(0.05),
-                    theme.colorScheme.surface.withOpacity(0.1),
+                    theme.accentColor.withOpacity(0.05),
+                    theme.accentColor.lighter.withOpacity(0.05),
+                    theme.scaffoldBackgroundColor.withOpacity(0.1),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    color: theme.accentColor.withOpacity(0.1),
                     blurRadius: 100,
                     spreadRadius: 20,
                   ),

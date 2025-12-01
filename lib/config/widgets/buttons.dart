@@ -1,160 +1,128 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 
-class ModernMenuItem extends StatefulWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-  final bool isDestructive;
-  final bool isPrimaryAction;
+import '../constants/theme_switch.dart';
 
-  const ModernMenuItem({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.isDestructive = false,
-    this.isPrimaryAction = false,
-  });
-
-  @override
-  State<ModernMenuItem> createState() => _ModernMenuItemState();
-}
-
-class _ModernMenuItemState extends State<ModernMenuItem>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _scaleController;
-  late Animation<double> _scaleAnimation;
-  bool _isPressed = false;
-  bool _isHovered = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 150),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(
-      parent: _scaleController,
-      curve: Curves.easeInOut,
-    ));
-  }
-
-  @override
-  void dispose() {
-    _scaleController.dispose();
-    super.dispose();
-  }
+class ThemeToggleButton extends StatelessWidget {
+  const ThemeToggleButton({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final baseColorScheme = theme.colorScheme;
-    final colorScheme = widget.isDestructive
-        ? ColorScheme.fromSeed(seedColor: Colors.red, brightness: theme.brightness)
-        : baseColorScheme;
+    final theme = FluentTheme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    final bool isHighlighted = _isHovered || _isPressed;
-
-    final Color iconColor;
-    final Color textColor;
-    final Gradient? backgroundGradient;
-    final List<BoxShadow>? boxShadow;
-
-    if (widget.isPrimaryAction) {
-      iconColor = baseColorScheme.onPrimary;
-      textColor = baseColorScheme.onPrimary;
-      backgroundGradient = LinearGradient(
-        colors: [
-          baseColorScheme.primary,
-          baseColorScheme.secondary,
-        ],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
-      boxShadow = [
-        BoxShadow(
-          color: baseColorScheme.primary.withOpacity(0.3),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ];
-    } else {
-      iconColor = isHighlighted
-          ? colorScheme.primary
-          : colorScheme.onSurface.withOpacity(0.7);
-      textColor = isHighlighted
-          ? colorScheme.primary
-          : baseColorScheme.onSurface.withOpacity(0.8);
-      backgroundGradient = isHighlighted
-          ? LinearGradient(colors: [
-        colorScheme.primary.withOpacity(0.1),
-        colorScheme.primary.withOpacity(0.05),
-      ])
-          : null;
-      boxShadow = null;
-    }
-
-    return AnimatedBuilder(
-      animation: _scaleAnimation,
-      builder: (context, child) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 1000),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
         return Transform.scale(
-          scale: _scaleAnimation.value,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => _isHovered = true),
-            onExit: (_) => setState(() => _isHovered = false),
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTapDown: (_) {
-                setState(() => _isPressed = true);
-                _scaleController.forward();
-              },
-              onTapUp: (_) {
-                setState(() => _isPressed = false);
-                _scaleController.reverse();
-                widget.onTap();
-              },
-              onTapCancel: () {
-                setState(() => _isPressed = false);
-                _scaleController.reverse();
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  gradient: backgroundGradient,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: boxShadow,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    FaIcon(widget.icon, size: 18, color: iconColor),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        widget.title,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: textColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+          scale: value,
+          child: Container(
+            decoration: BoxDecoration(
+              color: theme.cardColor.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: theme.inactiveColor.withOpacity(0.1)),
+            ),
+            child: IconButton(
+              icon: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, animation) =>
+                    RotationTransition(turns: animation, child: child),
+                child: Icon(
+                  size: 25,
+                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                  key: ValueKey(isDark),
+                  color: theme.typography.body?.color,
                 ),
               ),
+              onPressed: () =>
+                  Provider.of<ThemeProvider>(context, listen: false)
+                      .toggleTheme(),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class CreateProjectButton extends StatelessWidget {
+  final int projectCount;
+  final VoidCallback onPressed;
+
+  const CreateProjectButton({
+    super.key,
+    required this.projectCount,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+
+    final primaryColor = theme.accentColor.darker;
+    final secondaryColor = theme.accentColor;
+
+    return Button(
+      onPressed: onPressed,
+      style: ButtonStyle(
+        padding: ButtonState.all(EdgeInsets.zero),
+        backgroundColor: ButtonState.all(Colors.transparent),
+        // Aggiungiamo questa riga per conformare il bordo del bottone base
+        // alla nostra decorazione con angoli arrotondati.
+        shape: ButtonState.all(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+        ),
+        shadowColor: ButtonState.resolveWith((states) {
+          if (states.isHovering) {
+            return primaryColor.withOpacity(0.5);
+          }
+          return Colors.transparent;
+        }),
+        elevation: ButtonState.resolveWith((states) {
+          if (states.isHovering) {
+            return 8.0;
+          }
+          return 0.0;
+        }),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16.0),
+          gradient: LinearGradient(colors: [primaryColor, secondaryColor]),
+          boxShadow: [
+            BoxShadow(
+              color: primaryColor.withOpacity(0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            )
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+               Icon(FontAwesomeIcons.plus, size: 16, color: theme.brightness == Brightness.dark ? Colors.black : Colors.white),
+              const SizedBox(width: 10),
+              Text(
+                projectCount == 0
+                    ? "Crea il tuo primo progetto"
+                    : "Nuovo Progetto",
+                style: theme.typography.body?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: theme.brightness == Brightness.dark
+                      ? Colors.black
+                      : Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
