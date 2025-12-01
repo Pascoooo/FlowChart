@@ -171,6 +171,18 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
       return;
     }
 
+    // 🔒 Precarica il main in cache senza cambiare il file attivo, così lo snapshot è aggiornato
+    final mainFile = fileSystemState.files.firstWhereOrNull(
+          (f) => f.name.toLowerCase() == 'main',
+    );
+    if (mainFile != null && flowchartBloc.activeFileId != mainFile.fileId) {
+      flowchartBloc.add(PreloadFlowchartCache(
+        fileId: mainFile.fileId,
+        fileName: mainFile.name,
+        jsonContent: mainFile.content,
+      ));
+    }
+
     // Salva lo stato corrente della griglia
     _preDebugShowGrid ??= _showGrid;
     if (_showGrid) {

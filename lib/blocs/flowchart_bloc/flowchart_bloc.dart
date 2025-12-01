@@ -72,6 +72,7 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
   FlowchartBloc() :
         super(FlowchartInitial()) {
     on<LoadFlowchart>(_onLoadFlowchart);
+    on<PreloadFlowchartCache>(_onPreloadFlowchartCache);
     on<ClearFlowchartCache>(_onClearFlowchartCache);
     on<AddNode>(_onAddNode);
     on<RemoveNode>(_onRemoveNode);
@@ -235,6 +236,33 @@ class FlowchartBloc extends Bloc<FlowchartEvent, FlowchartState> {
       projectFlowcharts: currentState?.projectFlowcharts ?? {},
       isDebugMode: (currentState?.isDebugMode ?? false),
     ));
+  }
+
+  void _onPreloadFlowchartCache(
+      PreloadFlowchartCache event, Emitter<FlowchartState> emit) {
+    try {
+      final flowchart = Flowchart.fromEntity(
+        FlowchartEntity.fromDocument(jsonDecode(event.jsonContent)),
+      );
+
+      _cache[event.fileId] = _FlowchartCacheEntry(
+        flowchart: flowchart.copyWith(name: event.fileName),
+        history: CommandHistory(),
+        selectedNodeId: null,
+        isConnectorModeActive: false,
+        connectorSourceNodeId: null,
+        selectedConnectorNodeIds: const {},
+        connectorPurpose: null,
+        projectFlowcharts: (state is FlowchartLoaded)
+            ? (state as FlowchartLoaded).projectFlowcharts
+            : {},
+        isDebugMode: false,
+      );
+
+      debugPrint('🗃️ Precaricato in cache il file ${event.fileName} (${event.fileId})');
+    } catch (e) {
+      debugPrint('❌ Errore precaricamento cache per ${event.fileName}: $e');
+    }
   }
 
   void _onAddGlobalVariable(

@@ -25,6 +25,22 @@ class LoadFlowchart extends FlowchartEvent {
   List<Object?> get props => [fileId, jsonContent, fileName];
 }
 
+/// Precarica un flowchart in cache senza cambiare il file attivo.
+class PreloadFlowchartCache extends FlowchartEvent {
+  final String fileId;
+  final String fileName;
+  final String jsonContent;
+
+  const PreloadFlowchartCache({
+    required this.fileId,
+    required this.fileName,
+    required this.jsonContent,
+  });
+
+  @override
+  List<Object?> get props => [fileId, fileName, jsonContent];
+}
+
 class AddNode extends FlowchartEvent {
   final FlowNodeKind kind;
   final String fromNodeId;
