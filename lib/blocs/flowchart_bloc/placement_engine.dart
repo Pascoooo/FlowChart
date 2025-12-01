@@ -70,12 +70,10 @@ class PlacementEngine {
     required Size newNodeSize,
     String? fromPort,
   }) {
-    // Caso specifico per DecisionNode, WhileNode, DoWhileNode
-    if ((fromNode.kind == FlowNodeKind.decision ||
-         fromNode.kind == FlowNodeKind.whileLoop ||
-         fromNode.kind == FlowNodeKind.doWhileLoop) && fromPort != null) {
+    // Caso specifico per Decision (IF classico)
+    if (fromNode.kind == FlowNodeKind.decision && fromPort != null) {
       if (fromPort == 'true') {
-        // Prova solo a destra.
+        // True a DESTRA
         return [
           Offset(
             fromNode.x + fromNode.width + _padding,
@@ -83,10 +81,52 @@ class PlacementEngine {
           ),
         ];
       } else { // fromPort == 'false'
-        // Prova solo a sinistra.
+        // False a SINISTRA
         return [
           Offset(
             fromNode.x - newNodeSize.width - _padding,
+            fromNode.y + (fromNode.height / 2) - (newNodeSize.height / 2),
+          ),
+        ];
+      }
+    }
+
+    // Caso specifico per WhileLoop (PRE-condizionale)
+    if (fromNode.kind == FlowNodeKind.whileLoop && fromPort != null) {
+      if (fromPort == 'true') {
+        // True in BASSO (corpo del ciclo)
+        return [
+          Offset(
+            fromNode.x + (fromNode.width / 2) - (newNodeSize.width / 2),
+            fromNode.y + fromNode.height + _padding,
+          ),
+        ];
+      } else { // fromPort == 'false'
+        // False a DESTRA (uscita dal ciclo)
+        return [
+          Offset(
+            fromNode.x + fromNode.width + _padding,
+            fromNode.y + (fromNode.height / 2) - (newNodeSize.height / 2),
+          ),
+        ];
+      }
+    }
+
+    // Caso specifico per DoWhileLoop (POST-condizionale)
+    if (fromNode.kind == FlowNodeKind.doWhileLoop && fromPort != null) {
+      if (fromPort == 'true') {
+        // True a SINISTRA (ritorno al corpo del ciclo)
+        return [
+          Offset(
+            fromNode.x - newNodeSize.width - _padding,
+            fromNode.y + (fromNode.height / 2) - (newNodeSize.height / 2),
+          ),
+        ];
+      } else { // fromPort == 'false'
+        // False a DESTRA (uscita dal ciclo)
+        return [
+          Offset(
+            fromNode.x + fromNode.width + _padding,
             fromNode.y + (fromNode.height / 2) - (newNodeSize.height / 2),
           ),
         ];

@@ -104,7 +104,14 @@ class _ProcessNodeDialogState extends State<_ProcessNodeDialog> {
   String _autoLabel() {
     if (_selectedFile == null) return "chiama ''";
     final name = _selectedFile!.name.replaceAll("'", r"\'");
-    return "chiama '$name'";
+
+    // Se ci sono parametri, li aggiungiamo all'etichetta
+    if (_selectedSignature != null && _selectedSignature!.parameters.isNotEmpty) {
+      final args = _argumentVariables.where((v) => v != null && v.isNotEmpty).join(', ');
+      return "chiama '$name($args)'";
+    }
+
+    return "chiama '$name()'";
   }
 
   void _onConfirm() {

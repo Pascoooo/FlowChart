@@ -26,7 +26,6 @@ class _AssignmentNodeDialog extends StatefulWidget {
 }
 
 class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
-  final _labelController = TextEditingController();
   final List<_AssignmentRowData> _assignments = [];
   bool _attemptedSubmit = false;
 
@@ -40,7 +39,6 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
 
   @override
   void dispose() {
-    _labelController.dispose();
     for (final a in _assignments) {
       a.dispose();
     }
@@ -185,7 +183,7 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
         .join('; ');
 
     Navigator.of(context).pop({
-      'text': _labelController.text.trim().isEmpty ? summary : _labelController.text.trim(),
+      'text': summary,
       'assignments': assignmentsList,
     });
   }
@@ -207,14 +205,6 @@ class _AssignmentNodeDialogState extends State<_AssignmentNodeDialog> {
             const SizedBox(height: 20),
             if (!hasVariables) _buildNoVariablesInfo(theme),
             if (hasVariables) ...[
-              InfoLabel(
-                label: 'Etichetta Nodo (opzionale)',
-                child: TextBox(
-                  controller: _labelController,
-                  placeholder: 'Es. Calcola Risultato',
-                ),
-              ),
-              const SizedBox(height: 24),
               _buildAssignmentHeader(theme),
               const SizedBox(height: 16),
               Expanded(

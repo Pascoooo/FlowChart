@@ -169,16 +169,12 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
       };
     }).toList();
 
-    final summary = assignmentsList
-        .map((a) {
-          final expr = (a['expression'] as String).trim();
-          final tgt = a['target'] as String;
-          return expr.isNotEmpty ? '$tgt = $expr' : tgt;
-        })
-        .join('; ');
+    // Genera l'etichetta automaticamente: "prendi in input var1, var2, var3"
+    final variableNames = assignmentsList.map((a) => a['target'] as String).join(', ');
+    final label = 'prendi in input $variableNames';
 
     Navigator.of(context).pop({
-      'text': summary,
+      'text': label,
       'assignments': assignmentsList,
     });
   }
@@ -404,6 +400,8 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
                         if (_attemptedSubmit) _validateForm();
                       }
                     }),
+                  ),
+                ],
               ),
               const SizedBox(width: 12),
               IconButton(
@@ -448,8 +446,6 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
                 ),
                 const SizedBox(width: 16),
                 const Spacer(flex: 1),
-                const SizedBox(width: 12),
-                const SizedBox(width: 40),
               ],
             ),
           ],
@@ -457,7 +453,6 @@ class _InputNodeDialogState extends State<_InputNodeDialog> {
             _buildErrorMessages(a),
         ],
       ),
-        ],    ),
     );
   }
 

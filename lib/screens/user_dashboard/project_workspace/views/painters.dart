@@ -567,8 +567,20 @@ class ConnectionPainter extends CustomPainter {
         fromNode.x + fromNode.width + offsetFromNode,
         fromNode.y + fromNode.height / 2 - (textPainter.height / 2) - padding,
       );
+    } else if (label == 'true' && fromNode.kind == FlowNodeKind.doWhileLoop) {
+      // Per do-while: "True" va a SINISTRA del rombo (ritorno al corpo del ciclo)
+      labelPos = Offset(
+        fromNode.x - textPainter.width - offsetFromNode - padding * 2,
+        fromNode.y + fromNode.height / 2 - (textPainter.height / 2) - padding,
+      );
+    } else if (label == 'true' && fromNode.kind == FlowNodeKind.whileLoop) {
+      // Per while: "True" va in BASSO del rombo (corpo del ciclo)
+      labelPos = Offset(
+        fromNode.x + fromNode.width / 2 - textPainter.width / 2 - padding,
+        fromNode.y + fromNode.height + padding,
+      );
     } else {
-      // Posiziona "True" (while) o "Do" (do-while) sotto il nodo
+      // Posiziona "Do" (do-while start) o altri sotto il nodo
       labelPos = Offset(
         fromNode.x + fromNode.width / 2 - textPainter.width / 2 - padding,
         fromNode.y + fromNode.height + padding,
@@ -812,8 +824,23 @@ class NodeSelectionBorderPainter extends CustomPainter {
         canvas.drawPath(path, strokePaint);
         break;
 
+      case FlowNodeKind.process:
+      // Rettangolo arrotondato con barre laterali per process
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, size.width, size.height),
+          const Radius.circular(8),
+        );
+        canvas.drawRRect(rect, strokePaint);
+
+        // Aggiungi le barre laterali
+        const padding = 8.0;
+        canvas.drawLine(Offset(padding, 0), Offset(padding, size.height), strokePaint);
+        canvas.drawLine(Offset(size.width - padding, 0),
+            Offset(size.width - padding, size.height), strokePaint);
+        break;
+
       default:
-      // Rettangolo arrotondato per process, assignment, ecc.
+      // Rettangolo arrotondato per assignment, ecc.
         final rect = RRect.fromRectAndRadius(
           Rect.fromLTWH(0, 0, size.width, size.height),
           const Radius.circular(8),
@@ -901,6 +928,48 @@ class FunctionHeaderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant FunctionHeaderPainter old) =>
+      old.fillColor != fillColor ||
+      old.borderColor != borderColor ||
+      old.strokeWidth != strokeWidth;
+}
+
+class ProcessPainter extends CustomPainter {
+  final Color fillColor;
+  final Color borderColor;
+  final double strokeWidth;
+
+  ProcessPainter({
+    required this.fillColor,
+    required this.borderColor,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(8));
+
+    canvas.drawRRect(rrect, Paint()..color = fillColor);
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = borderColor
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke,
+    );
+
+    // Disegna le due barre laterali
+    final sidePaint = Paint()
+      ..color = borderColor
+      ..strokeWidth = strokeWidth;
+    const padding = 8.0;
+    canvas.drawLine(Offset(padding, 0), Offset(padding, size.height), sidePaint);
+    canvas.drawLine(Offset(size.width - padding, 0),
+        Offset(size.width - padding, size.height), sidePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant ProcessPainter old) =>
       old.fillColor != fillColor ||
       old.borderColor != borderColor ||
       old.strokeWidth != strokeWidth;
@@ -1020,7 +1089,14 @@ class NodeRenderer extends StatelessWidget {
           strokeWidth: borderWidth,
         );
         break;
-      default: // Process, Assignment
+      case FlowNodeKind.process:
+        painter = ProcessPainter(
+          fillColor: fillColor,
+          borderColor: borderColor,
+          strokeWidth: borderWidth,
+        );
+        break;
+      default: // Assignment
         painter = RoundedRectanglePainter(
           color: fillColor,
           borderColor: borderColor,
