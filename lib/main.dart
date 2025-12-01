@@ -10,6 +10,7 @@ import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:user_repository/user_repository.dart';
 import 'config/firebase/firebase_options.dart';
+import 'config/services/gemini_service.dart';
 import 'myapp.dart';
 
 void main() async {
@@ -23,6 +24,10 @@ void main() async {
     minimumFetchInterval: const Duration(hours: 1),
   ));
   await remoteConfig.fetchAndActivate();
+
+  // Inizializza GeminiService per l'AI Chat
+  await GeminiService.instance.initialize();
+
   final googleClientId = remoteConfig.getString('google_web_client_id');
   if (googleClientId.isNotEmpty) {
     FirebaseUIAuth.configureProviders([

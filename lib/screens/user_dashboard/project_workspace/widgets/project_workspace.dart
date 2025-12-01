@@ -14,6 +14,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:project_repository/project_repository.dart';
 import 'package:universal_html/html.dart' as html;
+import '../../../../blocs/ai_chat_bloc/ai_chat_bloc.dart';
 import '../../../../blocs/debug_bloc/debug_bloc.dart';
 import '../../../../blocs/debug_bloc/debug_event.dart';
 import '../../../../blocs/debug_bloc/debug_state.dart';
@@ -25,6 +26,7 @@ import '../../../../config/services/banner_service.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/dialog_service/service_dialog.dart';
 import '../../../../config/services/export_service.dart';
+import '../../../../config/services/gemini_service.dart';
 import '../../../settings/widgets/settings_provider.dart';
 import '../views/debug_mode_view.dart';
 import '../views/workarea.dart';
@@ -299,6 +301,11 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
             create: (context) => FileSystemBloc(
               projectRepository: context.read<ProjectBloc>().projectRepository,
             )..add(RefreshFileSystem(projectId: widget.selectedProject.projectId)),
+          ),
+          BlocProvider<AiChatBloc>(
+            create: (context) => AiChatBloc(
+              apiKey: GeminiService.instance.apiKey ?? '',
+            ),
           ),
         ],
         child: BlocBuilder<FileSystemBloc, FileSystemState>(
