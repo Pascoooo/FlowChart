@@ -53,11 +53,13 @@ Future<void> _flushCurrentFlowchart(BuildContext context) async {
 class ProjectSidebar extends StatefulWidget {
   final MyProject selectedProject;
   final bool isReadOnly;
+  final VoidCallback? onLeave;
 
   const ProjectSidebar({
     super.key,
     required this.selectedProject,
     this.isReadOnly = false,
+    this.onLeave,
   });
 
   @override
@@ -84,7 +86,10 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
               ),
               child: Column(
                 children: [
-                  _SidebarHeader(projectName: widget.selectedProject.name),
+                  _SidebarHeader(
+                    projectName: widget.selectedProject.name,
+                    onLeave: widget.onLeave,
+                  ),
                   _buildDivider(theme),
                   Expanded(
                     child: _FileSystemView(
@@ -127,7 +132,12 @@ class _ProjectSidebarState extends State<ProjectSidebar> {
 /// Header della Sidebar.
 class _SidebarHeader extends StatefulWidget {
   final String projectName;
-  const _SidebarHeader({required this.projectName});
+  final VoidCallback? onLeave;
+
+  const _SidebarHeader({
+    required this.projectName,
+    this.onLeave,
+  });
 
   @override
   State<_SidebarHeader> createState() => _SidebarHeaderState();
@@ -170,6 +180,13 @@ class _SidebarHeaderState extends State<_SidebarHeader>
         children: [
           IconButton(
             onPressed: () async {
+              // Se è fornito un callback onLeave personalizzato, usalo
+              if (widget.onLeave != null) {
+                widget.onLeave!();
+                return;
+              }
+
+              // Altrimenti, comportamento standard
               // ✅ FIX: Flush immediato del flowchart prima di uscire
               await _flushCurrentFlowchart(context);
               if (!mounted) return;
@@ -205,12 +222,24 @@ class _SidebarHeaderState extends State<_SidebarHeader>
               height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    theme.accentColor,
-                    theme.accentColor.lighter,
-                  ],
-                ),
+                color: theme.brightness == Brightness.light ? theme.cardColor : null,
+                gradient: theme.brightness == Brightness.dark
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          theme.accentColor.dark,
+                          theme.accentColor,
+                          theme.accentColor.light,
+                        ],
+                      )
+                    : null,
+                border: theme.brightness == Brightness.light
+                    ? Border.all(
+                        color: theme.accentColor,
+                        width: 2.5,
+                      )
+                    : null,
                 boxShadow: [
                   BoxShadow(
                     color: theme.accentColor.withValues(alpha: 0.3),
@@ -219,10 +248,12 @@ class _SidebarHeaderState extends State<_SidebarHeader>
                   ),
                 ],
               ),
-              child: const Icon(
-                FontAwesomeIcons.diagramProject,
-                color: Colors.white,
-                size: 24,
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Image.asset(
+                  'assets/logo.png',
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
           ),

@@ -1,18 +1,20 @@
-// lib/screens/user_dashboard/project_workspace/widgets/static_workspace.dart
-
 import 'package:file_repository/file_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter/widgets.dart' show Navigator;
 import 'package:project_repository/project_repository.dart';
 
-import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
-import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
+import '../../../../blocs/file_bloc/file_system_bloc.dart';
+import '../../../../blocs/file_bloc/file_system_state.dart';
 import '../../../../blocs/project_bloc/project_bloc.dart';
 import '../../../../blocs/project_bloc/project_event.dart';
-import '../views/workarea.dart';
+import 'project_workspace.dart';
 
+/// Workspace per PROGETTO CONDIVISO.
+/// Invece di avere una debug mode separata, inizializza il FileSystemBloc con i file condivisi
+/// e poi riusa direttamente [ProjectWorkspace] in modalità sola lettura.
+/// In questo modo la DebugModeView, la console, la tabella variabili e il call stack
+/// sono IDENTICI a quelli del workspace normale.
 class StaticProjectWorkspace extends StatefulWidget {
   final MyProject project;
   final List<MyFile> files;
@@ -28,185 +30,60 @@ class StaticProjectWorkspace extends StatefulWidget {
 }
 
 class _StaticProjectWorkspaceState extends State<StaticProjectWorkspace> {
-  String? _activeFileId;
-
   @override
   void initState() {
     super.initState();
-    if (widget.files.isNotEmpty) {
-      final mainFile = widget.files.firstWhere(
-            (file) => file.name == 'main',
-        orElse: () => widget.files.first,
-      );
-      _activeFileId = mainFile.fileId;
-    }
+    // Nessuna logica speciale qui: l'inizializzazione avviene nel BlocProvider di FileSystemBloc
   }
 
   @override
   Widget build(BuildContext context) {
-    final activeFile = widget.files.firstWhere(
-          (file) => file.fileId == _activeFileId,
-      orElse: () => widget.files.isNotEmpty ? widget.files.first : MyFile.empty,
-    );
+    return MultiBlocProvider(
+      providers: [
+        // ProjectBloc esiste già a livello superiore nell'app.
+        // Lo usiamo senza modificare lo stato (già in StaticWorkspaceLoaded)
+        BlocProvider<ProjectBloc>.value(
+          value: context.read<ProjectBloc>(),
+        ),
 
-    return BlocProvider<FlowchartBloc>(
-      key: ValueKey(_activeFileId),
-      create: (context) => FlowchartBloc()
-        ..add(LoadFlowchart(
-          jsonContent: activeFile.content,
-          fileName: activeFile.name,
-          fileId: activeFile.fileId,
-        )),
-      child: Row(
-        children: [
-          _StaticSidebar(
-            files: widget.files,
-            activeFileId: _activeFileId,
-            onFileSelected: (fileId) {
-              setState(() {
-                _activeFileId = fileId;
-              });
-            },
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  _StaticTopBar(
-                    projectName: widget.project.name,
-                    fileName: activeFile.name,
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded( // FIX: Rimosso 'const' da qui
-                    child: WorkArea(
-                      repaintKey: GlobalKey(),
-                      showGrid: true,
-                      isReadOnly: true,
-                      allowDragInReadOnly: true,
-                      onToggleGrid: () {}, // FIX: Sostituito null con una funzione vuota
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+        // FileSystemBloc inizializzato direttamente dai file condivisi.
+        // Non fa chiamate a Firestore: parte già in stato FileSystemLoaded.
+        BlocProvider<FileSystemBloc>(
+          create: (ctx) {
+            final bloc = FileSystemBloc(
+              projectRepository: ctx.read<ProjectBloc>().projectRepository,
+            );
 
-class _StaticSidebar extends StatelessWidget {
-  final List<MyFile> files;
-  final String? activeFileId;
-  final ValueChanged<String> onFileSelected;
+            // Costruisci lo stato FileSystemLoaded a partire dai MyFile condivisi
+            final files = widget.files;
+            String? activeId;
+            if (files.isNotEmpty) {
+              // Usa 'main' come file attivo se presente, altrimenti il primo
+              final mainFile = files.firstWhere(
+                (f) => f.name.toLowerCase() == 'main',
+                orElse: () => files.first,
+              );
+              activeId = mainFile.fileId;
+            }
 
-  const _StaticSidebar({
-    required this.files,
-    required this.activeFileId,
-    required this.onFileSelected,
-  });
+            bloc.emit(FileSystemLoaded(
+              files: files,
+              activeFileId: activeId,
+            ));
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    return Container(
-      width: 320,
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
-      ),
-      child: Column(
-        children: [
-          ListTile(
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded),
-              onPressed: () =>
-              context.read<ProjectBloc>().add(const LeaveProject()),
-            ),
-            title: Text('Progetto Condiviso', style: theme.typography.bodyStrong),
-          ),
-          const Divider(
-            style: DividerThemeData(
-              horizontalMargin: EdgeInsets.symmetric(horizontal: 16),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: files.length,
-              itemBuilder: (context, index) {
-                final file = files[index];
-                final isSelected = file.fileId == activeFileId;
-                return ListTile(
-                  leading: Icon(
-                    FontAwesomeIcons.fileCode,
-                    // FIX: Sostituito disabledColor con inactiveColor
-                    color: isSelected ? theme.accentColor : theme.inactiveColor,
-                  ),
-                  title: Text(
-                    file.name,
-                    style: (theme.typography.body ?? const TextStyle()).copyWith(
-                      fontWeight:
-                      isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? theme.accentColor : null,
-                    ),
-                  ),
-                  onPressed: () => onFileSelected(file.fileId),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StaticTopBar extends StatelessWidget {
-  final String projectName;
-  final String fileName;
-
-  const _StaticTopBar({required this.projectName, required this.fileName});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    return Container(
-      height: 80,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.1)),
-      ),
-      alignment: Alignment.centerLeft,
-      child: Row(
-        children: [
-          Icon(FontAwesomeIcons.diagramProject, color: theme.accentColor),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  projectName,
-                  style: theme.typography.bodyStrong,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Visualizzando: $fileName (sola lettura)',
-                  style: theme.typography.caption,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
+            return bloc;
+          },
+        ),
+      ],
+      child: ProjectWorkspace(
+        selectedProject: widget.project,
+        isReadOnly: true,
+        onLeave: () {
+          // In modalità statica NON chiamiamo LeaveProject del ProjectBloc,
+          // così non torni forzatamente alla pagina dei progetti.
+          // Se la StaticWorkspace è aperta come nuova route, puoi usare:
+          // Navigator.of(context).maybePop();
+        },
       ),
     );
   }

@@ -14,7 +14,6 @@
 // ❌ NON gestisce variabili direttamente
 //
 // ============================================================================
-
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -46,7 +45,7 @@ class _DebugConsoleState extends State<DebugConsole> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
-      _initializeEngine();
+      // Prova a inizializzare subito, ma se fallisce verrà riprovato nel listener
     });
   }
 
@@ -55,8 +54,8 @@ class _DebugConsoleState extends State<DebugConsole> {
 
     // Consenti inizializzazione sia in DebugInProgress che in DebugAwaitingInput
     if (debugState is! DebugInProgress && debugState is! DebugAwaitingInput) {
+      debugPrint('! Impossibile inizializzare console: non in debug');
       debugPrint('⚠️ Impossibile inizializzare console: non in debug');
-      return;
     }
 
     // Determina il nodo corrente e il flowchart corrente
@@ -230,9 +229,9 @@ class _DebugConsoleState extends State<DebugConsole> {
               debugPrint('⚠️ Nodo $nodeId non trovato nel flowchart corrente, reinizializzo engine');
               _initializeEngine();
             } else {
+              // Se engine è null o il nodo è cambiato, reinizializza
               // Se il nodo è cambiato, reinizializza
               if (_engine?.currentNode.id != currentNode.id) {
-                _initializeEngine();
               }
             }
           }

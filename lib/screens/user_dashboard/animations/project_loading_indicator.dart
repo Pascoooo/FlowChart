@@ -1,7 +1,6 @@
 /// Modern loading indicator with fade-in animation and progress bar.
 /// Displays "Loading Projects" message with icon and animated entrance.
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ModernLoadingIndicator extends StatefulWidget {
   const ModernLoadingIndicator({super.key});
@@ -56,10 +55,44 @@ class _ModernLoadingIndicatorState extends State<ModernLoadingIndicator>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            FaIcon(
-              FontAwesomeIcons.diagramProject,
-              size: 48,
-              color: theme.accentColor,
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: theme.brightness == Brightness.light ? theme.cardColor : null,
+                gradient: theme.brightness == Brightness.dark
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          theme.accentColor.dark,
+                          theme.accentColor,
+                          theme.accentColor.light,
+                        ],
+                      )
+                    : null,
+                border: theme.brightness == Brightness.light
+                    ? Border.all(
+                        color: theme.accentColor,
+                        width: 2.5,
+                      )
+                    : null,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.accentColor.withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14.0),
+                child: Image.asset(
+                  'assets/logo.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
             const SizedBox(height: 32),
             SlideTransition(

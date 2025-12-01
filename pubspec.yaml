@@ -43,6 +43,10 @@ dependencies:
   image: ^4.2.0
   cached_network_image: ^3.3.1
 
+  # == AI & MARKDOWN ==
+  google_generative_ai: ^0.4.6
+  markdown_widget: ^2.3.2+6
+
   # == REPOSITORIES LOCALI ==
   user_repository:
     path: packages/user_repository

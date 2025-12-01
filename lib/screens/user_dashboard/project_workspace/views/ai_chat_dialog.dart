@@ -4,6 +4,8 @@ import 'package:markdown_widget/markdown_widget.dart';
 import '../../../../blocs/ai_chat_bloc/ai_chat_bloc.dart';
 import '../../../../blocs/ai_chat_bloc/ai_chat_event.dart';
 import '../../../../blocs/ai_chat_bloc/ai_chat_state.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_bloc.dart';
+import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 
 /// Pannello chat floating laterale per l'assistente AI
 class AiChatPanel extends StatefulWidget {
@@ -71,7 +73,19 @@ class _AiChatPanelState extends State<AiChatPanel>
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
-    context.read<AiChatBloc>().add(SendMessageToAi(message));
+    // Ottieni il JSON del flowchart corrente come contesto
+    String? flowchartContext;
+    try {
+      final flowchartBloc = context.read<FlowchartBloc>();
+      final flowchartState = flowchartBloc.state;
+      if (flowchartState is FlowchartLoaded) {
+        flowchartContext = flowchartState.toJson();
+      }
+    } catch (e) {
+      // Ignora errori nel recupero del contesto
+    }
+
+    context.read<AiChatBloc>().add(SendMessageToAi(message, context: flowchartContext));
     _messageController.clear();
     _scrollToBottom();
   }
@@ -93,40 +107,35 @@ class _AiChatPanelState extends State<AiChatPanel>
     final double panelWidth = 380;
     final double panelHeight = size.height * 0.5;
 
-    return FluentTheme(
-      data: theme.copyWith(
-        selectionColor: Colors.grey.withValues(alpha: 0.3),
-      ),
-      child: IgnorePointer(
-        ignoring: false,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: Container(
-              width: panelWidth,
-              height: panelHeight,
-              margin: const EdgeInsets.only(right: 16, top: 16, bottom: 16),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 18,
-                    offset: const Offset(-4, 4),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildHeader(theme),
-                  Expanded(child: _buildMessages(theme)),
-                  _buildInputArea(theme),
-                ],
-              ),
+    return IgnorePointer(
+      ignoring: false,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Container(
+            width: panelWidth,
+            height: panelHeight,
+            margin: const EdgeInsets.only(right: 16, top: 16, bottom: 16),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(-4, 4),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(theme),
+                Expanded(child: _buildMessages(theme)),
+                _buildInputArea(theme),
+              ],
             ),
           ),
         ),
@@ -159,12 +168,6 @@ class _AiChatPanelState extends State<AiChatPanel>
                 fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(FluentIcons.delete, color: Colors.white, size: 14),
-            onPressed: () {
-              context.read<AiChatBloc>().add(const ClearChatHistory());
-            },
           ),
           IconButton(
             icon: const Icon(FluentIcons.chrome_close, color: Colors.white, size: 14),
@@ -372,8 +375,8 @@ class _AiChatPanelState extends State<AiChatPanel>
                               color: aiTextColor,
                             ),
                           ),
-                          CodeConfig(
-                            style: const TextStyle(
+                          const CodeConfig(
+                            style: TextStyle(
                               fontFamily: 'Consolas',
                               fontSize: 11,
                               color: Colors.black,

@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flowchart_repository/flowchart_repository.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../../../blocs/ai_chat_bloc/ai_chat_bloc.dart';
 import '../../../../blocs/debug_bloc/debug_bloc.dart';
 import '../../../../blocs/debug_bloc/debug_state.dart';
 import '../../../../blocs/file_bloc/file_system_bloc.dart';
@@ -17,6 +18,8 @@ import '../../../../blocs/flowchart_bloc/flowchart_event.dart';
 import '../../../../blocs/flowchart_bloc/flowchart_state.dart';
 import '../../../../config/services/dialog_service/app_dialogs.dart';
 import '../../../../config/services/dialog_service/service_dialog.dart';
+import 'ai_chat_button.dart' as ai_button;
+import 'ai_chat_dialog.dart'; // Contiene AiChatPanel
 import 'flowchart_canvas.dart';
 import 'grid_toggle.dart';
 
@@ -53,6 +56,7 @@ class _WorkAreaState extends State<WorkArea>
   late AnimationController _panelAnimationController;
   late Animation<Offset> _panelSlideAnimation;
   bool _isVariablesPanelOpen = false;
+  bool _isAiChatOpen = false;
 
   @override
   void initState() {
@@ -462,6 +466,12 @@ class _WorkAreaState extends State<WorkArea>
     }
   }
 
+  void _showAiChatDialog(BuildContext context) {
+    setState(() {
+      _isAiChatOpen = !_isAiChatOpen;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Avvolge il canvas con un listener sul FileSystemBloc per caricare il contenuto del file attivo
@@ -505,8 +515,9 @@ class _WorkAreaState extends State<WorkArea>
             allowDragInReadOnly: widget.allowDragInReadOnly,
           ),
 
-          // Layer per i bottoni sopra la workarea
-          if (!widget.isReadOnly && (widget.onExport != null || widget.onStartDebug != null || widget.onLeave != null))
+          // Topbar in modalità NORMALE (non read-only): toolbar completa
+          if (!widget.isReadOnly &&
+              (widget.onExport != null || widget.onStartDebug != null || widget.onLeave != null))
             Positioned(
               top: 16,
               left: 0,
@@ -668,6 +679,42 @@ class _WorkAreaState extends State<WorkArea>
               ),
             ),
 
+          // Topbar in modalità READ-ONLY (es. StaticWorkspace): SOLO tasto Play centrale
+          if (widget.isReadOnly && widget.onStartDebug != null)
+            Positioned(
+              top: 16,
+              left: 0,
+              right: 0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: BlocBuilder<FlowchartBloc, FlowchartState>(
+                  builder: (context, flowchartState) {
+                    final bool disableUI = flowchartState is FlowchartLoaded &&
+                        flowchartState.isConnectorModeActive;
+
+                    final bool isPlayEnabled =
+                        flowchartState is FlowchartLoaded &&
+                        !disableUI &&
+                        flowchartState.flowchart.isMain;
+
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _TopBarButton(
+                          icon: FontAwesomeIcons.play,
+                          tooltip: 'Esegui flowchart condiviso',
+                          enabled: isPlayEnabled,
+                          onTap: isPlayEnabled ? widget.onStartDebug : null,
+                          isAccent: true,
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+
           // ✨ NUOVO PANNELLO VARIABILI LATERALE E CORTO
           if (!widget.isReadOnly)
             SlideTransition(
@@ -710,6 +757,21 @@ class _WorkAreaState extends State<WorkArea>
                 ),
               ),
             ),
+            // Bottone AI Chat sopra il bottone griglia
+            Positioned(
+              bottom: 100,
+              right: 24,
+              child: ScaleTransition(
+                scale: _buttonAnimation,
+                child: FadeTransition(
+                  opacity: _buttonAnimation,
+                  child: ai_button.AiChatButton(
+                    onTap: () => _showAiChatDialog(context),
+                  ),
+                ),
+              ),
+            ),
+            // Bottone griglia
             Positioned(
               bottom: 24,
               right: 24,
@@ -725,6 +787,21 @@ class _WorkAreaState extends State<WorkArea>
               ),
             ),
           ],
+
+          // Pannello AI Chat floating laterale
+          if (_isAiChatOpen && !widget.isReadOnly)
+            Positioned.fill(
+              child: BlocProvider.value(
+                value: context.read<AiChatBloc>(),
+                child: AiChatPanel(
+                  onClose: () {
+                    setState(() {
+                      _isAiChatOpen = false;
+                    });
+                  },
+                ),
+              ),
+            ),
         ],
       ),
     );

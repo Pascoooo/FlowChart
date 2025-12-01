@@ -154,20 +154,39 @@ class Header extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [theme.accentColor.dark, theme.accentColor],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
+              shape: BoxShape.circle,
+              color: theme.brightness == Brightness.light ? theme.cardColor : null,
+              gradient: theme.brightness == Brightness.dark
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        theme.accentColor.dark,
+                        theme.accentColor,
+                        theme.accentColor.light,
+                      ],
+                    )
+                  : null,
+              border: theme.brightness == Brightness.light
+                  ? Border.all(
+                      color: theme.accentColor,
+                      width: 2.5,
+                    )
+                  : null,
+              boxShadow: [
+                BoxShadow(
+                  color: theme.accentColor.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: Center(
-              child: FaIcon(
-                FontAwesomeIcons.gear,
-                color: theme.brightness == Brightness.dark
-                    ? theme.scaffoldBackgroundColor
-                    : theme.cardColor,
-                size: 24,
+            child: Padding(
+              padding: const EdgeInsets.all(10.0),
+              child: Image.asset(
+
+                'assets/logo.png',
+                fit: BoxFit.contain,
               ),
             ),
           ),

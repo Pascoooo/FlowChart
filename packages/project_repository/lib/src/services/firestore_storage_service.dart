@@ -51,15 +51,34 @@ class FirestoreStorageService {
   }
 
   /// Elimina un progetto e tutti i suoi file associati.
+  /// Se il progetto era pubblico, lo elimina anche da publicProjects.
   /// Usa un'operazione batch per garantire atomicità (tutto o niente).
   Future<void> deleteProject({required String projectId}) async {
     final projectRef = projectCollection.doc(projectId);
+    final publicProjectRef = FirebaseFirestore.instance.collection('publicProjects').doc(projectId);
+
+    // Verifica se il progetto esiste ed è pubblico
+    final projectSnapshot = await projectRef.get();
+    final isPublic = projectSnapshot.exists && (projectSnapshot.data()?['isPublic'] == true);
+
+    // Elimina i file del progetto privato
     final filesSnapshot = await projectRef.collection('files').get();
     final batch = FirebaseFirestore.instance.batch();
     for (final doc in filesSnapshot.docs) {
       batch.delete(doc.reference);
     }
     batch.delete(projectRef);
+
+    // Se era pubblico, elimina anche dalla collezione publicProjects
+    if (isPublic) {
+      // Elimina i file del progetto pubblico
+      final publicFilesSnapshot = await publicProjectRef.collection('files').get();
+      for (final doc in publicFilesSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      batch.delete(publicProjectRef);
+    }
+
     await batch.commit();
   }
 

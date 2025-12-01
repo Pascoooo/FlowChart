@@ -2,7 +2,6 @@
 /// Features fade-in, slide, and scale animations for hero icon and text.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../../blocs/auth_bloc/authentication_bloc.dart';
 import '../../../../blocs/auth_bloc/authentication_state.dart';
 import '../../../../config/constants/app_constants.dart';
@@ -108,27 +107,42 @@ class WelcomeHeaderState extends State<WelcomeHeader>
         return Transform.scale(
           scale: 0.8 + (0.2 * _decorationAnimation.value),
           child: Container(
-            padding: const EdgeInsets.all(20),
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  theme.accentColor,
-                  theme.accentColor.lighter,
-                ],
-              ),
+              color: theme.brightness == Brightness.light ? theme.cardColor : null,
+              gradient: theme.brightness == Brightness.dark
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        theme.accentColor.dark,
+                        theme.accentColor,
+                        theme.accentColor.light,
+                      ],
+                    )
+                  : null,
+              border: theme.brightness == Brightness.light
+                  ? Border.all(
+                      color: theme.accentColor,
+                      width: 3,
+                    )
+                  : null,
               boxShadow: [
                 BoxShadow(
                   color: theme.accentColor.withOpacity(0.3),
                   blurRadius: 20,
-                  spreadRadius: 2,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
-            child: const FaIcon(
-              FontAwesomeIcons.diagramProject,
-              size: 32,
-              color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Image.asset(
+                'assets/logo.png',
+                fit: BoxFit.contain,
+              ),
             ),
           ),
         );

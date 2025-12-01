@@ -141,15 +141,28 @@ class _BrandPanelState extends State<BrandPanel> with TickerProviderStateMixin {
                     return Transform.scale(
                       scale: value,
                       child: Container(
-                        padding: const EdgeInsets.all(24),
+                        width: 120,
+                        height: 120,
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              theme.accentColor.dark,
-                              theme.accentColor,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(24),
+                          shape: BoxShape.circle,
+                          color: theme.brightness == Brightness.light ? theme.cardColor : null,
+                          gradient: theme.brightness == Brightness.dark
+                              ? LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    theme.accentColor.dark,
+                                    theme.accentColor,
+                                    theme.accentColor.light,
+                                  ],
+                                )
+                              : null,
+                          border: theme.brightness == Brightness.light
+                              ? Border.all(
+                                  color: theme.accentColor,
+                                  width: 3.5,
+                                )
+                              : null,
                           boxShadow: [
                             BoxShadow(
                               color: theme.accentColor.withOpacity(0.3),
@@ -158,10 +171,12 @@ class _BrandPanelState extends State<BrandPanel> with TickerProviderStateMixin {
                             ),
                           ],
                         ),
-                        child: const FaIcon(
-                          FontAwesomeIcons.diagramProject,
-                          size: 48,
-                          color: Colors.white,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Image.asset(
+                            'assets/logo.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                     );
@@ -234,12 +249,12 @@ class _BrandPanelState extends State<BrandPanel> with TickerProviderStateMixin {
         'icon': FontAwesomeIcons.bugSlash,
         'title': 'Debug Potenziato',
         'subtitle':
-        'Imposta breakpoint e naviga il codice, direttamente sul diagramma.'
+        'Naviga il codice, direttamente sul diagramma.'
       },
       {
         'icon': FontAwesomeIcons.magnifyingGlassChart,
         'title': 'Analisi Dettagliata',
-        'subtitle': 'Ispeziona variabili e stati del programma ad ogni passo.'
+        'subtitle': 'Analizza variabili e stati del programma ad ogni passo.'
       },
     ];
 

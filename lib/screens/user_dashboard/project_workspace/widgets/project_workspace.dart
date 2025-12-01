@@ -373,11 +373,13 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace>
                       if (debugState is DebugInitial || debugState is DebugCompleted) {
                         _restoreGridState();
 
-                        // 💾 SALVA SU FIRESTORE ALL'USCITA DAL DEBUG
-                        final projectRepo = context.read<ProjectBloc>().projectRepository;
-                        unawaited(projectRepo.saveSessionToFirestore(
-                            widget.selectedProject.projectId
-                        ));
+                        // 💾 SALVA SU FIRESTORE ALL'USCITA DAL DEBUG (solo se NON in modalità read-only)
+                        if (!widget.isReadOnly) {
+                          final projectRepo = context.read<ProjectBloc>().projectRepository;
+                          unawaited(projectRepo.saveSessionToFirestore(
+                              widget.selectedProject.projectId
+                          ));
+                        }
 
                         // Se DebugCompleted, invia DebugStop per pulire il repository
                         if (debugState is DebugCompleted) {
@@ -683,7 +685,10 @@ class _WorkspaceLayout extends StatelessWidget {
           child: FadeTransition(
             opacity: fadeAnimation,
             child: ProjectSidebar(
-                selectedProject: selectedProject, isReadOnly: isReadOnly),
+              selectedProject: selectedProject,
+              isReadOnly: isReadOnly,
+              onLeave: onLeave,
+            ),
           ),
         ),
         Expanded(

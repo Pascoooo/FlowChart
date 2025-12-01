@@ -3,7 +3,6 @@
 /// Pensato per mantenere coerenza di brand tra versioni light/dark.
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show Icons;
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 class AuthHeader extends StatelessWidget {
@@ -40,41 +39,6 @@ class AuthHeader extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
-              // Logo animato
-              TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 800),
-                tween: Tween(begin: 0.0, end: 1.0),
-                builder: (context, value, child) {
-                  return Transform.scale(
-                    scale: value,
-                    child: Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            theme.accentColor.darker,
-                            theme.accentColor,
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: theme.accentColor.withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        FontAwesomeIcons.diagramProject,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  );
-                },
-              ),
               const SizedBox(width: 16),
               // Testi
               Expanded(
