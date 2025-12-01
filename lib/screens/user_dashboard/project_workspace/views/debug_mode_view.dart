@@ -51,6 +51,7 @@ class _DebugModeViewState extends State<DebugModeView>
   String? _entryFileId;
   String? _entryFileName;
   String? _entryFileContent;
+  String? _entryFlowchartId;
 
   @override
   void initState() {
@@ -62,6 +63,16 @@ class _DebugModeViewState extends State<DebugModeView>
 
     // Salva lo stato iniziale della griglia
     _gridStateOnEnter = widget.showGrid;
+
+    // Snapshot prioritario: stato attuale del FlowchartBloc (include modifiche non ancora persistite)
+    final flowchartBloc = context.read<FlowchartBloc>();
+    final fcState = flowchartBloc.state;
+    if (fcState is FlowchartLoaded) {
+      _entryFileId = flowchartBloc.activeFileId ?? _entryFileId;
+      _entryFileName = fcState.flowchart.name;
+      _entryFileContent = fcState.toJson();
+      _entryFlowchartId = fcState.flowchart.flowchartId;
+    }
 
     // 🔒 Cattura il file attivo corrente per poter ripristinare il canvas all'uscita dal debug
     final fsState = context.read<FileSystemBloc>().state;
@@ -159,7 +170,16 @@ class _DebugModeViewState extends State<DebugModeView>
           final savedId = _entryFileId;
           final savedName = _entryFileName;
           final savedContent = _entryFileContent;
+          final savedFlowchartId = _entryFlowchartId;
           if (savedId != null && savedName != null && savedContent != null) {
+            // Evita reload se siamo già sullo stesso file/flowchart
+            final currentState = flowchartBloc.state;
+            final currentActiveId = flowchartBloc.activeFileId;
+            if (currentState is FlowchartLoaded &&
+                currentActiveId == savedId &&
+                currentState.flowchart.flowchartId == savedFlowchartId) {
+              return;
+            }
             flowchartBloc.add(LoadFlowchart(
               jsonContent: savedContent,
               fileName: savedName,
